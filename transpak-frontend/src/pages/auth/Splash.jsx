@@ -13,7 +13,7 @@ const Splash = () => {
   useEffect(() => {
     if (!loading) {
       const timer = setTimeout(() => {
-        navigate(user ? '/' : '/role', { replace: true });
+        navigate(user ? '/' : '/login', { replace: true });
       }, 2300);
       return () => clearTimeout(timer);
     }

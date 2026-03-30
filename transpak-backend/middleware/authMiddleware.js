@@ -1,62 +1,45 @@
 const User = require("../models/User");
 const { verifyToken } = require("../utils/jwt");
+const { sendError } = require("../utils/apiResponse");
 
-/**
- * Authenticate requests using Authorization: Bearer <token>.
- * Attaches `req.user` with the safe frontend shape.
- */
 async function protect(req, res, next) {
   try {
     const auth = req.headers.authorization || "";
     const [scheme, token] = auth.split(" ");
 
     if (scheme !== "Bearer" || !token) {
-      return res.status(401).json({
-        error: "Unauthorized"
-      });
+      return sendError(res, 401, "Unauthorized");
     }
 
     const decoded = verifyToken(token);
     const userId = decoded?.sub;
     if (!userId) {
-      return res.status(401).json({
-        error: "Unauthorized"
-      });
+      return sendError(res, 401, "Unauthorized");
     }
 
     const user = await User.findById(userId);
     if (!user) {
-      return res.status(401).json({
-        error: "Unauthorized"
-      });
+      return sendError(res, 401, "Unauthorized");
     }
 
     req.user = user.toAuthJSON();
     req.auth = {
-      userId: userId,
-      roles: decoded.roles || user.roles,
-      activeRole: decoded.activeRole || user.activeRole
+      userId: user._id.toString(),
+      roles: user.roles,
+      activeRole: user.activeRole
     };
 
     return next();
   } catch (err) {
-    return res.status(401).json({
-      error: "Unauthorized"
-    });
+    return sendError(res, 401, "Unauthorized");
   }
 }
 
-/**
- * Optional role guard for multi-role users.
- * Usage: router.get(..., protect, requireRole("admin"), handler)
- */
 function requireRole(role) {
   return (req, res, next) => {
     const roles = req.auth?.roles || req.user?.roles || [];
     if (!roles.includes(role)) {
-      return res.status(403).json({
-        error: "Forbidden"
-      });
+      return sendError(res, 403, "Forbidden");
     }
     return next();
   };
@@ -67,17 +50,26 @@ function requireAnyRole(rolesList) {
   return (req, res, next) => {
     const roles = req.auth?.roles || req.user?.roles || [];
     if (!required.some((r) => roles.includes(r))) {
-      return res.status(403).json({
-        error: "Forbidden"
-      });
+      return sendError(res, 403, "Forbidden");
     }
     return next();
+  };
+}
+
+function requireActiveRole(...allowed) {
+  const list = allowed.flat();
+  return (req, res, next) => {
+    const roles = req.auth?.roles || [];
+    if (roles.includes("admin")) return next();
+    const active = req.auth?.activeRole;
+    if (list.includes(active)) return next();
+    return sendError(res, 403, "Switch role to continue");
   };
 }
 
 module.exports = {
   protect,
   requireRole,
-  requireAnyRole
+  requireAnyRole,
+  requireActiveRole
 };
-

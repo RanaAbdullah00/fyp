@@ -19,5 +19,13 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+api.interceptors.response.use((response) => {
+  const body = response.data;
+  if (body && typeof body.success === 'boolean' && 'data' in body) {
+    return { ...response, data: body.data };
+  }
+  return response;
+});
+
 export default api;
 

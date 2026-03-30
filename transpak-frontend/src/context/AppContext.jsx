@@ -12,15 +12,17 @@ export const AppProvider = ({ children }) => {
       id: 1,
       type: 'shipment',
       message: 'Shipment PK-INV-001 picked up from Lahore.',
+      roleType: 'shipper',
       read: false,
-      createdAt: '5m ago'
+      createdAt: new Date(Date.now() - 5 * 60 * 1000).toISOString()
     },
     {
       id: 2,
       type: 'bid',
       message: 'New bid received for Load #L-102.',
+      roleType: 'carrier',
       read: false,
-      createdAt: '20m ago'
+      createdAt: new Date(Date.now() - 20 * 60 * 1000).toISOString()
     }
   ]);
 

@@ -1,35 +1,71 @@
-import React, { useMemo, useState } from 'react';
-import { Link, NavLink } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { FaBars, FaBell } from 'react-icons/fa';
 import { useAuth } from '../../hooks/useAuth.js';
 import { AppContext } from '../../context/AppContext.jsx';
 import MobileDrawer from './MobileDrawer.jsx';
 import BrandLogo from './BrandLogo.jsx';
-import Modal from '../ui/Modal.jsx';
-import RegisterForm from '../auth/RegisterForm.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
-import LanguageToggle from '../ui/LanguageToggle.jsx';
+import { dashboardPathForRole } from '../../utils/dashboardPath.js';
+import { notifyError } from '../ui/ToastProvider.jsx';
+import { unwrapErrorMessage } from '../../utils/unwrapApi.js';
 
 const Navbar = () => {
+  const navigate = useNavigate();
   const { t, isUrdu } = useLanguage();
   const { user, setActiveRole } = useAuth();
   const app = React.useContext(AppContext);
   const unreadCount = Array.isArray(app?.notifications) ? app.notifications.filter((n) => !n.read).length : 0;
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [upgradeOpen, setUpgradeOpen] = useState(false);
   const roles = user?.roles || (user?.role ? [user.role] : []);
   const activeRole = user?.activeRole || user?.role;
 
   const hasShipper = roles.includes('shipper');
   const hasCarrier = roles.includes('carrier');
-  const dualRole = hasShipper && hasCarrier;
-  const nextUpgradeRole = useMemo(() => {
-    if (!user) return null;
-    if (dualRole) return null;
-    if (hasShipper) return 'carrier';
-    if (hasCarrier) return 'shipper';
+
+  const targetRole = (() => {
+    if (!activeRole) return null;
+    if (activeRole === 'shipper') return hasCarrier ? 'carrier' : 'carrier';
+    if (activeRole === 'carrier') return hasShipper ? 'shipper' : 'shipper';
+    // admin or unknown: pick the role that is missing (if only one exists).
+    if (hasShipper && !hasCarrier) return 'carrier';
+    if (hasCarrier && !hasShipper) return 'shipper';
+    if (hasShipper && hasCarrier) return 'carrier';
     return null;
-  }, [user, dualRole, hasShipper, hasCarrier]);
+  })();
+
+  const canSwitch = Boolean(hasShipper || hasCarrier) && Boolean(targetRole);
+
+  const handleSwitchAccount = () => {
+    if (!user || !targetRole) return;
+
+    const otherRoleExists = roles.includes(targetRole);
+    const originalRole = activeRole;
+
+    if (otherRoleExists) {
+      // Optimistic role update ensures the UI/dashboard feels instant.
+      setActiveRole(targetRole).catch((err) => {
+        notifyError(unwrapErrorMessage(err) || t('errors.generic'));
+        if (originalRole) navigate(dashboardPathForRole(originalRole), { replace: true });
+      });
+      navigate(dashboardPathForRole(targetRole), { replace: true });
+      return;
+    }
+
+    // Missing the other role: route to role creation.
+    navigate('/register', {
+      replace: true,
+      state: {
+        upgradeRole: targetRole,
+        prefill: {
+          name: user?.name || '',
+          email: user?.email || '',
+          phone: user?.phone || '',
+          cnic: user?.cnic || ''
+        }
+      }
+    });
+  };
 
   return (
     <>
@@ -49,18 +85,30 @@ const Navbar = () => {
             <BrandLogo />
           </Link>
           {user && (
-            <NavLink
-              to="/notifications"
-              className="btn btn-outline-secondary btn-sm rounded-lg position-relative"
-              aria-label={t('nav.notificationsAria')}
-            >
-              <FaBell size={16} />
-              {unreadCount > 0 && (
-                <span className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style={{ fontSize: 9 }}>
-                  {unreadCount}
-                </span>
+            <div className="d-flex align-items-center gap-2">
+              <NavLink
+                to="/notifications"
+                className="btn btn-outline-secondary btn-sm rounded-lg position-relative d-flex align-items-center justify-content-center"
+                aria-label={t('nav.notificationsAria')}
+              >
+                <FaBell size={14} />
+                {unreadCount > 0 && (
+                  <span className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style={{ fontSize: 9 }}>
+                    {unreadCount}
+                  </span>
+                )}
+              </NavLink>
+              {canSwitch && (
+                <button
+                  type="button"
+                  className="btn btn-outline-success btn-sm rounded-lg px-2 text-nowrap"
+                  onClick={handleSwitchAccount}
+                  title={t('nav.switchAccount')}
+                >
+                  {t('nav.switchAccount')}
+                </button>
               )}
-            </NavLink>
+            </div>
           )}
         </div>
       </nav>
@@ -73,7 +121,6 @@ const Navbar = () => {
           </Link>
 
           <div className="d-flex align-items-center gap-2 flex-wrap justify-content-end">
-            <LanguageToggle className="d-none d-sm-inline-flex" />
             {user ? (
               <>
                 <NavLink
@@ -86,30 +133,12 @@ const Navbar = () => {
                     <span className="badge rounded-pill bg-danger" style={{ fontSize: 9 }}>{unreadCount}</span>
                   )}
                 </NavLink>
-                {dualRole && (
-                  <div className="d-flex gap-2 tp-role-selector" role="group" aria-label={t('nav.roleSwitchAria')} style={{ maxWidth: 280 }}>
-                    <button
-                      type="button"
-                      className={`btn btn-sm ${activeRole === 'shipper' ? 'btn-primary' : 'btn-outline-primary'} rounded-lg flex-fill`}
-                      onClick={() => setActiveRole('shipper')}
-                    >
-                      {t('nav.shipperShort')}
-                    </button>
-                    <button
-                      type="button"
-                      className={`btn btn-sm ${activeRole === 'carrier' ? 'btn-primary' : 'btn-outline-primary'} rounded-lg flex-fill`}
-                      onClick={() => setActiveRole('carrier')}
-                    >
-                      {t('nav.carrierShort')}
-                    </button>
-                  </div>
-                )}
-                {!dualRole && nextUpgradeRole && (
+                {canSwitch && (
                   <button
                     type="button"
                     className="btn btn-outline-success btn-sm rounded-lg px-3"
-                    onClick={() => setUpgradeOpen(true)}
-                    title={t('nav.createAnotherRoleTitle')}
+                    onClick={handleSwitchAccount}
+                    title={t('nav.switchAccount')}
                   >
                     {t('nav.switchAccount')}
                   </button>
@@ -126,33 +155,6 @@ const Navbar = () => {
         </div>
       </nav>
       <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
-      <Modal
-        open={upgradeOpen}
-        title={t('nav.switchAccountModalTitle')}
-        onClose={() => setUpgradeOpen(false)}
-        size="lg"
-      >
-        <div className="small text-muted mb-2">
-          {t('nav.switchAccountHint', {
-            role: nextUpgradeRole === 'carrier' ? t('auth.carrier') : t('auth.shipper')
-          })}
-        </div>
-        <RegisterForm
-          upgradeRole={nextUpgradeRole}
-          prefill={{
-            name: user?.name || '',
-            email: user?.email || '',
-            phone: user?.phone || '',
-            cnic: user?.cnic || ''
-          }}
-          onDone={() => setUpgradeOpen(false)}
-        />
-        <div className="d-flex gap-2 mt-3">
-          <button type="button" className="btn btn-outline-secondary flex-grow-1" onClick={() => setUpgradeOpen(false)}>
-            {t('nav.cancel')}
-          </button>
-        </div>
-      </Modal>
     </>
   );
 };

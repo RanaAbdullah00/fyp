@@ -1,5 +1,6 @@
 const express = require("express");
-const { protect, requireAnyRole } = require("../middleware/authMiddleware");
+const { protect, requireAnyRole, requireActiveRole } = require("../middleware/authMiddleware");
+const { sendSuccess, sendError } = require("../utils/apiResponse");
 const Load = require("../models/Load");
 const User = require("../models/User");
 
@@ -18,8 +19,7 @@ function generateCode() {
   return `L-${Math.floor(100000 + Math.random() * 900000)}`;
 }
 
-// Carrier marketplace: list open loads
-router.get("/", protect, requireAnyRole(["carrier", "admin"]), async (req, res) => {
+router.get("/", protect, requireAnyRole(["carrier", "admin"]), requireActiveRole("carrier"), async (req, res) => {
   const { origin, destination, vehicleType } = req.query || {};
 
   const q = { status: "open" };
@@ -28,48 +28,44 @@ router.get("/", protect, requireAnyRole(["carrier", "admin"]), async (req, res) 
   if (vehicleType) q.vehicleType = new RegExp(String(vehicleType).trim(), "i");
 
   const loads = await Load.find(q).sort({ createdAt: -1 }).limit(200);
-  return res.json(loads.map((l) => l.toJSONSafe()));
+  return sendSuccess(res, 200, loads.map((l) => l.toJSONSafe()));
 });
 
-// Shipper: list my loads
-router.get("/mine", protect, requireAnyRole(["shipper", "admin"]), async (req, res) => {
+router.get("/mine", protect, requireAnyRole(["shipper", "admin"]), requireActiveRole("shipper"), async (req, res) => {
   const loads = await Load.find({ shipperId: req.auth.userId }).sort({ createdAt: -1 }).limit(200);
-  return res.json(loads.map((l) => l.toJSONSafe()));
+  return sendSuccess(res, 200, loads.map((l) => l.toJSONSafe()));
 });
 
-// Shared: load detail (allowed for shipper owner, assigned carrier, or admin)
 router.get("/:id", protect, async (req, res) => {
   const load = await Load.findById(req.params.id);
-  if (!load) return res.status(404).json({ error: "Not found" });
+  if (!load) return sendError(res, 404, "Not found");
 
   const roles = req.auth?.roles || [];
   const isAdmin = roles.includes("admin");
   const isOwner = String(load.shipperId) === String(req.auth.userId);
   const isAssignedCarrier = load.assignedCarrierId && String(load.assignedCarrierId) === String(req.auth.userId);
 
-  if (!isAdmin && !isOwner && !isAssignedCarrier) return res.status(403).json({ error: "Forbidden" });
-  return res.json(load.toJSONSafe());
+  if (!isAdmin && !isOwner && !isAssignedCarrier) return sendError(res, 403, "Forbidden");
+  return sendSuccess(res, 200, load.toJSONSafe());
 });
 
-// Shipper: create load (compat alias /create to match frontend)
 async function createLoad(req, res) {
   const user = await User.findById(req.auth.userId);
-  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!user) return sendError(res, 401, "Unauthorized");
   const u = user.toAuthJSON();
   if (!u.profileComplete) {
-    return res.status(403).json({ error: "Complete your profile (address + CNIC images) to post loads" });
+    return sendError(res, 403, "Complete your profile (address + CNIC images) to post loads");
   }
   const { cargo, origin, destination, weight, type, vehicleType, price, expectedPrice, pickupDate, deadlineHours } =
     req.body || {};
 
   const pickup = String(pickupDate || "").trim();
-  if (!isISODateOnly(pickup)) return res.status(400).json({ error: "pickupDate must be YYYY-MM-DD" });
+  if (!isISODateOnly(pickup)) return sendError(res, 400, "pickupDate must be YYYY-MM-DD");
 
-  // future date only (tomorrow or later) in UTC
   const today = startOfTodayUTC();
   const pickupDt = new Date(`${pickup}T00:00:00.000Z`);
   if (!(pickupDt.getTime() > today.getTime())) {
-    return res.status(400).json({ error: "Pickup date must be in the future" });
+    return sendError(res, 400, "Pickup date must be in the future");
   }
 
   const load = await Load.create({
@@ -85,11 +81,10 @@ async function createLoad(req, res) {
     shipperId: req.auth.userId
   });
 
-  return res.status(201).json(load.toJSONSafe());
+  return sendSuccess(res, 201, load.toJSONSafe(), "Created");
 }
 
-router.post("/", protect, requireAnyRole(["shipper", "admin"]), createLoad);
-router.post("/create", protect, requireAnyRole(["shipper", "admin"]), createLoad);
+router.post("/", protect, requireAnyRole(["shipper", "admin"]), requireActiveRole("shipper"), createLoad);
+router.post("/create", protect, requireAnyRole(["shipper", "admin"]), requireActiveRole("shipper"), createLoad);
 
 module.exports = router;
-

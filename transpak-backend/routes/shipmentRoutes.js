@@ -1,9 +1,9 @@
 const express = require("express");
 const { protect } = require("../middleware/authMiddleware");
+const { sendSuccess, sendError } = require("../utils/apiResponse");
 
 const router = express.Router();
 
-// Minimal demo shipment tracking data (kept in-memory for FYP UI stability)
 const shipments = new Map();
 
 function getOrCreateShipment(id) {
@@ -34,17 +34,15 @@ function getOrCreateShipment(id) {
   return data;
 }
 
-// GET /api/shipments/track/:id
 router.get("/track/:id", protect, (req, res) => {
   const data = getOrCreateShipment(req.params.id);
-  return res.json(data);
+  return sendSuccess(res, 200, data);
 });
 
-// PUT /api/shipments/:id/status
 router.put("/:id/status", protect, (req, res) => {
   const { status } = req.body || {};
   const next = String(status || "").trim();
-  if (!next) return res.status(400).json({ error: "Status is required" });
+  if (!next) return sendError(res, 400, "Status is required");
 
   const data = getOrCreateShipment(req.params.id);
   data.tracking = {
@@ -59,8 +57,7 @@ router.put("/:id/status", protect, (req, res) => {
   });
 
   shipments.set(String(req.params.id), data);
-  return res.json(data);
+  return sendSuccess(res, 200, data);
 });
 
 module.exports = router;
-

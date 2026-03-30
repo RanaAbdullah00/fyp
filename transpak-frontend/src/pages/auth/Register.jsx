@@ -1,7 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import RegisterForm from '../../components/auth/RegisterForm.jsx';
-import LanguageToggle from '../../components/ui/LanguageToggle.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import BrandLogo from '../../components/layout/BrandLogo.jsx';
 
@@ -11,9 +10,6 @@ const Register = () => {
 
   return (
     <div className={`container py-4 tp-auth-page ${isUrdu ? 'tp-rtl' : ''}`}>
-      <div className="d-flex justify-content-end mb-2 gap-2">
-        <LanguageToggle />
-      </div>
       <div className="text-center mb-4">
         <BrandLogo
           className="auth-logo mb-2"

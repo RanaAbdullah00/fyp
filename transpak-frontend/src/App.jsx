@@ -41,6 +41,7 @@ import MobileNav from './components/layout/MobileNav.jsx';
 import Footer from './components/layout/Footer.jsx';
 import Loader from './components/ui/Loader.jsx';
 import LoadingScreen from './components/ui/LoadingScreen.jsx';
+import { dashboardPathForRole } from './utils/dashboardPath.js';
 
 const SplashScreen = () => (
   <div className="d-flex flex-column justify-content-center align-items-center vh-100 text-white" style={{ backgroundColor: 'var(--pak-primary)' }}>
@@ -63,11 +64,8 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
     return <Navigate to="/login" replace />;
   }
 
-  // Fallback: if role missing (e.g. corrupted localStorage), redirect to role selection
   const activeRole = user.activeRole || user.role;
-  if (!activeRole) {
-    return <Navigate to="/role" replace />;
-  }
+  if (!activeRole) return <Navigate to="/role" replace />;
 
   if (allowedRoles && !allowedRoles.includes(activeRole)) {
     return <Navigate to="/" replace />;
@@ -81,9 +79,7 @@ const RoleDashboard = () => {
   if (!user) return <Navigate to="/login" replace />;
   const activeRole = user.activeRole || user.role;
   if (!activeRole) return <Navigate to="/role" replace />;
-  if (activeRole === 'carrier') return <Navigate to="/dashboard/carrier" replace />;
-  if (activeRole === 'admin') return <Navigate to="/admin/dashboard" replace />;
-  return <Navigate to="/dashboard/shipper" replace />;
+  return <Navigate to={dashboardPathForRole(activeRole)} replace />;
 };
 
 function App() {

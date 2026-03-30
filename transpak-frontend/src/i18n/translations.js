@@ -61,9 +61,11 @@ export const translations = {
       urdu: 'اردو',
       welcomeBack: 'Welcome back!',
       roleAddedSuccess: 'Role added successfully.',
-      accountCreatedSuccess: 'Account created successfully.',
+      accountCreatedSuccess: 'Account created successfully',
       registrationFailed: 'Registration failed',
-      creatingAdditionalRole: 'Creating additional role: {{role}}'
+      creatingAdditionalRole: 'Creating additional role: {{role}}',
+      roleSelectTitle: 'Select your role',
+      roleSelectSubtitle: 'TransPak shows tools based on the role you use right now.'
     },
     errors: {
       invalidCredentials: 'Invalid credentials',
@@ -284,7 +286,9 @@ export const translations = {
       roleAddedSuccess: 'کردار کامیابی سے شامل ہو گیا۔',
       accountCreatedSuccess: 'اکاؤنٹ کامیابی سے بن گیا۔',
       registrationFailed: 'رجسٹریشن ناکام رہی',
-      creatingAdditionalRole: 'اضافی کردار بنایا جا رہا ہے: {{role}}'
+      creatingAdditionalRole: 'اضافی کردار بنایا جا رہا ہے: {{role}}',
+      roleSelectTitle: 'اپنا کردار منتخب کریں',
+      roleSelectSubtitle: 'ٹرانسپاک اس وقت کے کردار کے مطابق ٹولز دکھاتا ہے۔'
     },
     errors: {
       invalidCredentials: 'غلط معلومات',

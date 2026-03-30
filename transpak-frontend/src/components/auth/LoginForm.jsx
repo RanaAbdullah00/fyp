@@ -7,9 +7,9 @@ import { loginApi } from '../../services/authService.js';
 import { notifySuccess, notifyError } from '../ui/ToastProvider.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { unwrapResponseData, unwrapErrorMessage } from '../../utils/unwrapApi.js';
+import { dashboardPathForRole } from '../../utils/dashboardPath.js';
 import { FaEnvelope, FaLock } from 'react-icons/fa';
 
-// Login form used on the login page.
 const LoginForm = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
@@ -39,19 +39,12 @@ const LoginForm = () => {
         roleHint: uiRolePref ? uiRolePref : undefined
       });
       const payload = unwrapResponseData(res) || {};
-      const { token, user } = payload;
+      const { token, user, currentRole } = payload;
       if (token) localStorage.setItem('transpak_token', token);
-      if (user) login(user);
+      if (user) login(payload);
       notifySuccess(t('auth.welcomeBack'));
-      if (Array.isArray(user?.roles) && user.roles.length > 1) {
-        navigate('/role', { replace: true });
-      } else if ((user?.activeRole || user?.role) === 'carrier') {
-        navigate('/dashboard/carrier', { replace: true });
-      } else if ((user?.activeRole || user?.role) === 'admin') {
-        navigate('/admin/dashboard', { replace: true });
-      } else {
-        navigate('/dashboard/shipper', { replace: true });
-      }
+      const roleToNavigate = currentRole || user?.activeRole || user?.role;
+      navigate(dashboardPathForRole(roleToNavigate), { replace: true });
     } catch (err) {
       const raw =
         unwrapErrorMessage(err) ||
@@ -72,7 +65,7 @@ const LoginForm = () => {
   return (
     <form onSubmit={handleSubmit} className="mt-3">
       {/* error toast replaces alert */}
-      <div className="btn-group w-100 mb-3 tp-role-selector" role="group" aria-label={t('auth.role')}>
+      <div className="tp-role-selector mb-3" role="group" aria-label={t('auth.role')}>
         <input
           type="radio"
           className="btn-check"

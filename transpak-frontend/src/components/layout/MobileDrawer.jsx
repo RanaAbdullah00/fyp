@@ -5,7 +5,6 @@ import { useAuth } from '../../hooks/useAuth.js';
 import { AppContext } from '../../context/AppContext.jsx';
 import LogoutConfirmModal from '../ui/LogoutConfirmModal.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
-import LanguageToggle from '../ui/LanguageToggle.jsx';
 
 const linkClass = ({ isActive }) =>
   `list-group-item list-group-item-action border-0 rounded-lg mb-1 ${isActive ? 'active' : ''}`;
@@ -41,12 +40,9 @@ const MobileDrawer = ({ open, onClose }) => {
         >
           <div className="d-flex justify-content-between align-items-center mb-2 gap-2 flex-wrap">
             <div className="fw-bold">{t('nav.menu')}</div>
-            <div className="d-flex align-items-center gap-2">
-              <LanguageToggle />
-              <button type="button" className="btn btn-sm btn-outline-secondary rounded-lg" onClick={onClose}>
-                {t('nav.close')}
-              </button>
-            </div>
+            <button type="button" className="btn btn-sm btn-outline-secondary rounded-lg" onClick={onClose}>
+              {t('nav.close')}
+            </button>
           </div>
           <div className="list-group list-group-flush flex-grow-1 overflow-auto">
             <NavLink to={dashboardPath} className={linkClass} onClick={onClose} end>

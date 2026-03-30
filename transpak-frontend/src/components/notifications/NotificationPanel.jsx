@@ -17,19 +17,21 @@ const NotificationPanel = () => {
     <div className="container py-3">
       <h5 className="mb-3">Notifications</h5>
       <Card>
-        <div className="list-group list-group-flush">
-          {sorted.map((n) => (
-            <NotificationItem
-              key={n._id || n.id}
-              notification={n}
-              onClick={() => markNotificationRead(n._id || n.id)}
-            />
-          ))}
-          {!sorted.length && (
-            <div className="text-center text-muted small py-3">
-              You&apos;re all caught up.
-            </div>
-          )}
+        <div style={{ maxHeight: '65vh', overflowY: 'auto' }}>
+          <div className="list-group list-group-flush">
+            {sorted.map((n) => (
+              <NotificationItem
+                key={n._id || n.id}
+                notification={n}
+                onClick={() => markNotificationRead(n._id || n.id)}
+              />
+            ))}
+            {!sorted.length && (
+              <div className="text-center text-muted small py-3">
+                You&apos;re all caught up.
+              </div>
+            )}
+          </div>
         </div>
       </Card>
     </div>

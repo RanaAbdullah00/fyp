@@ -3,6 +3,7 @@ const { validationResult } = require("express-validator");
 const User = require("../models/User");
 const { signToken } = require("../utils/jwt");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
+const { authData, authDataNoToken } = require("../utils/authPayload");
 
 function validationErrorResponse(req, res) {
   const result = validationResult(req);
@@ -14,9 +15,6 @@ function validationErrorResponse(req, res) {
   });
 }
 
-/**
- * POST /api/auth/register
- */
 async function register(req, res) {
   const maybeError = validationErrorResponse(req, res);
   if (maybeError) return maybeError;
@@ -78,7 +76,7 @@ async function register(req, res) {
     await identityMatch.save();
 
     const token = signToken(identityMatch);
-    return sendSuccess(res, 200, { token, user: identityMatch.toAuthJSON() }, "Registration complete");
+    return sendSuccess(res, 200, authData(identityMatch, token), "Registration complete");
   }
 
   const saltRounds = 10;
@@ -106,12 +104,9 @@ async function register(req, res) {
   }
 
   const token = signToken(user);
-  return sendSuccess(res, 201, { token, user: user.toAuthJSON() }, "Account created");
+  return sendSuccess(res, 201, authData(user, token), "Account created");
 }
 
-/**
- * POST /api/auth/login
- */
 async function login(req, res) {
   const maybeError = validationErrorResponse(req, res);
   if (maybeError) return maybeError;
@@ -142,18 +137,39 @@ async function login(req, res) {
   }
 
   const token = signToken(user);
-  return sendSuccess(res, 200, { token, user: user.toAuthJSON() }, "Logged in");
+  return sendSuccess(res, 200, authData(user, token), "Logged in");
 }
 
-/**
- * GET /api/auth/profile
- */
 async function profile(req, res) {
-  return sendSuccess(res, 200, { user: req.user }, "OK");
+  const user = await User.findById(req.auth.userId);
+  if (!user) return sendError(res, 401, "Unauthorized");
+  return sendSuccess(res, 200, authDataNoToken(user), "OK");
+}
+
+async function updateActiveRole(req, res) {
+  const { activeRole } = req.body || {};
+  const allowed = User.ALLOWED_ROLES || ["shipper", "carrier", "admin"];
+  const next = String(activeRole || "").trim().toLowerCase();
+  if (!allowed.includes(next)) {
+    return sendError(res, 400, "Invalid role");
+  }
+
+  const user = await User.findById(req.auth.userId);
+  if (!user) return sendError(res, 401, "Unauthorized");
+  if (!user.roles.includes(next)) {
+    return sendError(res, 403, "Role not available for this account");
+  }
+
+  user.activeRole = next;
+  await user.save();
+
+  const token = signToken(user);
+  return sendSuccess(res, 200, authData(user, token), "Role updated");
 }
 
 module.exports = {
   register,
   login,
-  profile
+  profile,
+  updateActiveRole
 };

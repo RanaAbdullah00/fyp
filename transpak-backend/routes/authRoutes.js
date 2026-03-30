@@ -1,7 +1,7 @@
 const express = require("express");
 const { body } = require("express-validator");
 const rateLimit = require("express-rate-limit");
-const { register, login, profile } = require("../controllers/authController");
+const { register, login, profile, updateActiveRole } = require("../controllers/authController");
 const { protect } = require("../middleware/authMiddleware");
 const User = require("../models/User");
 
@@ -72,6 +72,8 @@ router.post(
 );
 
 router.get("/profile", protect, profile);
+
+router.patch("/active-role", protect, updateActiveRole);
 
 module.exports = router;
 

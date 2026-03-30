@@ -1,7 +1,17 @@
 import React from 'react';
 import Badge from '../ui/Badge.jsx';
 
-const roleLabel = (roleType) => (roleType === 'carrier' ? '🚛 Carrier' : roleType === 'shipper' ? '📦 Shipper' : 'General');
+const roleText = (roleType) => {
+  if (roleType === 'carrier') return 'Carrier';
+  if (roleType === 'shipper') return 'Shipper';
+  return 'Role';
+};
+
+const roleVariant = (roleType) => {
+  if (roleType === 'carrier') return 'warning'; // amber
+  if (roleType === 'shipper') return 'success'; // green
+  return 'secondary';
+};
 
 const typeVariant = (type) => {
   if (!type) return 'secondary';
@@ -20,9 +30,11 @@ const NotificationItem = ({ notification, onClick }) => (
     onClick={onClick}
   >
     <div className="me-2">
-      <div className="small">{notification.message}</div>
+      <div className="small">
+        <strong>{roleText(notification.roleType)}:</strong> {notification.message}
+      </div>
       <div className="small text-muted d-flex gap-2 flex-wrap">
-        <span>{roleLabel(notification.roleType)}</span>
+        <Badge variant={roleVariant(notification.roleType)}>{roleText(notification.roleType)}</Badge>
         {notification.type && (
           <span className="text-uppercase">{notification.type}</span>
         )}

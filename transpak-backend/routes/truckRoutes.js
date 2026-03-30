@@ -1,16 +1,18 @@
 const express = require("express");
-const { protect, requireAnyRole } = require("../middleware/authMiddleware");
+const { protect, requireAnyRole, requireActiveRole } = require("../middleware/authMiddleware");
+const { sendSuccess, sendError } = require("../utils/apiResponse");
 const Truck = require("../models/Truck");
 
 const router = express.Router();
 
-// POST /api/trucks (carrier/admin)
-router.post("/", protect, requireAnyRole(["carrier", "admin"]), async (req, res) => {
+router.post("/", protect, requireAnyRole(["carrier", "admin"]), requireActiveRole("carrier"), async (req, res) => {
   const { engineNumber, truckType, capacity, licensePlate, truckCardFrontImage, truckCardBackImage } = req.body || {};
   if (!engineNumber || !truckType || !licensePlate || !truckCardFrontImage || !truckCardBackImage) {
-    return res
-      .status(400)
-      .json({ error: "engineNumber, truckType, licensePlate, truckCardFrontImage, and truckCardBackImage are required" });
+    return sendError(
+      res,
+      400,
+      "engineNumber, truckType, licensePlate, truckCardFrontImage, and truckCardBackImage are required"
+    );
   }
 
   const truck = await Truck.create({
@@ -23,24 +25,22 @@ router.post("/", protect, requireAnyRole(["carrier", "admin"]), async (req, res)
     truckCardBackImage: String(truckCardBackImage).trim()
   });
 
-  return res.status(201).json(truck.toJSONSafe());
+  return sendSuccess(res, 201, truck.toJSONSafe(), "Created");
 });
 
-// GET /api/trucks/mine (carrier/admin)
-router.get("/mine", protect, requireAnyRole(["carrier", "admin"]), async (req, res) => {
+router.get("/mine", protect, requireAnyRole(["carrier", "admin"]), requireActiveRole("carrier"), async (req, res) => {
   const trucks = await Truck.find({ userId: req.auth.userId }).sort({ createdAt: -1 }).limit(100);
-  return res.json(trucks.map((t) => t.toJSONSafe()));
+  return sendSuccess(res, 200, trucks.map((t) => t.toJSONSafe()));
 });
 
-// PUT /api/trucks/:id (carrier/admin) - only owner (unless admin)
-router.put("/:id", protect, requireAnyRole(["carrier", "admin"]), async (req, res) => {
+router.put("/:id", protect, requireAnyRole(["carrier", "admin"]), requireActiveRole("carrier"), async (req, res) => {
   const truck = await Truck.findById(req.params.id);
-  if (!truck) return res.status(404).json({ error: "Not found" });
+  if (!truck) return sendError(res, 404, "Not found");
 
   const roles = req.auth?.roles || [];
   const isAdmin = roles.includes("admin");
   if (!isAdmin && String(truck.userId) !== String(req.auth.userId)) {
-    return res.status(403).json({ error: "Forbidden" });
+    return sendError(res, 403, "Forbidden");
   }
 
   const { engineNumber, truckType, capacity, licensePlate, truckCardFrontImage, truckCardBackImage } = req.body || {};
@@ -52,8 +52,7 @@ router.put("/:id", protect, requireAnyRole(["carrier", "admin"]), async (req, re
   if (truckCardBackImage != null) truck.truckCardBackImage = String(truckCardBackImage).trim();
   await truck.save();
 
-  return res.json(truck.toJSONSafe());
+  return sendSuccess(res, 200, truck.toJSONSafe());
 });
 
 module.exports = router;
-

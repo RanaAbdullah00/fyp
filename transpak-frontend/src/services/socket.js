@@ -15,7 +15,18 @@ export function createSocketClient({ userId, onNotification, onTracking }) {
         receiverId: userId || 'local',
         roleType: 'shipper',
         type: 'INFO',
-        message: 'Realtime (simulated): system heartbeat update.',
+        message: 'Simulated: shipment update for shippers.',
+        createdAt: new Date().toISOString(),
+        read: false
+      });
+
+      onNotification?.({
+        id: Date.now() + 1,
+        senderId: 'system',
+        receiverId: userId || 'local',
+        roleType: 'carrier',
+        type: 'INFO',
+        message: 'Simulated: bid update for carriers.',
         createdAt: new Date().toISOString(),
         read: false
       });

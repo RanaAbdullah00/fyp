@@ -27,9 +27,17 @@ app.use(mongoSanitize());
 
 // CORS for React + Vite SPA
 const corsOrigin = process.env.CORS_ORIGIN || "*";
+const allowedOrigins = corsOrigin === "*" ? null : corsOrigin.split(",").map((s) => s.trim());
 app.use(
   cors({
-    origin: corsOrigin === "*" ? true : corsOrigin.split(",").map((s) => s.trim()),
+    origin: (origin, callback) => {
+      // Allow browser-based requests for configured origins.
+      // If origin is missing (non-browser requests), allow by default.
+      if (!origin) return callback(null, true);
+      if (!allowedOrigins) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(null, false);
+    },
     credentials: true
   })
 );

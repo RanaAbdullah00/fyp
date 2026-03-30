@@ -6,7 +6,9 @@ import RoleSelector from './RoleSelector.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { registerApi } from '../../services/authService.js';
 import { notifySuccess, notifyError } from '../ui/ToastProvider.jsx';
+import { useAuth } from '../../hooks/useAuth.js';
 import { unwrapResponseData, unwrapErrorMessage } from '../../utils/unwrapApi.js';
+import { dashboardPathForRole } from '../../utils/dashboardPath.js';
 import PhoneInput from 'react-phone-input-2';
 import 'react-phone-input-2/lib/style.css';
 import { FaUser, FaEnvelope, FaIdCard, FaLock } from 'react-icons/fa';
@@ -16,6 +18,7 @@ const CNIC_REGEX = /^\d{5}-\d{7}-\d{1}$/;
 const RegisterForm = ({ prefill: prefillProp = null, upgradeRole: upgradeRoleProp = null, onDone }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { login } = useAuth();
   const { t, isUrdu } = useLanguage();
   const prefill = useMemo(() => prefillProp || location.state?.prefill || null, [prefillProp, location.state]);
   const upgradeRole = useMemo(() => upgradeRoleProp || location.state?.upgradeRole || null, [upgradeRoleProp, location.state]);
@@ -114,24 +117,24 @@ const RegisterForm = ({ prefill: prefillProp = null, upgradeRole: upgradeRolePro
         role: form.role
       });
       const payload = unwrapResponseData(res) || {};
-      const { token, user } = payload;
-      if (token) localStorage.setItem('transpak_token', token);
-      // Persist session for immediate role routing
-      if (user) localStorage.setItem('transpak_user', JSON.stringify(user));
+      const { token, user, currentRole } = payload;
       notifySuccess(upgradeRole ? t('auth.roleAddedSuccess') : t('auth.accountCreatedSuccess'));
-      setTimeout(() => {
+
+      if (upgradeRole) {
+        if (token) localStorage.setItem('transpak_token', token);
+        if (user) login(payload);
         onDone?.(user);
-        if (upgradeRoleProp || location.state?.upgradeRole) {
-          // if used inside modal, let caller close + route; default to role selection if multi-role
-          if (Array.isArray(user?.roles) && user.roles.length > 1) navigate('/role', { replace: true });
-          else if ((user?.activeRole || user?.role) === 'carrier') navigate('/dashboard/carrier', { replace: true });
-          else navigate('/dashboard/shipper', { replace: true });
-        } else {
-          if (Array.isArray(user?.roles) && user.roles.length > 1) navigate('/role', { replace: true });
-          else if ((user?.activeRole || user?.role) === 'carrier') navigate('/dashboard/carrier', { replace: true });
-          else navigate('/dashboard/shipper', { replace: true });
-        }
-      }, 600);
+        const role = currentRole || user?.activeRole || user?.role;
+        navigate(dashboardPathForRole(role), { replace: true });
+        return;
+      }
+
+      // New account registration: do not auto-login.
+      onDone?.(user);
+      navigate('/login', {
+        replace: true,
+        state: { prefill: { email: form.email } }
+      });
     } catch (err) {
       const raw = unwrapErrorMessage(err) || err?.message || t('auth.registrationFailed');
       const translated =
@@ -166,6 +169,7 @@ const RegisterForm = ({ prefill: prefillProp = null, upgradeRole: upgradeRolePro
       <RoleSelector
         value={form.role}
         onChange={(role) => setForm((prev) => ({ ...prev, role }))}
+        onlyRole={upgradeRole || undefined}
       />
       {upgradeRole && (
         <div className="alert alert-info py-2 small" role="alert">

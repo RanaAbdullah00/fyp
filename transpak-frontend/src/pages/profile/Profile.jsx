@@ -84,11 +84,11 @@ const Profile = () => {
         }
       });
       const updated = res?.user;
-      if (updated) login(updated);
+      if (updated) login({ user: { ...user, ...updated }, currentRole: user.activeRole });
       setProfileComplete(Boolean(updated?.profileComplete));
       notifySuccess('Profile saved.');
     } catch (err) {
-      notifyError(err?.response?.data?.error || 'Failed to save profile');
+      notifyError(err?.response?.data?.message || err?.response?.data?.error || 'Failed to save profile');
     } finally {
       setLoading(false);
     }

@@ -1,5 +1,6 @@
 const express = require("express");
-const { protect, requireAnyRole } = require("../middleware/authMiddleware");
+const { protect, requireAnyRole, requireActiveRole } = require("../middleware/authMiddleware");
+const { sendSuccess, sendError } = require("../utils/apiResponse");
 const Bid = require("../models/Bid");
 const Load = require("../models/Load");
 const User = require("../models/User");
@@ -12,8 +13,7 @@ function isExpired(bid) {
   return exp > 0 && Date.now() > exp;
 }
 
-// Shipper: list bids for my loads
-router.get("/", protect, requireAnyRole(["shipper", "admin"]), async (req, res) => {
+router.get("/", protect, requireAnyRole(["shipper", "admin"]), requireActiveRole("shipper"), async (req, res) => {
   const roles = req.auth?.roles || [];
   const isAdmin = roles.includes("admin");
 
@@ -28,12 +28,13 @@ router.get("/", protect, requireAnyRole(["shipper", "admin"]), async (req, res) 
 
   const bids = await Bid.find({ loadId: { $in: loadIds } }).sort({ createdAt: -1 }).limit(500);
 
-  // Attach carrier name (lightweight)
   const carrierIds = Array.from(new Set(bids.map((b) => String(b.carrierId))));
   const carriers = await User.find({ _id: { $in: carrierIds } }).select("name");
   const carrierNameById = new Map(carriers.map((c) => [String(c._id), c.name]));
 
-  return res.json(
+  return sendSuccess(
+    res,
+    200,
     bids.map((b) =>
       b.toJSONSafe({
         carrierName: carrierNameById.get(String(b.carrierId)) || "Carrier",
@@ -43,20 +44,18 @@ router.get("/", protect, requireAnyRole(["shipper", "admin"]), async (req, res) 
   );
 });
 
-// Carrier: list my bids
-router.get("/mine", protect, requireAnyRole(["carrier", "admin"]), async (req, res) => {
+router.get("/mine", protect, requireAnyRole(["carrier", "admin"]), requireActiveRole("carrier"), async (req, res) => {
   const bids = await Bid.find({ carrierId: req.auth.userId }).sort({ createdAt: -1 }).limit(500);
-  return res.json(bids.map((b) => b.toJSONSafe()));
+  return sendSuccess(res, 200, bids.map((b) => b.toJSONSafe()));
 });
 
-// Carrier: place bid
-router.post("/", protect, requireAnyRole(["carrier", "admin"]), async (req, res) => {
+router.post("/", protect, requireAnyRole(["carrier", "admin"]), requireActiveRole("carrier"), async (req, res) => {
   const { loadId, amount, currency, transitTime, note } = req.body || {};
-  if (!loadId) return res.status(400).json({ error: "loadId is required" });
+  if (!loadId) return sendError(res, 400, "loadId is required");
 
   const load = await Load.findById(loadId);
-  if (!load) return res.status(404).json({ error: "Not found" });
-  if (load.status !== "open") return res.status(409).json({ error: "Load is not open for bidding" });
+  if (!load) return sendError(res, 404, "Not found");
+  if (load.status !== "open") return sendError(res, 409, "Load is not open for bidding");
 
   const hours = Number(load.deadlineHours || 2);
   const expiresAt = new Date(Date.now() + Math.max(1, hours) * 60 * 60 * 1000);
@@ -72,31 +71,29 @@ router.post("/", protect, requireAnyRole(["carrier", "admin"]), async (req, res)
     expiresAt
   });
 
-  return res.status(201).json(bid.toJSONSafe());
+  return sendSuccess(res, 201, bid.toJSONSafe(), "Created");
 });
 
-// Shipper: accept bid (must own the load)
-router.put("/:id/accept", protect, requireAnyRole(["shipper", "admin"]), async (req, res) => {
+router.put("/:id/accept", protect, requireAnyRole(["shipper", "admin"]), requireActiveRole("shipper"), async (req, res) => {
   const bid = await Bid.findById(req.params.id);
-  if (!bid) return res.status(404).json({ error: "Not found" });
+  if (!bid) return sendError(res, 404, "Not found");
 
   if (isExpired(bid)) {
     bid.status = "expired";
     await bid.save();
-    return res.status(409).json({ error: "Bid expired" });
+    return sendError(res, 409, "Bid expired");
   }
 
   const load = await Load.findById(bid.loadId);
-  if (!load) return res.status(404).json({ error: "Not found" });
+  if (!load) return sendError(res, 404, "Not found");
 
   const roles = req.auth?.roles || [];
   const isAdmin = roles.includes("admin");
   const isOwner = String(load.shipperId) === String(req.auth.userId);
-  if (!isAdmin && !isOwner) return res.status(403).json({ error: "Forbidden" });
+  if (!isAdmin && !isOwner) return sendError(res, 403, "Forbidden");
 
-  if (load.status !== "open") return res.status(409).json({ error: "Load is not open" });
+  if (load.status !== "open") return sendError(res, 409, "Load is not open");
 
-  // If carrier suggested a rate, use that amount when accepting
   if (bid.status === "suggested" && bid.suggestedBy === "carrier" && bid.suggestedAmount != null) {
     bid.amount = bid.suggestedAmount;
     bid.suggestedAmount = null;
@@ -104,7 +101,6 @@ router.put("/:id/accept", protect, requireAnyRole(["shipper", "admin"]), async (
     bid.suggestedBy = null;
   }
 
-  // Accept this bid; reject other pending/suggested bids for this load
   await Bid.updateMany(
     { loadId: load._id, status: { $in: ["pending", "suggested"] }, _id: { $ne: bid._id } },
     { $set: { status: "rejected" } }
@@ -117,56 +113,54 @@ router.put("/:id/accept", protect, requireAnyRole(["shipper", "admin"]), async (
   load.acceptedBidId = bid._id;
   await load.save();
 
-  return res.json({ ok: true });
+  return sendSuccess(res, 200, { ok: true });
 });
 
-// Shipper: reject bid (must own the load)
-router.put("/:id/reject", protect, requireAnyRole(["shipper", "admin"]), async (req, res) => {
+router.put("/:id/reject", protect, requireAnyRole(["shipper", "admin"]), requireActiveRole("shipper"), async (req, res) => {
   const bid = await Bid.findById(req.params.id);
-  if (!bid) return res.status(404).json({ error: "Not found" });
+  if (!bid) return sendError(res, 404, "Not found");
 
   const load = await Load.findById(bid.loadId);
-  if (!load) return res.status(404).json({ error: "Not found" });
+  if (!load) return sendError(res, 404, "Not found");
 
   const roles = req.auth?.roles || [];
   const isAdmin = roles.includes("admin");
   const isOwner = String(load.shipperId) === String(req.auth.userId);
-  if (!isAdmin && !isOwner) return res.status(403).json({ error: "Forbidden" });
+  if (!isAdmin && !isOwner) return sendError(res, 403, "Forbidden");
 
-  if (bid.status !== "pending") return res.status(409).json({ error: "Bid is not pending" });
+  if (bid.status !== "pending") return sendError(res, 409, "Bid is not pending");
 
   bid.status = "rejected";
   await bid.save();
-  return res.json({ ok: true });
+  return sendSuccess(res, 200, { ok: true });
 });
 
-// Shipper: suggest rate (counter-offer)
-router.put("/:id/suggest", protect, requireAnyRole(["shipper", "admin"]), async (req, res) => {
+router.put("/:id/suggest", protect, requireAnyRole(["shipper", "admin"]), requireActiveRole("shipper"), async (req, res) => {
   const { amount } = req.body || {};
   const amt = Number(amount);
   if (!amount || amt < 0 || Number.isNaN(amt)) {
-    return res.status(400).json({ error: "Valid amount is required" });
+    return sendError(res, 400, "Valid amount is required");
   }
 
   const bid = await Bid.findById(req.params.id);
-  if (!bid) return res.status(404).json({ error: "Not found" });
+  if (!bid) return sendError(res, 404, "Not found");
 
   const load = await Load.findById(bid.loadId);
-  if (!load) return res.status(404).json({ error: "Not found" });
+  if (!load) return sendError(res, 404, "Not found");
 
   const roles = req.auth?.roles || [];
   const isAdmin = roles.includes("admin");
   const isOwner = String(load.shipperId) === String(req.auth.userId);
-  if (!isAdmin && !isOwner) return res.status(403).json({ error: "Forbidden" });
+  if (!isAdmin && !isOwner) return sendError(res, 403, "Forbidden");
 
   if (bid.status !== "pending" && bid.status !== "suggested") {
-    return res.status(409).json({ error: "Bid is not available for suggestion" });
+    return sendError(res, 409, "Bid is not available for suggestion");
   }
 
   if (isExpired(bid)) {
     bid.status = "expired";
     await bid.save();
-    return res.status(409).json({ error: "Bid expired" });
+    return sendError(res, 409, "Bid expired");
   }
 
   bid.suggestedAmount = amt;
@@ -175,7 +169,7 @@ router.put("/:id/suggest", protect, requireAnyRole(["shipper", "admin"]), async 
   bid.status = "suggested";
   await bid.save();
 
-  return res.json({ ok: true, bid: bid.toJSONSafe() });
+  return sendSuccess(res, 200, { ok: true, bid: bid.toJSONSafe() });
 });
 
 async function carrierHasCompleteTrucks(userId) {
@@ -188,36 +182,35 @@ async function carrierHasCompleteTrucks(userId) {
   );
 }
 
-// Carrier: accept suggested rate (accept bid at suggested amount)
-router.put("/:id/accept-suggestion", protect, requireAnyRole(["carrier", "admin"]), async (req, res) => {
+router.put("/:id/accept-suggestion", protect, requireAnyRole(["carrier", "admin"]), requireActiveRole("carrier"), async (req, res) => {
   const roles = req.auth?.roles || [];
   if (!roles.includes("admin")) {
     const hasTrucks = await carrierHasCompleteTrucks(req.auth.userId);
     if (!hasTrucks) {
-      return res.status(403).json({ error: "Complete truck details before accepting suggestions" });
+      return sendError(res, 403, "Complete truck details before accepting suggestions");
     }
   }
 
   const bid = await Bid.findById(req.params.id);
-  if (!bid) return res.status(404).json({ error: "Not found" });
+  if (!bid) return sendError(res, 404, "Not found");
 
   const isCarrier = String(bid.carrierId) === String(req.auth.userId);
   const isAdmin = roles.includes("admin");
-  if (!isAdmin && !isCarrier) return res.status(403).json({ error: "Forbidden" });
+  if (!isAdmin && !isCarrier) return sendError(res, 403, "Forbidden");
 
   if (bid.status !== "suggested" || !bid.suggestedAmount) {
-    return res.status(409).json({ error: "No suggestion to accept" });
+    return sendError(res, 409, "No suggestion to accept");
   }
 
   if (isExpired(bid)) {
     bid.status = "expired";
     await bid.save();
-    return res.status(409).json({ error: "Bid expired" });
+    return sendError(res, 409, "Bid expired");
   }
 
   const load = await Load.findById(bid.loadId);
-  if (!load) return res.status(404).json({ error: "Not found" });
-  if (load.status !== "open") return res.status(409).json({ error: "Load is not open" });
+  if (!load) return sendError(res, 404, "Not found");
+  if (load.status !== "open") return sendError(res, 409, "Load is not open");
 
   bid.amount = bid.suggestedAmount;
   bid.suggestedAmount = null;
@@ -236,20 +229,19 @@ router.put("/:id/accept-suggestion", protect, requireAnyRole(["carrier", "admin"
   load.acceptedBidId = bid._id;
   await load.save();
 
-  return res.json({ ok: true });
+  return sendSuccess(res, 200, { ok: true });
 });
 
-// Carrier: reject suggested rate
-router.put("/:id/reject-suggestion", protect, requireAnyRole(["carrier", "admin"]), async (req, res) => {
+router.put("/:id/reject-suggestion", protect, requireAnyRole(["carrier", "admin"]), requireActiveRole("carrier"), async (req, res) => {
   const bid = await Bid.findById(req.params.id);
-  if (!bid) return res.status(404).json({ error: "Not found" });
+  if (!bid) return sendError(res, 404, "Not found");
 
   const isCarrier = String(bid.carrierId) === String(req.auth.userId);
   const roles = req.auth?.roles || [];
   const isAdmin = roles.includes("admin");
-  if (!isAdmin && !isCarrier) return res.status(403).json({ error: "Forbidden" });
+  if (!isAdmin && !isCarrier) return sendError(res, 403, "Forbidden");
 
-  if (bid.status !== "suggested") return res.status(409).json({ error: "No suggestion to reject" });
+  if (bid.status !== "suggested") return sendError(res, 409, "No suggestion to reject");
 
   bid.suggestedAmount = null;
   bid.suggestedAt = null;
@@ -257,40 +249,39 @@ router.put("/:id/reject-suggestion", protect, requireAnyRole(["carrier", "admin"
   bid.status = "pending";
   await bid.save();
 
-  return res.json({ ok: true });
+  return sendSuccess(res, 200, { ok: true });
 });
 
-// Carrier: suggest rate (revised offer)
-router.put("/:id/suggest-carrier", protect, requireAnyRole(["carrier", "admin"]), async (req, res) => {
+router.put("/:id/suggest-carrier", protect, requireAnyRole(["carrier", "admin"]), requireActiveRole("carrier"), async (req, res) => {
   const roles = req.auth?.roles || [];
   if (!roles.includes("admin")) {
     const hasTrucks = await carrierHasCompleteTrucks(req.auth.userId);
     if (!hasTrucks) {
-      return res.status(403).json({ error: "Complete truck details before suggesting rates" });
+      return sendError(res, 403, "Complete truck details before suggesting rates");
     }
   }
 
   const { amount } = req.body || {};
   const amt = Number(amount);
   if (!amount || amt < 0 || Number.isNaN(amt)) {
-    return res.status(400).json({ error: "Valid amount is required" });
+    return sendError(res, 400, "Valid amount is required");
   }
 
   const bid = await Bid.findById(req.params.id);
-  if (!bid) return res.status(404).json({ error: "Not found" });
+  if (!bid) return sendError(res, 404, "Not found");
 
   const isCarrier = String(bid.carrierId) === String(req.auth.userId);
   const isAdmin = roles.includes("admin");
-  if (!isAdmin && !isCarrier) return res.status(403).json({ error: "Forbidden" });
+  if (!isAdmin && !isCarrier) return sendError(res, 403, "Forbidden");
 
   if (bid.status !== "pending" && bid.status !== "suggested") {
-    return res.status(409).json({ error: "Bid is not available for suggestion" });
+    return sendError(res, 409, "Bid is not available for suggestion");
   }
 
   if (isExpired(bid)) {
     bid.status = "expired";
     await bid.save();
-    return res.status(409).json({ error: "Bid expired" });
+    return sendError(res, 409, "Bid expired");
   }
 
   bid.suggestedAmount = amt;
@@ -299,8 +290,7 @@ router.put("/:id/suggest-carrier", protect, requireAnyRole(["carrier", "admin"])
   bid.status = "suggested";
   await bid.save();
 
-  return res.json({ ok: true, bid: bid.toJSONSafe() });
+  return sendSuccess(res, 200, { ok: true, bid: bid.toJSONSafe() });
 });
 
 module.exports = router;
-
