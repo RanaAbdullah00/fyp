@@ -59,6 +59,8 @@ export const translations = {
       language: 'Language',
       english: 'English',
       urdu: 'اردو',
+      demoVideoLabel: 'Demo video (optional)',
+      demoVideoHint: 'MP4/WebM, max ~50MB — stored locally in this session only.',
       welcomeBack: 'Welcome back!',
       roleAddedSuccess: 'Role added successfully.',
       accountCreatedSuccess: 'Account created successfully',
@@ -94,7 +96,31 @@ export const translations = {
         origin: 'From city',
         destination: 'To city',
         vehicleType: 'Vehicle type',
-        bid: 'Bid'
+        bid: 'Bid',
+        city: 'City (origin or destination)',
+        minPrice: 'Min price (PKR)',
+        maxPrice: 'Max price (PKR)',
+        applyFilters: 'Apply filters'
+      },
+      pipeline: {
+        posted: 'Posted',
+        booked: 'Booked',
+        picked: 'Picked up',
+        transit: 'In transit',
+        delivered: 'Delivered',
+        advance: 'Next stage'
+      },
+      static: {
+        aboutTitle: 'About TransPak',
+        aboutBody:
+          'TransPak is a digital freight exchange connecting shippers and carriers across Pakistan with transparent loads, bids, and shipment tracking.',
+        contactTitle: 'Contact',
+        contactIntro: 'Send us a quick note. This form is stored locally for the demo — no message is emailed.',
+        contactMessage: 'Message',
+        contactPlaceholder: 'How can we help?',
+        contactSubmit: 'Send',
+        contactThanks: 'Thanks — we received your message.',
+        contactLink: 'Contact us'
       },
       bids: {
         management: 'Bid Management',
@@ -282,6 +308,8 @@ export const translations = {
       language: 'زبان',
       english: 'English',
       urdu: 'اردو',
+      demoVideoLabel: 'ڈیمو ویڈیو (اختیاری)',
+      demoVideoHint: 'MP4/WebM — صرف اس سیشن میں براؤزر میں محفوظ۔',
       welcomeBack: 'خوش آمدید!',
       roleAddedSuccess: 'کردار کامیابی سے شامل ہو گیا۔',
       accountCreatedSuccess: 'اکاؤنٹ کامیابی سے بن گیا۔',
@@ -317,7 +345,31 @@ export const translations = {
         origin: 'شہر سے',
         destination: 'شہر تک',
         vehicleType: 'ویہیکل کی قسم',
-        bid: 'بڈ'
+        bid: 'بڈ',
+        city: 'شہر (شروع یا منزل)',
+        minPrice: 'کم از کم قیمت (PKR)',
+        maxPrice: 'زیادہ سے زیادہ قیمت (PKR)',
+        applyFilters: 'فلٹر لگائیں'
+      },
+      pipeline: {
+        posted: 'پوسٹ',
+        booked: 'بک شدہ',
+        picked: 'اٹھا لیا گیا',
+        transit: 'راستے میں',
+        delivered: 'پہنچا دیا گیا',
+        advance: 'اگلا مرحلہ'
+      },
+      static: {
+        aboutTitle: 'ٹرانسپاک کے بارے میں',
+        aboutBody:
+          'ٹرانسپاک پاکستان میں شپپرز اور کیریئرز کو جوڑنے والا ڈیجیٹل فریٹ ایکسچینج ہے جس میں لوڈز، بڈز اور ٹریکنگ شامل ہیں۔',
+        contactTitle: 'رابطہ',
+        contactIntro: 'یہ ڈیمو فارم ہے — پیغام ای میل نہیں ہوتا۔',
+        contactMessage: 'پیغام',
+        contactPlaceholder: 'ہم کیسے مدد کر سکتے ہیں؟',
+        contactSubmit: 'بھیجیں',
+        contactThanks: 'شکریہ — آپ کا پیغام موصول ہوا۔',
+        contactLink: 'رابطہ کریں'
       },
       bids: {
         management: 'بڈ مینجمنٹ',

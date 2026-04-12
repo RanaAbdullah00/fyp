@@ -20,15 +20,38 @@ function generateCode() {
 }
 
 router.get("/", protect, requireAnyRole(["carrier", "admin"]), requireActiveRole("carrier"), async (req, res) => {
-  const { origin, destination, vehicleType } = req.query || {};
+  try {
+    const { origin, destination, vehicleType, city, minPrice, maxPrice } = req.query || {};
+    const and = [{ status: "open" }];
 
-  const q = { status: "open" };
-  if (origin) q.origin = new RegExp(String(origin).trim(), "i");
-  if (destination) q.destination = new RegExp(String(destination).trim(), "i");
-  if (vehicleType) q.vehicleType = new RegExp(String(vehicleType).trim(), "i");
+    if (origin) and.push({ origin: new RegExp(String(origin).trim(), "i") });
+    if (destination) and.push({ destination: new RegExp(String(destination).trim(), "i") });
+    if (vehicleType) and.push({ vehicleType: new RegExp(String(vehicleType).trim(), "i") });
+    if (city) {
+      const c = new RegExp(String(city).trim(), "i");
+      and.push({ $or: [{ origin: c }, { destination: c }] });
+    }
 
-  const loads = await Load.find(q).sort({ createdAt: -1 }).limit(200);
-  return sendSuccess(res, 200, loads.map((l) => l.toJSONSafe()));
+    const minRaw = minPrice !== undefined && String(minPrice).trim() !== "" ? String(minPrice).trim() : "";
+    const maxRaw = maxPrice !== undefined && String(maxPrice).trim() !== "" ? String(maxPrice).trim() : "";
+    if (minRaw && !Number.isFinite(Number(minRaw))) return sendError(res, 400, "minPrice must be a valid number");
+    if (maxRaw && !Number.isFinite(Number(maxRaw))) return sendError(res, 400, "maxPrice must be a valid number");
+    const minN = minRaw ? Number(minRaw) : null;
+    const maxN = maxRaw ? Number(maxRaw) : null;
+    if (minN != null && maxN != null && minN > maxN) return sendError(res, 400, "minPrice cannot exceed maxPrice");
+    if (minN != null || maxN != null) {
+      const range = {};
+      if (minN != null) range.$gte = minN;
+      if (maxN != null) range.$lte = maxN;
+      if (Object.keys(range).length) and.push({ expectedPrice: range });
+    }
+
+    const q = and.length === 1 ? and[0] : { $and: and };
+    const loads = await Load.find(q).sort({ createdAt: -1 }).limit(200);
+    return sendSuccess(res, 200, loads.map((l) => l.toJSONSafe()));
+  } catch (err) {
+    return sendError(res, 500, err.message || "Server error");
+  }
 });
 
 router.get("/mine", protect, requireAnyRole(["shipper", "admin"]), requireActiveRole("shipper"), async (req, res) => {

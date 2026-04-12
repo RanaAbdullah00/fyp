@@ -1,23 +1,38 @@
 import React from 'react';
 import Badge from '../ui/Badge.jsx';
+import { normalizeShipmentStatus } from '../../utils/shipmentStatus.js';
 
-// Visual indicator for shipment status.
-const StatusBadge = ({ status }) => {
+// Visual indicator for shipment / tracking status.
+const StatusBadge = ({ status, size }) => {
+  const canon = normalizeShipmentStatus(status) || String(status || '').toLowerCase();
   const map = {
+    posted: 'secondary',
+    booked: 'warning',
+    pickedup: 'warning',
+    intransit: 'primary',
+    delivered: 'success',
     pending: 'warning',
     in_transit: 'primary',
-    delivered: 'success',
     cancelled: 'secondary'
   };
   const labelMap = {
-    pending: 'Pending pickup',
-    in_transit: 'In transit',
+    posted: 'Posted',
+    booked: 'Booked',
+    pickedup: 'Picked up',
+    intransit: 'In transit',
     delivered: 'Delivered',
+    pending: 'Pending',
+    in_transit: 'In transit',
     cancelled: 'Cancelled'
   };
-  const variant = map[status] || 'secondary';
-  return <Badge variant={variant}>{labelMap[status] || status}</Badge>;
+  const variant = map[canon] || map[String(status || '').toLowerCase()] || 'secondary';
+  const label = labelMap[canon] || String(status || 'Unknown').replace(/_/g, ' ');
+  const cls = size === 'lg' ? 'fs-6 px-3 py-2' : '';
+  return (
+    <Badge variant={variant} className={cls}>
+      {label}
+    </Badge>
+  );
 };
 
 export default StatusBadge;
-

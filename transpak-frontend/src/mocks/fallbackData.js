@@ -61,7 +61,7 @@ export const fallbackNotifications = [
 
 export const fallbackTracking = {
   tracking: {
-    status: 'in_transit',
+    status: 'intransit',
     eta: 'Tonight 11:30 PM',
     currentLocation: [28.4, 70.3]
   },

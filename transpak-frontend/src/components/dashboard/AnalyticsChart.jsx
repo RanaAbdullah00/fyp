@@ -6,23 +6,26 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  CartesianGrid
+  CartesianGrid,
+  Legend
 } from 'recharts';
 import Card from '../ui/Card.jsx';
 
 // Simple line chart visualising shipment or revenue trends.
-const AnalyticsChart = ({ data, label }) => (
+const AnalyticsChart = ({ data, label, legend = 'Series' }) => (
   <Card>
     <h6 className="mb-2">{label}</h6>
-    <div style={{ width: '100%', height: 200 }}>
+    <div style={{ width: '100%', height: 220 }}>
       <ResponsiveContainer>
-        <LineChart data={data} margin={{ top: 10, right: 10, bottom: 0, left: -20 }}>
+        <LineChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-          <YAxis tick={{ fontSize: 10 }} />
-          <Tooltip />
+          <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+          <Tooltip formatter={(v) => [`${v}`, legend]} />
+          <Legend verticalAlign="top" height={28} formatter={() => legend} />
           <Line
             type="monotone"
+            name={legend}
             dataKey="value"
             stroke="#16a34a"
             strokeWidth={2}

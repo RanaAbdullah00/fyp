@@ -1,5 +1,7 @@
 require("dotenv").config();
 
+const path = require("path");
+const fs = require("fs");
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
@@ -13,26 +15,47 @@ const bidRoutes = require("./routes/bidRoutes");
 const truckRoutes = require("./routes/truckRoutes");
 const userRoutes = require("./routes/userRoutes");
 const adminRoutes = require("./routes/adminRoutes");
+const reviewRoutes = require("./routes/reviewRoutes");
+const notificationRoutes = require("./routes/notificationRoutes");
+const demoVideoRoutes = require("./routes/demoVideoRoutes");
 
 const app = express();
+
+const uploadsDir = path.join(__dirname, "uploads");
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
 
 // If you deploy behind a proxy (Render/Heroku/Nginx), enable this so rate limiting & IPs work correctly.
 app.set("trust proxy", 1);
 
 // Security & parsing middleware
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" }
+  })
+);
 app.use(express.json({ limit: "10kb" }));
 app.use(express.urlencoded({ extended: false }));
 app.use(mongoSanitize());
 
-// CORS for React + Vite SPA
-const corsOrigin = process.env.CORS_ORIGIN || "*";
-const allowedOrigins = corsOrigin === "*" ? null : corsOrigin.split(",").map((s) => s.trim());
+// CORS: allow typical Vite dev origins + optional CORS_ORIGIN (comma-separated)
+const defaultDevOrigins = [
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:5174"
+];
+const envOrigins = (process.env.CORS_ORIGIN || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+const allowedOrigins =
+  envOrigins.length > 0 ? [...new Set([...defaultDevOrigins, ...envOrigins])] : null;
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow browser-based requests for configured origins.
-      // If origin is missing (non-browser requests), allow by default.
       if (!origin) return callback(null, true);
       if (!allowedOrigins) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
@@ -46,6 +69,8 @@ app.use(
 app.get("/api/health", (req, res) =>
   res.json({ success: true, message: "ok", data: { status: "ok" } })
 );
+
+app.use("/api/demo-video", demoVideoRoutes);
 
 // Dev-only: seed admin user into current DB (for in-memory MongoDB)
 if (process.env.NODE_ENV === "development") {
@@ -188,6 +213,8 @@ app.use("/api/bids", bidRoutes);
 app.use("/api/trucks", truckRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/reviews", reviewRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 // Not found handler
 app.use((req, res) => {
@@ -242,9 +269,23 @@ async function start() {
   try {
     await connectDB();
     await seedAdminIfNeeded();
-    app.listen(PORT, () => {
-      console.log(`TransPak backend running on port ${PORT}`);
-    });
+    const basePort = Number(PORT) || 5000;
+    const maxAttempts = 20;
+    const tryListen = (port, attempt = 0) => {
+      const server = app.listen(port, () => {
+        console.log(`TransPak backend running on port ${port}`);
+      });
+      server.on("error", (err) => {
+        if (err && err.code === "EADDRINUSE" && attempt < maxAttempts) {
+          console.warn(`Port ${port} already in use. Trying ${port + 1}...`);
+          return tryListen(port + 1, attempt + 1);
+        }
+        console.error("Server listen failed:", err.message || err);
+        process.exit(1);
+      });
+      return server;
+    };
+    tryListen(basePort);
   } catch (err) {
     console.error("Failed to start server:", err.message);
     process.exit(1);

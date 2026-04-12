@@ -48,7 +48,10 @@ const AvailableLoads = () => {
   const [filters, setFilters] = useState({
     origin: '',
     destination: '',
-    vehicleType: ''
+    vehicleType: '',
+    city: '',
+    minPrice: '',
+    maxPrice: ''
   });
   const [loads, setLoads] = useState([]);
 
@@ -60,7 +63,10 @@ const AvailableLoads = () => {
         const params = {
           origin: filters.origin,
           destination: filters.destination,
-          vehicleType: filters.vehicleType
+          vehicleType: filters.vehicleType,
+          city: filters.city,
+          minPrice: filters.minPrice,
+          maxPrice: filters.maxPrice
         };
         const data = await request({
           method: 'GET',
@@ -135,6 +141,37 @@ const AvailableLoads = () => {
               <option>Container</option>
               <option>Flatbed</option>
             </select>
+          </div>
+          <div className="col-12">
+            <input
+              name="city"
+              className="form-control form-control-sm rounded-3"
+              placeholder={t('pages.loads.city')}
+              value={filters.city}
+              onChange={handleFilterChange}
+            />
+          </div>
+          <div className="col-6">
+            <input
+              name="minPrice"
+              type="number"
+              min="0"
+              className="form-control form-control-sm rounded-3"
+              placeholder={t('pages.loads.minPrice')}
+              value={filters.minPrice}
+              onChange={handleFilterChange}
+            />
+          </div>
+          <div className="col-6">
+            <input
+              name="maxPrice"
+              type="number"
+              min="0"
+              className="form-control form-control-sm rounded-3"
+              placeholder={t('pages.loads.maxPrice')}
+              value={filters.maxPrice}
+              onChange={handleFilterChange}
+            />
           </div>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import React, { createContext, useEffect, useMemo, useState } from 'react';
 import { createSocketClient } from '../services/socket.js';
 import { normalizeNotification } from '../adapters/normalize.js';
+import api from '../services/api.js';
 
 // Global app-level context for things like notifications, layout flags,
 // and shared mock data used across dashboards.
@@ -32,11 +33,25 @@ export const AppProvider = ({ children }) => {
       { id: Date.now(), read: false, ...normalized },
       ...prev
     ]);
+    const token = localStorage.getItem('transpak_token');
+    if (token && normalized?.message) {
+      api
+        .post('/notifications', {
+          title: String(normalized.type || 'Update').slice(0, 120),
+          message: String(normalized.message).slice(0, 2000),
+          roleType: normalized.roleType || '',
+          meta: { type: normalized.type }
+        })
+        .catch(() => {});
+    }
   };
 
   const markNotificationRead = (id) => {
     setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+      prev.map((n) => {
+        const nid = n.id ?? n._id;
+        return nid === id || String(nid) === String(id) ? { ...n, read: true, isRead: true } : n;
+      })
     );
   };
 

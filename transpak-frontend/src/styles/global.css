@@ -1018,3 +1018,237 @@ body.dark-theme .tp-logo-text .tp-logo-tagline {
   text-align: right;
 }
 
+/* App shell: subtle logistics-themed surface (no heavy assets) */
+.tp-app-surface {
+  background-color: var(--tp-bg);
+  background-image:
+    radial-gradient(1200px 500px at 10% 0%, rgba(22, 163, 74, 0.12), transparent 55%),
+    radial-gradient(900px 420px at 90% 10%, rgba(15, 118, 110, 0.1), transparent 50%),
+    repeating-linear-gradient(
+      -8deg,
+      rgba(15, 23, 42, 0.02) 0,
+      rgba(15, 23, 42, 0.02) 1px,
+      transparent 1px,
+      transparent 10px
+    );
+}
+
+body.dark-theme .tp-app-surface {
+  background-image:
+    radial-gradient(1200px 500px at 10% 0%, rgba(34, 197, 94, 0.12), transparent 55%),
+    radial-gradient(900px 420px at 90% 10%, rgba(20, 184, 166, 0.08), transparent 50%),
+    repeating-linear-gradient(-8deg, rgba(255, 255, 255, 0.03) 0, rgba(255, 255, 255, 0.03) 1px, transparent 1px, transparent 10px);
+}
+
+/* Shipment progress pipeline */
+.tp-pipeline-card {
+  border: 1px solid var(--pak-border);
+}
+
+.tp-pipeline {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+}
+
+.tp-pipeline-step {
+  flex: 1 1 0;
+  min-width: 72px;
+  text-align: center;
+}
+
+.tp-pipeline-node-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.35rem;
+}
+
+.tp-pipeline-node {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  border: 2px solid rgba(22, 163, 74, 0.35);
+  background: #fff;
+  color: #166534;
+}
+
+.tp-pipeline-bar {
+  flex: 1 1 auto;
+  height: 3px;
+  margin: 0 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(22, 163, 74, 0.35), rgba(22, 163, 74, 0.12));
+}
+
+.tp-pipeline-step.done .tp-pipeline-node {
+  background: #16a34a;
+  color: #fff;
+  border-color: #15803d;
+}
+
+.tp-pipeline-step.done .tp-pipeline-bar {
+  background: linear-gradient(90deg, #16a34a, #86efac);
+}
+
+.tp-pipeline-step.current .tp-pipeline-node {
+  box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.2);
+  border-color: #16a34a;
+  animation: tpPulseNode 1.6s ease-in-out infinite;
+}
+
+.tp-pipeline-step.current .tp-pipeline-label {
+  color: #166534;
+}
+
+@keyframes tpPulseNode {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+/* --- TransPak global shell: logistics motion (CSS only) --- */
+.tp-main-shell {
+  position: relative;
+  min-height: 60vh;
+}
+
+.tp-main-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  background-image: repeating-linear-gradient(
+      -18deg,
+      transparent,
+      transparent 38px,
+      rgba(22, 163, 74, 0.06) 38px,
+      rgba(22, 163, 74, 0.06) 40px
+    ),
+    radial-gradient(800px 400px at 20% 0%, rgba(22, 163, 74, 0.08), transparent 55%);
+}
+
+body.dark-theme .tp-main-shell::before {
+  opacity: 0.5;
+  background-image: repeating-linear-gradient(
+      -18deg,
+      transparent,
+      transparent 38px,
+      rgba(34, 197, 94, 0.07) 38px,
+      rgba(34, 197, 94, 0.07) 40px
+    ),
+    radial-gradient(800px 400px at 20% 0%, rgba(34, 197, 94, 0.1), transparent 55%);
+}
+
+.tp-navbar-surface {
+  background: rgba(255, 255, 255, 0.92) !important;
+  backdrop-filter: blur(8px);
+}
+
+body.dark-theme .tp-navbar-surface {
+  background: rgba(17, 24, 39, 0.92) !important;
+}
+
+.tp-auth-shell {
+  background: var(--tp-bg);
+  background-image: radial-gradient(900px 480px at 0% 0%, rgba(22, 163, 74, 0.14), transparent 55%),
+    radial-gradient(700px 400px at 100% 20%, rgba(15, 118, 110, 0.12), transparent 50%),
+    repeating-linear-gradient(0deg, rgba(15, 23, 42, 0.03) 0, rgba(15, 23, 42, 0.03) 1px, transparent 1px, transparent 14px);
+}
+
+body.dark-theme .tp-auth-shell {
+  background-image: radial-gradient(900px 480px at 0% 0%, rgba(34, 197, 94, 0.15), transparent 55%),
+    radial-gradient(700px 400px at 100% 20%, rgba(20, 184, 166, 0.1), transparent 50%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.04) 0, rgba(255, 255, 255, 0.04) 1px, transparent 1px, transparent 14px);
+}
+
+.tp-auth-hero {
+  background: linear-gradient(165deg, #14532d 0%, #166534 38%, #0f766e 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.tp-auth-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.2;
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.12) 0,
+    rgba(255, 255, 255, 0.12) 2px,
+    transparent 2px,
+    transparent 48px
+  );
+  animation: tpRoadDrift 22s linear infinite;
+}
+
+@keyframes tpRoadDrift {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-48px);
+  }
+}
+
+.tp-auth-form-wrap {
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(6px);
+}
+
+body.dark-theme .tp-auth-form-wrap {
+  background: rgba(17, 24, 39, 0.55);
+}
+
+.tp-route-lines {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.1));
+  box-shadow: 0 0 24px rgba(255, 255, 255, 0.35);
+}
+
+.tp-hero-mark {
+  letter-spacing: 0.08em;
+  text-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+}
+
+.tp-auth-hero-compact {
+  background: linear-gradient(135deg, #166534, #0f766e);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
+}
+
+.tp-static-page .card {
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(4px);
+}
+
+body.dark-theme .tp-static-page .card {
+  background: rgba(31, 41, 55, 0.88);
+}
+
+.tp-empty-state {
+  border-radius: 0.75rem;
+}
+
+.tp-star-btn.tp-star-on {
+  background: #16a34a;
+  border-color: #15803d;
+  color: #fff;
+}
+
+.tp-star-btn {
+  min-width: 2.25rem;
+}
+

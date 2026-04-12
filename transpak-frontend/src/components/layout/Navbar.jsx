@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { FaBars, FaBell } from 'react-icons/fa';
 import { useAuth } from '../../hooks/useAuth.js';
@@ -9,14 +9,42 @@ import { useLanguage } from '../../hooks/useLanguage.js';
 import { dashboardPathForRole } from '../../utils/dashboardPath.js';
 import { notifyError } from '../ui/ToastProvider.jsx';
 import { unwrapErrorMessage } from '../../utils/unwrapApi.js';
+import api from '../../services/api.js';
 
 const Navbar = () => {
   const navigate = useNavigate();
   const { t, isUrdu } = useLanguage();
   const { user, setActiveRole } = useAuth();
   const app = React.useContext(AppContext);
-  const unreadCount = Array.isArray(app?.notifications) ? app.notifications.filter((n) => !n.read).length : 0;
+  const [serverUnread, setServerUnread] = useState(0);
+  const ephemeralUnread = Array.isArray(app?.notifications)
+    ? app.notifications.filter(
+        (n) => !(n.read || n.isRead) && !/^[a-f0-9]{24}$/i.test(String(n.id || n._id || ''))
+      ).length
+    : 0;
+  const unreadCount = serverUnread + ephemeralUnread;
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      if (!user) {
+        setServerUnread(0);
+        return;
+      }
+      try {
+        const res = await api.get('/notifications/unread-count');
+        const body = res.data;
+        const n = typeof body?.unreadCount === 'number' ? body.unreadCount : 0;
+        setServerUnread(n);
+      } catch {
+        setServerUnread(0);
+      }
+    };
+    load();
+    const onRead = () => load();
+    window.addEventListener('tp_notifications_read', onRead);
+    return () => window.removeEventListener('tp_notifications_read', onRead);
+  }, [user]);
   const roles = user?.roles || (user?.role ? [user.role] : []);
   const activeRole = user?.activeRole || user?.role;
 
@@ -70,7 +98,7 @@ const Navbar = () => {
   return (
     <>
       <nav
-        className={`navbar navbar-light bg-white shadow-sm sticky-top d-flex d-md-none navbar-custom ${isUrdu ? 'tp-rtl' : ''}`}
+        className={`navbar navbar-light shadow-sm sticky-top d-flex d-md-none navbar-custom tp-navbar-surface ${isUrdu ? 'tp-rtl' : ''}`}
       >
         <div className="container-fluid px-3 d-flex justify-content-between align-items-center">
           <button
@@ -113,7 +141,7 @@ const Navbar = () => {
         </div>
       </nav>
       <nav
-        className={`navbar navbar-expand-md navbar-light bg-white shadow-sm sticky-top d-none d-md-flex navbar-custom ${isUrdu ? 'tp-rtl' : ''}`}
+        className={`navbar navbar-expand-md navbar-light shadow-sm sticky-top d-none d-md-flex navbar-custom tp-navbar-surface ${isUrdu ? 'tp-rtl' : ''}`}
       >
         <div className="container-fluid px-3">
           <Link to="/" className="navbar-brand d-flex align-items-center fw-bold">

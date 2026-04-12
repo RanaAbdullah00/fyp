@@ -12,7 +12,20 @@ export const useApi = () => {
     const method = String(config?.method || 'GET').toUpperCase();
     if (method === 'GET' && url.includes('/loads')) return fallbackLoads;
     if (method === 'GET' && url.includes('/bids')) return fallbackBids;
+    if (method === 'GET' && url.includes('/notifications/unread-count')) {
+      return { unreadCount: 0 };
+    }
     if (method === 'GET' && url.includes('/notifications')) return fallbackNotifications;
+    if (method === 'GET' && url.includes('/admin/stats')) {
+      return {
+        totalUsers: 0,
+        totalLoads: 0,
+        totalShipments: 0,
+        activeShipments: 0,
+        totalBids: 0,
+        totalReviews: 0
+      };
+    }
     if (method === 'GET' && url.includes('/shipments/track')) return fallbackTracking;
     if (method === 'PUT' && url.includes('/bids/') && (url.endsWith('/accept') || url.endsWith('/reject') || url.endsWith('/suggest') || url.includes('/accept-suggestion') || url.includes('/reject-suggestion') || url.includes('/suggest-carrier'))) {
       return { ok: true };

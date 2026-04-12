@@ -15,6 +15,7 @@ const LoginForm = () => {
   const { login } = useAuth();
   const { t, isUrdu } = useLanguage();
   const [form, setForm] = useState({ email: '', password: '' });
+  const [demoVideo, setDemoVideo] = useState(null);
   const [uiRolePref, setUiRolePref] = useState(''); // UI hint only; admin determined by backend role
   const [loading, setLoading] = useState(false);
 
@@ -126,6 +127,21 @@ const LoginForm = () => {
             required
           />
         </div>
+      </div>
+      <div className="mb-3">
+        <label className="form-label small">{t('auth.demoVideoLabel')}</label>
+        <input
+          type="file"
+          accept="video/*"
+          className="form-control form-control-sm rounded-3"
+          onChange={(e) => setDemoVideo(e.target.files?.[0] || null)}
+        />
+        <div className="form-text small">{t('auth.demoVideoHint')}</div>
+        {demoVideo && (
+          <div className="small text-muted mt-1">
+            {demoVideo.name} ({Math.round(demoVideo.size / 1024)} KB)
+          </div>
+        )}
       </div>
       <Button
         variant="primary"

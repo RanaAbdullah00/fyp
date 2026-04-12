@@ -6,26 +6,34 @@ import LoadList from '../../components/loadboard/LoadList.jsx';
 import { useState, useEffect } from 'react';
 import { useApi } from '../../hooks/useApi.js';
 import { useAuth } from '../../hooks/useAuth.js';
+import { useLanguage } from '../../hooks/useLanguage.js';
 import TrackingMap from '../../components/shipment/TrackingMap.jsx';
 import StatusBadge from '../../components/shipment/StatusBadge.jsx';
 import StatusTimeline from '../../components/shipment/StatusTimeline.jsx';
+import ShipmentProgressPipeline from '../../components/shipment/ShipmentProgressPipeline.jsx';
 import Loader from '../../components/ui/Loader.jsx';
 import Button from '../../components/ui/Button.jsx';
 import { FaTruck } from 'react-icons/fa';
 import { notifySuccess, notifyError } from '../../components/ui/ToastProvider.jsx';
-import { normalizeTracking } from '../../adapters/normalize.js';
+import { normalizeTracking, normalizeLoads } from '../../adapters/normalize.js';
+import { nextShipmentStatus, ADVANCE_LABELS, normalizeShipmentStatus } from '../../utils/shipmentStatus.js';
 import { Link } from 'react-router-dom';
 
 // Dashboard view tailored for carriers.
 const CarrierDashboard = () => {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const profileComplete = user?.profileComplete === true;
-  const stats = [
-    { label: 'Active loads', value: 3 },
-    { label: 'Bids pending', value: 5 },
-    { label: 'Fleet vehicles', value: 12 },
-    { label: 'Earnings (PKR)', value: '3.1M', subLabel: 'Last 30 days' }
-  ];
+  const pipelineLabels = useMemo(
+    () => [
+      t('pages.pipeline.posted'),
+      t('pages.pipeline.booked'),
+      t('pages.pipeline.picked'),
+      t('pages.pipeline.transit'),
+      t('pages.pipeline.delivered')
+    ],
+    [t]
+  );
 
   const activities = [
     { id: 1, message: 'Assigned to shipment PK-INV-004 (Karachi → Faisalabad).', time: '30 min ago' },
@@ -33,31 +41,60 @@ const CarrierDashboard = () => {
   ];
 
   const [month, setMonth] = useState('This month');
-  const chartData = useMemo(() => {
-    const base = month === 'Last month' ? [1, 2, 3, 2, 3, 2, 1] : [2, 3, 4, 2, 5, 3, 1];
-    return ['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7'].map((n, i) => ({ name: n, value: base[i] }));
-  }, [month]);
+  const [openLoads, setOpenLoads] = useState([]);
+  const [bidSummary, setBidSummary] = useState({ accepted: 0, pending: 0 });
 
-  const loads = [
-    {
-      id: 2,
-      code: 'L-103',
-      cargo: 'Bulk cement',
-      origin: 'DG Khan',
-      destination: 'Lahore',
-      weight: 22,
-      vehicleType: 'Truck',
-      distance: 380,
-      expectedPrice: 90000,
-      pickupDate: 'Tomorrow',
-      status: 'open'
-    }
-  ];
+  const metrics = useMemo(() => {
+    const open = openLoads.length;
+    const accepted = bidSummary.accepted;
+    const pending = bidSummary.pending;
+    return { open, accepted, pending };
+  }, [openLoads, bidSummary]);
+
+  const stats = useMemo(
+    () => [
+      { label: 'Open marketplace loads', value: metrics.open },
+      { label: 'Accepted bids', value: metrics.accepted },
+      { label: 'Pending bids', value: metrics.pending },
+      { label: 'Fleet vehicles', value: 12, subLabel: 'Demo count' }
+    ],
+    [metrics]
+  );
+
+  const chartData = useMemo(() => {
+    const seed = Math.max(1, Math.min(8, metrics.accepted + 1));
+    const base =
+      month === 'Last month' ? [seed, seed, seed + 1, seed, seed + 1, seed, seed] : [seed, seed + 1, seed + 2, seed, seed + 1, seed + 2, seed];
+    return ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5', 'Week 6', 'Week 7'].map((n, i) => ({
+      name: n,
+      value: base[i]
+    }));
+  }, [month, metrics.accepted]);
 
   const [trackingData, setTrackingData] = useState(null);
   const [loadingTracking, setLoadingTracking] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState(false);
   const { request } = useApi();
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [loadsRaw, bidsRaw] = await Promise.all([
+          request({ method: 'GET', url: '/loads' }).catch(() => []),
+          request({ method: 'GET', url: '/bids/mine' }).catch(() => [])
+        ]);
+        const loadsArr = normalizeLoads(Array.isArray(loadsRaw) ? loadsRaw : []);
+        setOpenLoads(loadsArr.slice(0, 6));
+        const bids = Array.isArray(bidsRaw) ? bidsRaw : [];
+        setBidSummary({
+          accepted: bids.filter((b) => String(b.status) === 'accepted').length,
+          pending: bids.filter((b) => String(b.status) === 'pending').length
+        });
+      } catch {
+        setOpenLoads([]);
+      }
+    })();
+  }, [request]);
 
   const updateShipmentStatus = async (newStatus) => {
     setLoadingStatus(true);
@@ -67,14 +104,19 @@ const CarrierDashboard = () => {
         url: '/shipments/1/status',
         data: { status: newStatus }
       });
-      setTrackingData(updatedData);
-      notifySuccess(`Status updated to ${newStatus.replace('_', ' ')}`);
+      setTrackingData(normalizeTracking(updatedData));
+      notifySuccess(`Status updated`);
     } catch (err) {
-      notifyError('Status update failed');
+      notifyError(err?.message || 'Status update failed');
     } finally {
       setLoadingStatus(false);
     }
   };
+
+  const currentCanon = normalizeShipmentStatus(trackingData?.tracking?.status) || 'posted';
+  const upcoming = nextShipmentStatus(currentCanon);
+  const advanceLabel =
+    currentCanon === 'delivered' ? t('pages.pipeline.delivered') : ADVANCE_LABELS[currentCanon] || ADVANCE_LABELS.posted;
 
   useEffect(() => {
     const fetchTracking = async () => {
@@ -113,7 +155,7 @@ const CarrierDashboard = () => {
               <option>Last month</option>
             </select>
           </div>
-          <AnalyticsChart data={chartData} label="Monthly accepted loads" />
+          <AnalyticsChart data={chartData} label="Weekly bidding activity" legend="Accepted loads (index)" />
         </div>
         <div className="col-12 col-lg-6">
           <ActivityFeed activities={activities} />
@@ -123,7 +165,7 @@ const CarrierDashboard = () => {
         <div className="d-flex justify-content-between align-items-center mb-1">
           <h6 className="mb-0">Recommended loads</h6>
         </div>
-        <LoadList loads={loads} />
+        <LoadList loads={openLoads} />
       </div>
       <div className="mt-4">
         <div className="d-flex justify-content-between align-items-center mb-3">
@@ -145,33 +187,17 @@ const CarrierDashboard = () => {
                   />
                 </div>
                 <div className="col-lg-4">
+                  <ShipmentProgressPipeline status={trackingData.tracking?.status} labels={pipelineLabels} />
                   <StatusBadge status={trackingData.tracking?.status || 'unknown'} size="lg" />
-                  <h5 className="mt-2 mb-3">Update Status</h5>
-                  
+                  <h5 className="mt-2 mb-3">Update status</h5>
                   <div className="d-grid gap-2">
-                    <Button 
-                      variant="outline-primary" 
+                    <Button
+                      variant="primary"
                       className="py-2"
-                      onClick={() => updateShipmentStatus('picked_up')}
-                      disabled={trackingData?.tracking?.status === 'in_transit' || loadingStatus}
+                      onClick={() => upcoming && updateShipmentStatus(upcoming)}
+                      disabled={!upcoming || loadingStatus}
                     >
-                      Load Picked Up
-                    </Button>
-                    <Button 
-                      variant="primary" 
-                      className="py-2"
-                      onClick={() => updateShipmentStatus('in_transit')}
-                      disabled={trackingData?.tracking?.status === 'delivered' || loadingStatus}
-                    >
-                      In Transit
-                    </Button>
-                    <Button 
-                      variant="success" 
-                      className="py-2"
-                      onClick={() => updateShipmentStatus('delivered')}
-                      disabled={trackingData?.tracking?.status !== 'in_transit' || loadingStatus}
-                    >
-                      Mark Delivered
+                      {upcoming ? `${t('pages.pipeline.advance')}: ${advanceLabel}` : t('pages.pipeline.delivered')}
                     </Button>
                   </div>
                   <small className="text-muted mt-2">
@@ -197,12 +223,10 @@ const CarrierDashboard = () => {
             </div>
           </div>
         ) : (
-          <div className="text-center py-5">
-            <div className="text-muted">
-              <FaTruck className="fs-1 text-muted mb-3" />
-              <h6>No assigned shipments</h6>
-              <p className="small">Check loads and bids for new assignments.</p>
-            </div>
+          <div className="text-center py-5 px-3 tp-empty-state rounded-3 border border-dashed text-muted">
+            <FaTruck className="fs-1 text-muted mb-3" />
+            <h6 className="mb-2">No assigned shipments</h6>
+            <p className="small mb-0">Check loads and bids for new assignments.</p>
           </div>
         )}
       </div>

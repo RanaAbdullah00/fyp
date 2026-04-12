@@ -16,8 +16,10 @@ const AdminDashboardPage = () => {
 
   const cards = [
     { label: 'Total users', value: stats?.totalUsers ?? '—', subLabel: 'Registered' },
-    { label: 'Total loads', value: stats?.totalLoads ?? '—', subLabel: 'All time' },
-    { label: 'Total bids', value: stats?.totalBids ?? '—', subLabel: 'Placed' }
+    { label: 'Total shipments', value: stats?.totalShipments ?? stats?.totalLoads ?? '—', subLabel: 'Load records' },
+    { label: 'Active shipments', value: stats?.activeShipments ?? '—', subLabel: 'Assigned + in transit' },
+    { label: 'Total bids', value: stats?.totalBids ?? '—', subLabel: 'Placed' },
+    { label: 'Total reviews', value: stats?.totalReviews ?? '—', subLabel: 'Ratings stored' }
   ];
 
   return (
@@ -30,7 +32,7 @@ const AdminDashboardPage = () => {
       ) : (
         <div className="row g-3">
           {cards.map((c, i) => (
-            <div key={i} className="col-12 col-md-4">
+            <div key={i} className="col-12 col-md-6 col-xl-4">
               <div className="card border-0 shadow-sm h-100 rounded-3 overflow-hidden">
                 <div className="card-body py-4">
                   <div className="text-muted small text-uppercase mb-1">{c.subLabel}</div>

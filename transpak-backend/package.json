@@ -19,7 +19,8 @@
     "express-validator": "^7.2.1",
     "helmet": "^7.2.0",
     "jsonwebtoken": "^9.0.3",
-    "mongoose": "^8.23.0"
+    "mongoose": "^8.23.0",
+    "multer": "^2.1.1"
   },
   "devDependencies": {
     "mongodb-memory-server": "^11.0.1",

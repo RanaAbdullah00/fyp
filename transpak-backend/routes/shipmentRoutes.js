@@ -1,6 +1,10 @@
 const express = require("express");
 const { protect } = require("../middleware/authMiddleware");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
+const {
+  normalizeShipmentStatus,
+  validateShipmentTransition
+} = require("../utils/shipmentStatus");
 
 const router = express.Router();
 
@@ -12,13 +16,16 @@ function getOrCreateShipment(id) {
 
   const data = {
     tracking: {
-      status: "in_transit",
+      status: "posted",
       eta: "Tonight 11:30 PM",
-      currentLocation: [28.4, 70.3]
+      currentLocation: [31.5204, 74.3587]
     },
     history: [
-      { event: "Picked up", time: "Today 8:15 AM", location: "Lahore" },
-      { event: "In transit", time: "Today 12:40 PM", location: "Near Sukkur" }
+      {
+        event: "Load posted",
+        time: new Date().toLocaleString(),
+        location: "System"
+      }
     ],
     liveTrackingMap: {
       coordinates: [
@@ -35,29 +42,48 @@ function getOrCreateShipment(id) {
 }
 
 router.get("/track/:id", protect, (req, res) => {
-  const data = getOrCreateShipment(req.params.id);
-  return sendSuccess(res, 200, data);
+  try {
+    const data = getOrCreateShipment(req.params.id);
+    const canonical = normalizeShipmentStatus(data.tracking?.status) || "posted";
+    data.tracking = { ...(data.tracking || {}), status: canonical };
+    return sendSuccess(res, 200, data);
+  } catch (err) {
+    return sendError(res, 500, err.message || "Server error");
+  }
 });
 
 router.put("/:id/status", protect, (req, res) => {
-  const { status } = req.body || {};
-  const next = String(status || "").trim();
-  if (!next) return sendError(res, 400, "Status is required");
+  try {
+    const { status } = req.body || {};
+    const nextRaw = String(status || "").trim();
+    if (!nextRaw) return sendError(res, 400, "Status is required");
 
-  const data = getOrCreateShipment(req.params.id);
-  data.tracking = {
-    ...(data.tracking || {}),
-    status: next
-  };
-  data.history = Array.isArray(data.history) ? data.history : [];
-  data.history.unshift({
-    event: `Status: ${next}`,
-    time: new Date().toLocaleString(),
-    location: "System"
-  });
+    const data = getOrCreateShipment(req.params.id);
+    const current = data.tracking?.status;
+    const check = validateShipmentTransition(current, nextRaw);
+    if (!check.ok) return sendError(res, 400, check.message);
 
-  shipments.set(String(req.params.id), data);
-  return sendSuccess(res, 200, data);
+    const canonical = check.canonical;
+    if (check.same) {
+      return sendSuccess(res, 200, data);
+    }
+
+    data.tracking = {
+      ...(data.tracking || {}),
+      status: canonical
+    };
+    data.history = Array.isArray(data.history) ? data.history : [];
+    data.history.unshift({
+      event: `Status: ${canonical}`,
+      time: new Date().toLocaleString(),
+      location: "System"
+    });
+
+    shipments.set(String(req.params.id), data);
+    return sendSuccess(res, 200, data);
+  } catch (err) {
+    return sendError(res, 500, err.message || "Server error");
+  }
 });
 
 module.exports = router;

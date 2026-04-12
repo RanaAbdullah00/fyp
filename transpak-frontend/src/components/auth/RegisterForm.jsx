@@ -36,6 +36,7 @@ const RegisterForm = ({ prefill: prefillProp = null, upgradeRole: upgradeRolePro
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [demoVideo, setDemoVideo] = useState(null);
 
   useEffect(() => {
     // If navigation state changes (rare), sync prefill once
@@ -282,6 +283,21 @@ const RegisterForm = ({ prefill: prefillProp = null, upgradeRole: upgradeRolePro
           />
         </div>
         {errors.confirmPassword && <div className="invalid-feedback">{errors.confirmPassword}</div>}
+      </div>
+      <div className="mb-3">
+        <label className="form-label small">{t('auth.demoVideoLabel')}</label>
+        <input
+          type="file"
+          accept="video/*"
+          className="form-control form-control-sm rounded-3"
+          onChange={(e) => setDemoVideo(e.target.files?.[0] || null)}
+        />
+        <div className="form-text small">{t('auth.demoVideoHint')}</div>
+        {demoVideo && (
+          <div className="small text-muted mt-1">
+            {demoVideo.name} ({Math.round(demoVideo.size / 1024)} KB)
+          </div>
+        )}
       </div>
       <Button
         variant="primary"

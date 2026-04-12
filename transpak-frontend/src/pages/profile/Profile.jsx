@@ -5,6 +5,7 @@ import Loader from '../../components/ui/Loader.jsx';
 import { useAuth } from '../../hooks/useAuth.js';
 import { useApi } from '../../hooks/useApi.js';
 import { notifyError, notifySuccess } from '../../components/ui/ToastProvider.jsx';
+import ReviewsSection from '../../components/reviews/ReviewsSection.jsx';
 
 const fileToDataUrl = (file) =>
   new Promise((resolve, reject) => {
@@ -203,6 +204,8 @@ const Profile = () => {
           </Button>
         </div>
       </Card>
+
+      {user?.id && <ReviewsSection userId={user.id} />}
     </div>
   );
 };

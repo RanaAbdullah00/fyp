@@ -45,7 +45,7 @@ const NotificationItem = ({ notification, onClick }) => (
     </div>
     <div className="d-flex align-items-center gap-2">
       {notification.type && <Badge variant={typeVariant(notification.type)}>{notification.type}</Badge>}
-      {!notification.read && <Badge variant="primary">New</Badge>}
+      {!(notification.read || notification.isRead) && <Badge variant="primary">New</Badge>}
     </div>
   </button>
 );

@@ -35,6 +35,8 @@ import Support from './pages/support/Support.jsx';
 import Feedback from './pages/support/Feedback.jsx';
 import Notifications from './pages/notifications/Notifications.jsx';
 import Messages from './pages/messages/Messages.jsx';
+import About from './pages/static/About.jsx';
+import Contact from './pages/static/Contact.jsx';
 import Navbar from './components/layout/Navbar.jsx';
 import Sidebar from './components/layout/Sidebar.jsx';
 import MobileNav from './components/layout/MobileNav.jsx';
@@ -85,20 +87,22 @@ const RoleDashboard = () => {
 function App() {
 
   const location = useLocation();
-  const isAuthPage = ['/login', '/register', '/splash', '/role'].includes(location.pathname);
+  const isAuthPage = ['/login', '/register', '/splash', '/role', '/about', '/contact'].includes(location.pathname);
   return (
     <>
 
-      <div className="app-root d-flex flex-column min-vh-100 bg-light">
+      <div className="app-root d-flex flex-column min-vh-100 tp-app-surface">
         {!isAuthPage && <Navbar />}
         <div className="d-flex flex-grow-1">
           {!isAuthPage && <Sidebar />}
-          <main className="flex-grow-1 container-fluid px-0 pb-5 pb-md-0">
+          <main className="flex-grow-1 container-fluid px-0 pb-5 pb-md-0 tp-main-shell">
               <Routes>
               {/* Auth */}
               <Route path="/splash" element={<Splash />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/about" element={<About />} />
+              <Route path="/contact" element={<Contact />} />
               <Route
                 path="/role"
                 element={

@@ -71,7 +71,7 @@ export const normalizeNotifications = (arr) =>
 export const normalizeTracking = (raw) => {
   if (!raw) return null;
   return {
-    tracking: raw.tracking || { status: 'unknown' },
+    tracking: raw.tracking || { status: 'posted' },
     history: Array.isArray(raw.history) ? raw.history : [],
     liveTrackingMap: raw.liveTrackingMap || { coordinates: [] }
   };
