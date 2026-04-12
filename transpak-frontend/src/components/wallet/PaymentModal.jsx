@@ -1,15 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Modal from '../ui/Modal.jsx';
 import Button from '../ui/Button.jsx';
 
 // Modal used to simulate payment between shipper and carrier wallets.
-const PaymentModal = ({ onClose, onConfirm, maxAmount }) => {
-  const [amount, setAmount] = useState('');
+const PaymentModal = ({ onClose, onConfirm, maxAmount, defaultAmount, initialOutcome = '' }) => {
+  const [amount, setAmount] = useState(defaultAmount != null ? String(defaultAmount) : '');
   const [provider, setProvider] = useState('easypaisa');
+  const [outcome, setOutcome] = useState(initialOutcome);
   const safeMax = Number(maxAmount ?? 0);
 
+  useEffect(() => {
+    if (defaultAmount != null) setAmount(String(defaultAmount));
+  }, [defaultAmount]);
+
   const handleConfirm = () => {
-    onConfirm?.({ amount: Number(amount), provider });
+    onConfirm?.({
+      amount: Number(amount),
+      provider,
+      outcome: outcome || undefined
+    });
   };
 
   return (
@@ -52,6 +61,19 @@ const PaymentModal = ({ onClose, onConfirm, maxAmount }) => {
         >
           <option value="easypaisa">Easypaisa</option>
           <option value="jazzcash">JazzCash</option>
+        </select>
+      </div>
+      <div className="mb-2">
+        <label className="form-label small">Test outcome (optional)</label>
+        <select
+          className="form-select form-select-sm rounded-3"
+          value={outcome}
+          onChange={(e) => setOutcome(e.target.value)}
+        >
+          <option value="">Default (success)</option>
+          <option value="success">success</option>
+          <option value="pending">pending</option>
+          <option value="failed">failed</option>
         </select>
       </div>
     </Modal>

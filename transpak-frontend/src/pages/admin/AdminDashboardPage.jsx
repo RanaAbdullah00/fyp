@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import StatsCards from '../../components/dashboard/StatsCards.jsx';
 import Loader from '../../components/ui/Loader.jsx';
 import { useApi } from '../../hooks/useApi.js';
-
 const AdminDashboardPage = () => {
   const { request, loading } = useApi();
   const [stats, setStats] = useState(null);

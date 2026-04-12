@@ -70,8 +70,25 @@ export const normalizeNotifications = (arr) =>
 
 export const normalizeTracking = (raw) => {
   if (!raw) return null;
+  const t = raw.tracking || {};
+  const loc = t.location != null ? t.location : t.currentLocation;
+  const hasCoords =
+    Array.isArray(loc) &&
+    loc.length >= 2 &&
+    Number.isFinite(Number(loc[0])) &&
+    Number.isFinite(Number(loc[1]));
+  const backendFlag = t.locationUnavailable === true;
+  const locationUnavailable = backendFlag || !hasCoords;
+  const safeLoc = hasCoords ? [Number(loc[0]), Number(loc[1])] : null;
   return {
-    tracking: raw.tracking || { status: 'posted' },
+    tracking: {
+      ...t,
+      status: t.status ?? 'posted',
+      eta: t.eta,
+      locationUnavailable,
+      location: safeLoc,
+      currentLocation: safeLoc
+    },
     history: Array.isArray(raw.history) ? raw.history : [],
     liveTrackingMap: raw.liveTrackingMap || { coordinates: [] }
   };

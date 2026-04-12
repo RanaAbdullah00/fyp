@@ -21,6 +21,9 @@ async function protect(req, res, next) {
     if (!user) {
       return sendError(res, 401, "Unauthorized");
     }
+    if (user.blocked) {
+      return sendError(res, 403, "Account is blocked");
+    }
 
     req.user = user.toAuthJSON();
     req.auth = {

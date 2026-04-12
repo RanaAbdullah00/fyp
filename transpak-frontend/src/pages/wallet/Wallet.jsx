@@ -1,60 +1,98 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import WalletCard from '../../components/wallet/WalletCard.jsx';
 import PaymentModal from '../../components/wallet/PaymentModal.jsx';
 import TransactionList from '../../components/wallet/TransactionList.jsx';
 import { useAuth } from '../../hooks/useAuth.js';
+import { simulatePayment } from '../../services/paymentService.js';
+import { fetchWalletSummary, fetchWalletTransactions } from '../../services/walletApi.js';
+import { notifySuccess, notifyError } from '../../components/ui/ToastProvider.jsx';
 
-// Wallet overview with balance and quick payment simulation.
+function formatTxRow(r) {
+  return {
+    id: r.id,
+    description: r.description || r.provider || 'Transaction',
+    amount: r.amount,
+    type: r.type,
+    date: r.createdAt ? new Date(r.createdAt).toLocaleString() : '—'
+  };
+}
+
 const Wallet = () => {
   const { user } = useAuth();
   const activeRole = user?.activeRole || user?.role || 'shipper';
   const [showPayment, setShowPayment] = useState(false);
-  const [balance, setBalance] = useState(500000);
-  const [transactions, setTransactions] = useState([
-    {
-      id: 1,
-      description: 'Payment to Carrier · PK-INV-001',
-      amount: 120000,
-      type: 'debit',
-      date: 'Today, 10:20 AM'
-    },
-    {
-      id: 2,
-      description: 'Wallet top-up',
-      amount: 300000,
-      type: 'credit',
-      date: 'Yesterday, 3:10 PM'
-    }
-  ]);
+  const [balance, setBalance] = useState(0);
+  const [retryPayload, setRetryPayload] = useState(null);
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleConfirm = ({ amount, provider }) => {
-    // Shippers send money; carriers receive money (demo simulation).
-    const direction = activeRole === 'carrier' ? 'credit' : 'debit';
-    setBalance((b) => (direction === 'credit' ? b + amount : b - amount));
-    setTransactions((prev) => [
-      {
-        id: Date.now(),
-        description:
-          activeRole === 'carrier'
-            ? `Received via ${provider}`
-            : `Payment via ${provider}`,
-        amount,
-        type: direction,
-        date: 'Just now'
-      },
-      ...prev
-    ]);
-    setShowPayment(false);
+  const refresh = useCallback(async () => {
+    try {
+      const [sum, txs] = await Promise.all([fetchWalletSummary(), fetchWalletTransactions(40)]);
+      if (typeof sum?.balance === 'number') setBalance(sum.balance);
+      setTransactions(Array.isArray(txs) ? txs.map(formatTxRow) : []);
+    } catch {
+      setBalance(0);
+      setTransactions([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const ledgerSum = useMemo(() => {
+    const type = activeRole === 'carrier' ? 'credit' : 'debit';
+    return transactions
+      .filter((x) => x.type === type)
+      .reduce((s, x) => s + (Number(x.amount) || 0), 0);
+  }, [transactions, activeRole]);
+
+  const paymentAmountCap = useMemo(() => {
+    const b = Math.abs(Number(balance) || 0);
+    if (b <= 0) return 500_000;
+    return Math.min(50_000_000, Math.max(10_000, Math.ceil(b * 25)));
+  }, [balance]);
+
+  const handleConfirm = async ({ amount, provider, outcome }) => {
+    try {
+      const data = await simulatePayment({ amount, provider, outcome });
+      const ps = data?.paymentStatus;
+      if (ps === 'success') {
+        await refresh();
+        setRetryPayload(null);
+        notifySuccess('Payment completed');
+        setShowPayment(false);
+        return;
+      }
+      if (ps === 'failed') {
+        setRetryPayload({ amount, provider });
+        notifyError(data?.message || 'Payment failed');
+        setShowPayment(false);
+        return;
+      }
+      if (ps === 'pending') {
+        notifySuccess(data?.message || 'Payment pending');
+        setShowPayment(false);
+        return;
+      }
+      notifyError('Unexpected payment response');
+    } catch (e) {
+      notifyError(e?.response?.data?.message || e?.message || 'Payment request failed');
+    }
   };
 
   return (
     <div className="container py-3">
       <h5 className="mb-3">Wallet</h5>
+      {loading ? <div className="small text-muted mb-2">Loading wallet…</div> : null}
       <div className="row g-2 mb-2">
         <div className="col-12 col-md-6">
           <div className="card tp-wallet-card p-3 card-hover">
-            <div className="small opacity-75">{activeRole === 'carrier' ? 'Earnings' : 'Spending'} (30 days)</div>
-            <div className="h4 mb-0">{activeRole === 'carrier' ? '312,000' : '184,000'} PKR</div>
+            <div className="small opacity-75">{activeRole === 'carrier' ? 'Earnings' : 'Spending'} (ledger)</div>
+            <div className="h4 mb-0">{ledgerSum.toLocaleString()} PKR</div>
           </div>
         </div>
         <div className="col-12 col-md-6">
@@ -72,10 +110,20 @@ const Wallet = () => {
       >
         {activeRole === 'carrier' ? 'Simulate receiving' : 'Simulate payment'}
       </button>
+      {retryPayload && (
+        <button
+          type="button"
+          className="btn btn-outline-danger w-100 rounded-pill mt-2"
+          onClick={() => setShowPayment(true)}
+        >
+          Retry failed payment
+        </button>
+      )}
       <TransactionList transactions={transactions} />
       {showPayment && (
         <PaymentModal
-          maxAmount={balance}
+          maxAmount={paymentAmountCap}
+          defaultAmount={retryPayload?.amount}
           onClose={() => setShowPayment(false)}
           onConfirm={handleConfirm}
         />
@@ -85,4 +133,3 @@ const Wallet = () => {
 };
 
 export default Wallet;
-

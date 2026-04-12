@@ -28,7 +28,11 @@ export const translations = {
       settings: 'Settings',
       darkMode: 'Dark mode',
       light: 'Light',
-      dark: 'Dark'
+      dark: 'Dark',
+      watchDemo: 'Watch walkthrough',
+      demoVideoUnavailable: 'No official walkthrough video is uploaded yet. Check the Help page later or contact support.',
+      demoVideoFooter: 'Official TransPak platform overview (admin-managed).',
+      demoAuthHint: 'Optional: short platform walkthrough (same video as Help).'
     },
     auth: {
       welcomeTitle: 'Welcome to TransPak',
@@ -59,15 +63,15 @@ export const translations = {
       language: 'Language',
       english: 'English',
       urdu: 'اردو',
-      demoVideoLabel: 'Demo video (optional)',
-      demoVideoHint: 'MP4/WebM, max ~50MB — stored locally in this session only.',
       welcomeBack: 'Welcome back!',
       roleAddedSuccess: 'Role added successfully.',
       accountCreatedSuccess: 'Account created successfully',
       registrationFailed: 'Registration failed',
       creatingAdditionalRole: 'Creating additional role: {{role}}',
       roleSelectTitle: 'Select your role',
-      roleSelectSubtitle: 'TransPak shows tools based on the role you use right now.'
+      roleSelectSubtitle: 'TransPak shows tools based on the role you use right now.',
+      cancelRegistration: 'Cancel',
+      chooseRoleToContinue: 'Choose your role to continue — this sets your workspace after sign-in.'
     },
     errors: {
       invalidCredentials: 'Invalid credentials',
@@ -108,6 +112,8 @@ export const translations = {
         picked: 'Picked up',
         transit: 'In transit',
         delivered: 'Delivered',
+        closed: 'Closed',
+        closeShipment: 'Close shipment',
         advance: 'Next stage'
       },
       static: {
@@ -170,6 +176,11 @@ export const translations = {
         stats: 'Stats',
         activity: 'Activity Feed',
         analytics: 'Analytics'
+      },
+      support: {
+        demoSectionTitle: 'Platform walkthrough',
+        demoSectionBody:
+          'Watch the official TransPak overview. This is the same video linked from sign-in and sign-up for quick access.'
       }
     },
     ui: {
@@ -277,7 +288,11 @@ export const translations = {
       settings: 'سیٹنگز',
       darkMode: 'ڈارک موڈ',
       light: 'لائٹ',
-      dark: 'ڈارک'
+      dark: 'ڈارک',
+      watchDemo: 'واک تھرو دیکھیں',
+      demoVideoUnavailable: 'ابھی کوئی سرکاری ویڈیو اپ لوڈ نہیں۔ بعد میں مدد صفحہ چیک کریں یا سپورٹ سے رابطہ کریں۔',
+      demoVideoFooter: 'ٹرانسپاک کا سرکاری پلیٹ فارم جائزہ (ایڈمن)۔',
+      demoAuthHint: 'اختیاری: مختصر پلیٹ فارم واک تھرو (وہی ویڈیو جو مدد میں ہے)۔'
     },
     auth: {
       welcomeTitle: 'ٹرانسپاک میں خوش آمدید',
@@ -308,15 +323,15 @@ export const translations = {
       language: 'زبان',
       english: 'English',
       urdu: 'اردو',
-      demoVideoLabel: 'ڈیمو ویڈیو (اختیاری)',
-      demoVideoHint: 'MP4/WebM — صرف اس سیشن میں براؤزر میں محفوظ۔',
       welcomeBack: 'خوش آمدید!',
       roleAddedSuccess: 'کردار کامیابی سے شامل ہو گیا۔',
       accountCreatedSuccess: 'اکاؤنٹ کامیابی سے بن گیا۔',
       registrationFailed: 'رجسٹریشن ناکام رہی',
       creatingAdditionalRole: 'اضافی کردار بنایا جا رہا ہے: {{role}}',
       roleSelectTitle: 'اپنا کردار منتخب کریں',
-      roleSelectSubtitle: 'ٹرانسپاک اس وقت کے کردار کے مطابق ٹولز دکھاتا ہے۔'
+      roleSelectSubtitle: 'ٹرانسپاک اس وقت کے کردار کے مطابق ٹولز دکھاتا ہے۔',
+      cancelRegistration: 'منسوخ کریں',
+      chooseRoleToContinue: 'جاری رکھنے کے لیے اپنا کردار منتخب کریں — سائن ان کے بعد آپ کا ورک اسپیس طے ہو گا۔'
     },
     errors: {
       invalidCredentials: 'غلط معلومات',
@@ -357,6 +372,8 @@ export const translations = {
         picked: 'اٹھا لیا گیا',
         transit: 'راستے میں',
         delivered: 'پہنچا دیا گیا',
+        closed: 'بند',
+        closeShipment: 'شپمنٹ بند کریں',
         advance: 'اگلا مرحلہ'
       },
       static: {
@@ -419,6 +436,11 @@ export const translations = {
         stats: 'اسٹیٹس',
         activity: 'ایکٹیویٹی فیڈ',
         analytics: 'اینالیٹکس'
+      },
+      support: {
+        demoSectionTitle: 'پلیٹ فارم واک تھرو',
+        demoSectionBody:
+          'ٹرانسپاک کا سرکاری جائزہ دیکھیں۔ یہ وہی ویڈیو ہے جو سائن ان اور سائن اپ پر تیز رسائی کے لیے ہے۔'
       }
     },
     ui: {

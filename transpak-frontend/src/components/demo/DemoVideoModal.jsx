@@ -1,31 +1,30 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import Modal from '../ui/Modal.jsx';
+import { useLanguage } from '../../hooks/useLanguage.js';
 
-const DemoVideoModal = ({ open, onClose, videoUrl, mimeType }) => {
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e) => {
-      if (e.key === 'Escape') onClose?.();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+const STREAM_PATH = '/api/demo-video/stream';
 
-  if (!open) return null;
+const DemoVideoModal = ({ open, onClose, videoUrl, mimeType, emptyMessage }) => {
+  const { t } = useLanguage();
+  const src = videoUrl || (open ? STREAM_PATH : null);
 
   return (
-    <Modal open={open} onClose={onClose} title="TransPak demo">
-      <div className="ratio ratio-16x9 bg-dark rounded-2 overflow-hidden">
-        {videoUrl ? (
-          <video key={videoUrl} className="w-100 h-100" controls playsInline preload="metadata">
-            <source src={videoUrl} type={mimeType || 'video/mp4'} />
-            Your browser does not support embedded video.
-          </video>
-        ) : (
-          <div className="d-flex align-items-center justify-content-center text-white small p-3">No video URL</div>
-        )}
-      </div>
-      <p className="small text-muted mt-2 mb-0">Official TransPak walkthrough (admin-managed).</p>
+    <Modal open={open} onClose={onClose} title={t('common.watchDemo')} size="lg">
+      {src ? (
+        <video
+          key={src}
+          className="w-100 rounded-3"
+          style={{ maxHeight: '56vh', background: '#000' }}
+          controls
+          playsInline
+          preload="metadata"
+        >
+          <source src={src} type={mimeType || 'video/mp4'} />
+        </video>
+      ) : (
+        <p className="small text-muted mb-0">{emptyMessage || t('common.demoVideoUnavailable')}</p>
+      )}
+      <p className="small text-muted mt-2 mb-0">{t('common.demoVideoFooter')}</p>
     </Modal>
   );
 };

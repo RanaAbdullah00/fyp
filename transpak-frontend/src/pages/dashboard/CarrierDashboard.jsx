@@ -7,34 +7,18 @@ import { useState, useEffect } from 'react';
 import { useApi } from '../../hooks/useApi.js';
 import { useAuth } from '../../hooks/useAuth.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
-import TrackingMap from '../../components/shipment/TrackingMap.jsx';
-import StatusBadge from '../../components/shipment/StatusBadge.jsx';
-import StatusTimeline from '../../components/shipment/StatusTimeline.jsx';
-import ShipmentProgressPipeline from '../../components/shipment/ShipmentProgressPipeline.jsx';
 import Loader from '../../components/ui/Loader.jsx';
-import Button from '../../components/ui/Button.jsx';
+import ActiveShipmentPanel from '../../components/dashboard/ActiveShipmentPanel.jsx';
 import { FaTruck } from 'react-icons/fa';
 import { notifySuccess, notifyError } from '../../components/ui/ToastProvider.jsx';
 import { normalizeTracking, normalizeLoads } from '../../adapters/normalize.js';
 import { nextShipmentStatus, ADVANCE_LABELS, normalizeShipmentStatus } from '../../utils/shipmentStatus.js';
 import { Link } from 'react-router-dom';
-
 // Dashboard view tailored for carriers.
 const CarrierDashboard = () => {
   const { user } = useAuth();
   const { t } = useLanguage();
   const profileComplete = user?.profileComplete === true;
-  const pipelineLabels = useMemo(
-    () => [
-      t('pages.pipeline.posted'),
-      t('pages.pipeline.booked'),
-      t('pages.pipeline.picked'),
-      t('pages.pipeline.transit'),
-      t('pages.pipeline.delivered')
-    ],
-    [t]
-  );
-
   const activities = [
     { id: 1, message: 'Assigned to shipment PK-INV-004 (Karachi → Faisalabad).', time: '30 min ago' },
     { id: 2, message: 'Bid accepted for Load L-099.', time: '2 hrs ago' }
@@ -56,7 +40,7 @@ const CarrierDashboard = () => {
       { label: 'Open marketplace loads', value: metrics.open },
       { label: 'Accepted bids', value: metrics.accepted },
       { label: 'Pending bids', value: metrics.pending },
-      { label: 'Fleet vehicles', value: 12, subLabel: 'Demo count' }
+      { label: 'Fleet vehicles', value: 12, subLabel: 'Registered' }
     ],
     [metrics]
   );
@@ -116,7 +100,17 @@ const CarrierDashboard = () => {
   const currentCanon = normalizeShipmentStatus(trackingData?.tracking?.status) || 'posted';
   const upcoming = nextShipmentStatus(currentCanon);
   const advanceLabel =
-    currentCanon === 'delivered' ? t('pages.pipeline.delivered') : ADVANCE_LABELS[currentCanon] || ADVANCE_LABELS.posted;
+    upcoming != null
+      ? ADVANCE_LABELS[currentCanon] || t('pages.pipeline.advance')
+      : currentCanon === 'closed'
+        ? t('pages.pipeline.closed')
+        : t('pages.pipeline.delivered');
+  const buttonLabel =
+    upcoming != null
+      ? `${t('pages.pipeline.advance')}: ${advanceLabel}`
+      : currentCanon === 'closed'
+        ? t('pages.pipeline.closed')
+        : t('pages.pipeline.delivered');
 
   useEffect(() => {
     const fetchTracking = async () => {
@@ -171,64 +165,27 @@ const CarrierDashboard = () => {
         <div className="d-flex justify-content-between align-items-center mb-3">
           <h6 className="mb-0">My Assigned Shipments</h6>
         </div>
-        {loadingTracking ? (
-          <div className="text-center py-4">
-            <Loader />
-          </div>
-        ) : trackingData ? (
-          <div className="card shadow-sm mb-4">
-            <div className="card-body">
-              <div className="row g-3">
-                <div className="col-lg-8">
-                  <TrackingMap 
-                    trackingData={trackingData}
-                    origin={[31.5204, 74.3587]} 
-                    destination={[24.8607, 67.0011]} 
-                  />
-                </div>
-                <div className="col-lg-4">
-                  <ShipmentProgressPipeline status={trackingData.tracking?.status} labels={pipelineLabels} />
-                  <StatusBadge status={trackingData.tracking?.status || 'unknown'} size="lg" />
-                  <h5 className="mt-2 mb-3">Update status</h5>
-                  <div className="d-grid gap-2">
-                    <Button
-                      variant="primary"
-                      className="py-2"
-                      onClick={() => upcoming && updateShipmentStatus(upcoming)}
-                      disabled={!upcoming || loadingStatus}
-                    >
-                      {upcoming ? `${t('pages.pipeline.advance')}: ${advanceLabel}` : t('pages.pipeline.delivered')}
-                    </Button>
-                  </div>
-                  <small className="text-muted mt-2">
-                    Current:{' '}
-                    {String(trackingData?.tracking?.status || 'No shipment')
-                      .replaceAll('_', ' ')
-                      .replace(/\b\w/g, (c) => c.toUpperCase())}
-                  </small>
-                  
-                  <div className="mt-4">
-                    <StatusTimeline 
-                      currentStatus={trackingData.tracking?.status} 
-                      events={(trackingData.history || []).map(h => ({
-                        label: h.event,
-                        time: h.time,
-                        note: h.location,
-                        done: true
-                      }))} 
-                    />
-                  </div>
-                </div>
-              </div>
+        <ActiveShipmentPanel
+          trackingData={trackingData}
+          loadingTracking={loadingTracking}
+          emptyState={
+            <div className="text-center py-5 px-3 tp-empty-state rounded-3 border border-dashed text-muted">
+              <FaTruck className="fs-1 text-muted mb-3" />
+              <h6 className="mb-2">No assigned shipments</h6>
+              <p className="small mb-0">Check loads and bids for new assignments.</p>
             </div>
-          </div>
-        ) : (
-          <div className="text-center py-5 px-3 tp-empty-state rounded-3 border border-dashed text-muted">
-            <FaTruck className="fs-1 text-muted mb-3" />
-            <h6 className="mb-2">No assigned shipments</h6>
-            <p className="small mb-0">Check loads and bids for new assignments.</p>
-          </div>
-        )}
+          }
+          carrierAdvance={{
+            title: 'Update status',
+            loadingStatus,
+            onAdvance: updateShipmentStatus,
+            upcoming,
+            buttonLabel,
+            statusLine: `Current: ${String(trackingData?.tracking?.status || '—')
+              .replaceAll('_', ' ')
+              .replace(/\b\w/g, (c) => c.toUpperCase())}`
+          }}
+        />
       </div>
     </div>
   );

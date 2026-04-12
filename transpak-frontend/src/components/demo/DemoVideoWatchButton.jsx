@@ -1,41 +1,45 @@
-import React, { useEffect, useState } from 'react';
-import Button from '../ui/Button.jsx';
+import React, { useCallback, useState } from 'react';
 import DemoVideoModal from './DemoVideoModal.jsx';
 import { fetchDemoVideoInfo } from '../../services/demoVideoService.js';
+import { useLanguage } from '../../hooks/useLanguage.js';
 
-const DemoVideoWatchButton = ({ className = '' }) => {
-  const [info, setInfo] = useState(null);
+/**
+ * Opens official walkthrough modal. variant="authHeader" for login/register top bar; default on Help.
+ */
+const DemoVideoWatchButton = ({ className = '', variant = 'default' }) => {
+  const { t } = useLanguage();
   const [open, setOpen] = useState(false);
+  const [info, setInfo] = useState(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const data = await fetchDemoVideoInfo();
-        if (!cancelled) setInfo(data);
-      } catch {
-        if (!cancelled) setInfo({ hasVideo: false });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+  const loadAndOpen = useCallback(async () => {
+    try {
+      const data = await fetchDemoVideoInfo();
+      setInfo(data || {});
+    } catch {
+      setInfo({ hasVideo: false });
+    }
+    setOpen(true);
   }, []);
 
-  if (!info?.hasVideo) return null;
-
-  const videoUrl = '/api/demo-video/stream';
+  const videoUrl = info?.hasVideo ? '/api/demo-video/stream' : null;
+  const btnClass =
+    variant === 'authHeader'
+      ? `btn btn-sm rounded-pill tp-auth-v2__header-btn tp-auth-v2__header-btn--demo ${className}`.trim()
+      : variant === 'compact'
+        ? `btn btn-link btn-sm text-decoration-none p-0 align-baseline ${className}`.trim()
+        : `btn btn-outline-primary btn-sm rounded-pill ${className}`.trim();
 
   return (
     <>
-      <Button type="button" variant="outline-success" size="sm" className={className} onClick={() => setOpen(true)}>
-        Watch demo
-      </Button>
+      <button type="button" className={btnClass} onClick={loadAndOpen}>
+        {t('common.watchDemo')}
+      </button>
       <DemoVideoModal
         open={open}
         onClose={() => setOpen(false)}
         videoUrl={videoUrl}
-        mimeType={info.mimeType || 'video/mp4'}
+        mimeType={info?.mimeType}
+        emptyMessage={t('common.demoVideoUnavailable')}
       />
     </>
   );

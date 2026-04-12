@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../ui/Button.jsx';
 import Loader from '../ui/Loader.jsx';
+import RoleSelector from './RoleSelector.jsx';
 import { useAuth } from '../../hooks/useAuth.js';
 import { loginApi } from '../../services/authService.js';
 import { notifySuccess, notifyError } from '../ui/ToastProvider.jsx';
@@ -15,8 +16,7 @@ const LoginForm = () => {
   const { login } = useAuth();
   const { t, isUrdu } = useLanguage();
   const [form, setForm] = useState({ email: '', password: '' });
-  const [demoVideo, setDemoVideo] = useState(null);
-  const [uiRolePref, setUiRolePref] = useState(''); // UI hint only; admin determined by backend role
+  const [uiRolePref, setUiRolePref] = useState('');
   const [loading, setLoading] = useState(false);
 
   React.useEffect(() => {
@@ -31,13 +31,16 @@ const LoginForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!uiRolePref) {
+      notifyError(t('errors.roleRequired'));
+      return;
+    }
     setLoading(true);
-    // clear previous toast handled automatically
     try {
       const res = await loginApi({
         email: form.email,
         password: form.password,
-        roleHint: uiRolePref ? uiRolePref : undefined
+        roleHint: uiRolePref
       });
       const payload = unwrapResponseData(res) || {};
       const { token, user, currentRole } = payload;
@@ -64,36 +67,8 @@ const LoginForm = () => {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="mt-3">
-      {/* error toast replaces alert */}
-      <div className="tp-role-selector mb-3" role="group" aria-label={t('auth.role')}>
-        <input
-          type="radio"
-          className="btn-check"
-          name="uiRolePref"
-          id="ui-role-shipper"
-          autoComplete="off"
-          value="shipper"
-          checked={uiRolePref === 'shipper'}
-          onChange={(e) => setUiRolePref(e.target.value)}
-        />
-        <label className="btn btn-outline-primary" htmlFor="ui-role-shipper">
-          {t('auth.shipper')}
-        </label>
-        <input
-          type="radio"
-          className="btn-check"
-          name="uiRolePref"
-          id="ui-role-carrier"
-          autoComplete="off"
-          value="carrier"
-          checked={uiRolePref === 'carrier'}
-          onChange={(e) => setUiRolePref(e.target.value)}
-        />
-        <label className="btn btn-outline-primary" htmlFor="ui-role-carrier">
-          {t('auth.carrier')}
-        </label>
-      </div>
+    <form onSubmit={handleSubmit} className="tp-auth-login-form mt-3">
+      <RoleSelector value={uiRolePref} onChange={setUiRolePref} />
       <div className="mb-2">
         <label className="form-label small">{t('auth.email')}</label>
         <div className="input-group input-group-sm">
@@ -128,26 +103,11 @@ const LoginForm = () => {
           />
         </div>
       </div>
-      <div className="mb-3">
-        <label className="form-label small">{t('auth.demoVideoLabel')}</label>
-        <input
-          type="file"
-          accept="video/*"
-          className="form-control form-control-sm rounded-3"
-          onChange={(e) => setDemoVideo(e.target.files?.[0] || null)}
-        />
-        <div className="form-text small">{t('auth.demoVideoHint')}</div>
-        {demoVideo && (
-          <div className="small text-muted mt-1">
-            {demoVideo.name} ({Math.round(demoVideo.size / 1024)} KB)
-          </div>
-        )}
-      </div>
       <Button
         variant="primary"
         className="w-100 py-2 d-flex justify-content-center align-items-center rounded-lg"
         type="submit"
-        disabled={loading}
+        disabled={loading || !uiRolePref}
       >
         {loading ? <Loader light /> : t('auth.signInButton')}
       </Button>
@@ -156,4 +116,3 @@ const LoginForm = () => {
 };
 
 export default LoginForm;
-

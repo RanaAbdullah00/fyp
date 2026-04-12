@@ -1,28 +1,27 @@
-const multer = require("multer");
 const path = require("path");
+const multer = require("multer");
 
-const uploadsDir = path.join(__dirname, "..", "uploads");
+const uploadDir = path.join(__dirname, "..", "uploads");
 
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, uploadsDir);
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
   },
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname || "").toLowerCase() || ".mp4";
-    const safe = [".mp4", ".webm", ".mov", ".mkv"].includes(ext) ? ext : ".mp4";
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname || "").toLowerCase();
+    const safe = [".mp4", ".webm"].includes(ext) ? ext : ".mp4";
     cb(null, `official-demo${safe}`);
   }
 });
 
-function fileFilter(_req, file, cb) {
-  if (!file.mimetype || !String(file.mimetype).startsWith("video/")) {
-    return cb(new Error("Only video uploads are allowed"));
-  }
-  cb(null, true);
+function fileFilter(req, file, cb) {
+  const ok = /^video\/(mp4|webm)$/i.test(file.mimetype || "");
+  if (ok) return cb(null, true);
+  cb(new Error("Only MP4 or WebM video is allowed"));
 }
 
 module.exports = multer({
   storage,
-  limits: { fileSize: 80 * 1024 * 1024 },
-  fileFilter
+  fileFilter,
+  limits: { fileSize: 52 * 1024 * 1024 }
 });

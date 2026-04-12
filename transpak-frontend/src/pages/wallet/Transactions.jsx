@@ -1,32 +1,45 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import TransactionList from '../../components/wallet/TransactionList.jsx';
+import { fetchWalletTransactions } from '../../services/walletApi.js';
 
-// Dedicated transactions screen if you want to deep-dive beyond the wallet summary.
+function formatTxRow(r) {
+  return {
+    id: r.id,
+    description: r.description || r.provider || 'Transaction',
+    amount: r.amount,
+    type: r.type,
+    date: r.createdAt ? new Date(r.createdAt).toLocaleString() : '—'
+  };
+}
+
 const Transactions = () => {
-  const transactions = [
-    {
-      id: 1,
-      description: 'Payment to PakTrans Logistics · PK-INV-001',
-      amount: 120000,
-      type: 'debit',
-      date: 'Today, 10:20 AM'
-    },
-    {
-      id: 2,
-      description: 'Wallet top-up',
-      amount: 300000,
-      type: 'credit',
-      date: 'Yesterday, 3:10 PM'
-    }
-  ];
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const txs = await fetchWalletTransactions(100);
+        if (!cancelled) setTransactions(Array.isArray(txs) ? txs.map(formatTxRow) : []);
+      } catch {
+        if (!cancelled) setTransactions([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="container py-3">
       <h5 className="mb-3">Transactions</h5>
+      {loading ? <div className="small text-muted mb-2">Loading…</div> : null}
       <TransactionList transactions={transactions} />
     </div>
   );
 };
 
 export default Transactions;
-

@@ -1,5 +1,5 @@
 /** Keep in sync with backend `utils/shipmentStatus.js` (canonical values). */
-export const SHIPMENT_ORDER = ['posted', 'booked', 'pickedup', 'intransit', 'delivered'];
+export const SHIPMENT_ORDER = ['posted', 'booked', 'pickedup', 'intransit', 'delivered', 'closed'];
 
 const LEGACY_TO_CANON = {
   posted: 'posted',
@@ -8,6 +8,7 @@ const LEGACY_TO_CANON = {
   picked: 'pickedup',
   intransit: 'intransit',
   delivered: 'delivered',
+  closed: 'closed',
   pending: 'posted',
   open: 'posted'
 };
@@ -33,5 +34,6 @@ export const ADVANCE_LABELS = {
   posted: 'Book load',
   booked: 'Confirm pickup',
   pickedup: 'Start transit',
-  intransit: 'Mark delivered'
+  intransit: 'Mark delivered',
+  delivered: 'Close shipment'
 };

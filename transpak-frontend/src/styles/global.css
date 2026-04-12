@@ -10,10 +10,19 @@
   --pak-warning: #d97706;
   --pak-danger: #dc2626;
   --pak-light: #f8fafc;
-  --pak-card-bg: #ffffff;
+  --pak-card-bg: color-mix(in srgb, #ffffff 90%, var(--bs-primary) 10%);
   --pak-shadow: 0 4px 20px rgba(22, 163, 74, 0.15);
-  --pak-border: #e2e8f0;
-  --tp-bg: #f8fafc;
+  --pak-border: color-mix(in srgb, #e2e8f0 82%, var(--bs-primary) 18%);
+  --tp-bg: color-mix(in srgb, #f8fafc 88%, var(--pak-light-green-bg) 12%);
+
+  /* Auth + app shell: same gradient tokens (light = soft primary-tinted, not pure white) */
+  --tp-auth-header-h: 3.5rem;
+  --tp-auth-canvas-0: color-mix(in srgb, var(--pak-light-green-bg) 48%, #f8fafc);
+  --tp-auth-canvas-1: color-mix(in srgb, #f1f5f9 88%, var(--bs-primary) 12%);
+  --tp-auth-canvas-2: color-mix(in srgb, var(--pak-light-green-bg) 40%, #eef2f0);
+  --tp-auth-glass-bg: color-mix(in srgb, var(--pak-card-bg) 86%, transparent);
+  --tp-auth-glass-border: color-mix(in srgb, var(--pak-border) 72%, var(--tp-auth-canvas-1));
+  --tp-auth-header-bar-bg: color-mix(in srgb, var(--tp-auth-canvas-1) 28%, transparent);
 
   /* Bootstrap overrides */
   --bs-primary: var(--pak-primary);
@@ -32,11 +41,25 @@ html {
   overflow-x: hidden;
 }
 
+html.tp-auth-viewport-lock-root {
+  overflow: hidden;
+  height: 100%;
+}
+
 body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background-color: var(--tp-bg);
+  color: color-mix(in srgb, #0f172a 90%, var(--bs-primary) 10%);
   transition: background-color 0.2s ease, color 0.2s ease;
   overflow-x: hidden;
+}
+
+body.tp-auth-viewport-lock {
+  overflow: hidden !important;
+  height: 100% !important;
+  position: fixed;
+  inset: 0;
+  width: 100%;
 }
 
 .container-fluid, .container {
@@ -68,8 +91,11 @@ a:hover {
   text-align: center;
   padding: 1.25rem 1.25rem 1rem;
   border-radius: 1rem;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
+  background: color-mix(in srgb, var(--pak-card-bg) 82%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid color-mix(in srgb, var(--pak-border) 75%, transparent);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
   transform: translateY(0) scale(1);
   animation: tpLoadingPop 380ms ease-out both;
 }
@@ -90,12 +116,51 @@ body.dark-theme .tp-loading-card {
 }
 
 .app-root {
-  background-color: var(--tp-bg);
+  background-color: transparent;
+}
+
+/* Light: translucent cards on gradient shell (no pure white slabs) */
+body:not(.dark-theme) .card,
+body:not(.dark-theme) .tp-filter-card {
+  background-color: color-mix(in srgb, var(--pak-card-bg) 82%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-color: color-mix(in srgb, var(--pak-border) 85%, transparent);
+  box-shadow: 0 4px 22px rgba(15, 23, 42, 0.07), 0 0 0 1px color-mix(in srgb, var(--pak-border) 40%, transparent);
+}
+
+/* Muted copy on gradient shell: readable, not washed out */
+body:not(.dark-theme) .tp-app-surface .text-muted,
+body:not(.dark-theme) .tp-main-shell .text-muted {
+  color: color-mix(in srgb, #475569 82%, var(--bs-primary) 18%) !important;
+}
+
+/* Outline buttons on light gradient: visible fill + border */
+body:not(.dark-theme) .btn-outline-secondary {
+  background-color: color-mix(in srgb, var(--pak-card-bg) 84%, transparent);
+  border-color: color-mix(in srgb, var(--pak-border) 55%, var(--bs-primary) 45%);
+  color: color-mix(in srgb, #334155 86%, var(--bs-primary) 14%);
+}
+
+body:not(.dark-theme) .btn-outline-secondary:hover {
+  background-color: color-mix(in srgb, var(--pak-light-green-bg) 50%, var(--pak-card-bg) 50%);
+  border-color: var(--pak-primary);
+  color: var(--pak-primary-dark);
+}
+
+body:not(.dark-theme) .text-dark {
+  color: color-mix(in srgb, #0f172a 88%, var(--bs-primary) 12%) !important;
 }
 
 /* Dark theme */
 body.dark-theme {
   --tp-bg: #111827;
+  --tp-auth-canvas-0: #0b1220;
+  --tp-auth-canvas-1: #0f172a;
+  --tp-auth-canvas-2: #111827;
+  --tp-auth-glass-bg: color-mix(in srgb, var(--tp-bg) 84%, transparent);
+  --tp-auth-glass-border: rgba(51, 65, 85, 0.55);
+  --tp-auth-header-bar-bg: color-mix(in srgb, var(--tp-auth-canvas-0) 88%, transparent);
   background-color: #111827;
   color: #e5e7eb;
 }
@@ -180,6 +245,10 @@ body.dark-theme .breadcrumb a {
 
 .tp-auth-page {
   max-width: 420px;
+}
+
+.tp-auth-page--register {
+  max-width: 480px;
 }
 
 .tp-modal-backdrop {
@@ -282,7 +351,7 @@ body.dark-theme .Toastify__close-button {
   margin-top: 0.3rem;
   border-radius: 999px;
   border: 2px solid rgba(1, 65, 28, 0.35);
-  background: #fff;
+  background: color-mix(in srgb, var(--pak-card-bg) 94%, transparent);
   position: relative;
 }
 
@@ -313,12 +382,12 @@ body.dark-theme .Toastify__close-button {
 }
 
 .mobile-nav-inner {
-  background-color: var(--mobile-nav-bg, #fff);
+  background-color: var(--mobile-nav-bg, color-mix(in srgb, var(--pak-card-bg) 94%, transparent));
   transition: background-color 0.2s ease;
 }
 
 .mobile-nav-inner .nav-link {
-  color: #6b7280;
+  color: color-mix(in srgb, #64748b 78%, var(--bs-primary) 22%);
   transition: all 0.2s ease;
 }
 
@@ -351,7 +420,7 @@ body.dark-theme .mobile-nav-inner .nav-link.mobile-nav-active {
 }
 
 .sidebar-aside {
-  background-color: var(--sidebar-bg, #fff);
+  background-color: var(--sidebar-bg, color-mix(in srgb, var(--pak-card-bg) 92%, transparent));
   border-end: 1px solid var(--pak-border);
   transition: background-color 0.2s ease;
 }
@@ -384,7 +453,7 @@ body.dark-theme .mobile-nav-inner .nav-link.mobile-nav-active {
 .tp-drawer {
   width: min(86vw, 340px);
   height: 100%;
-  background: #fff;
+  background: color-mix(in srgb, var(--pak-card-bg) 96%, var(--bs-primary) 4%);
   padding: 0.75rem;
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
   animation: tpDrawerIn 180ms ease-out both;
@@ -430,7 +499,7 @@ body.dark-theme .sidebar-aside .nav-link.active {
 }
 
 .tp-filter-card {
-  background: #fff;
+  background: color-mix(in srgb, var(--pak-card-bg) 92%, transparent);
   border-radius: 1.25rem;
   padding: 0.75rem;
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
@@ -465,8 +534,8 @@ body.dark-theme .sidebar-aside .nav-link.active {
 }
 
 .tp-chat-bubble.them {
-  background: #fff;
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: color-mix(in srgb, var(--pak-card-bg) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--pak-border) 80%, transparent);
 }
 
 .tp-chat-time {
@@ -505,6 +574,11 @@ body.dark-theme .sidebar-aside .nav-link.active {
   color: var(--pak-primary) !important;
 }
 
+body:not(.dark-theme) .btn-outline-primary {
+  background-color: color-mix(in srgb, var(--pak-card-bg) 78%, var(--pak-light-green-bg) 22%);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.05);
+}
+
 .btn-outline-primary:hover {
   background-color: var(--pak-light-green-bg) !important;
   border-color: var(--pak-primary-hover) !important;
@@ -525,6 +599,47 @@ body.dark-theme .sidebar-aside .nav-link.active {
 
 .tp-role-selector .btn:hover {
   transform: translateY(-1px);
+}
+
+/* Auth: Shipper / Carrier as two buttons (same row, theme tokens) */
+.tp-role-toggle__btn {
+  font-weight: 600;
+  min-height: 2.4rem;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+.tp-role-toggle__btn--inactive {
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--pak-primary) 38%, var(--pak-border));
+  color: var(--pak-primary);
+}
+.tp-auth-v2__glass .tp-role-toggle__btn--inactive {
+  border-color: color-mix(in srgb, var(--pak-primary) 45%, var(--pak-border));
+  color: color-mix(in srgb, var(--pak-primary) 92%, var(--tp-auth-canvas-1));
+}
+.tp-role-toggle__btn--inactive:hover {
+  border-color: var(--bs-primary);
+  background: color-mix(in srgb, var(--bs-primary) 10%, transparent);
+  transform: translateY(-1px);
+}
+.tp-role-toggle__btn--active {
+  background: var(--bs-primary) !important;
+  border-color: var(--bs-primary) !important;
+  color: #fff !important;
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--bs-primary) 40%, transparent);
+}
+.tp-role-toggle__btn--active:hover {
+  background: var(--pak-primary-dark) !important;
+  border-color: var(--pak-primary-dark) !important;
+  color: #fff !important;
+}
+body.dark-theme .tp-auth-v2__glass .tp-role-toggle__btn--inactive {
+  border-color: color-mix(in srgb, var(--pak-border) 70%, transparent);
+  color: #e5e7eb;
+}
+body.dark-theme .tp-auth-v2__glass .tp-role-toggle__btn--inactive:hover {
+  border-color: var(--bs-primary);
+  color: #fff;
 }
 
 .form-control:focus,
@@ -722,6 +837,124 @@ body.dark-theme .sidebar-aside .nav-link.active {
   flex: 0 0 1.25rem;
   color: var(--pak-primary);
   opacity: 0.92;
+}
+
+.tp-brand-logo.tp-brand-logo--mark {
+  flex-direction: row !important;
+  align-items: center;
+  padding: 0.35rem 0.55rem;
+  border-radius: 0.65rem;
+  background: rgba(255, 255, 255, 0.38);
+  border: 1px solid rgba(22, 163, 74, 0.28);
+  box-shadow: 0 4px 22px rgba(22, 163, 74, 0.12);
+}
+
+body.dark-theme .tp-brand-logo.tp-brand-logo--mark {
+  background: rgba(15, 23, 42, 0.55);
+  border-color: rgba(74, 222, 128, 0.35);
+  box-shadow: 0 4px 28px rgba(0, 0, 0, 0.35);
+}
+
+.tp-brand-logo--mark .tp-brand-logo__icons--mark {
+  display: flex;
+  flex-direction: row;
+  gap: 0.35rem;
+  margin-top: 0;
+}
+
+.tp-brand-logo--mark .tp-brand-logo__icon {
+  width: 1.05rem;
+  height: 1.05rem;
+  flex: 0 0 1.05rem;
+}
+
+body.dark-theme .tp-brand-logo--mark .tp-brand-logo__icon {
+  color: #86efac;
+}
+
+/* Auth card wordmark — enterprise inline (no animation) */
+.tp-brand-logo--auth-inline {
+  text-align: start;
+  color: #0f172a;
+}
+
+.tp-brand-logo__text--auth {
+  font-size: clamp(1.25rem, 2.8vw, 1.65rem);
+  letter-spacing: 0.1em;
+  font-weight: 800;
+  color: #0c1a2e;
+}
+
+.tp-brand-logo--auth-inline .tp-brand-logo__icons--auth {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0;
+  opacity: 0.72;
+}
+
+.tp-brand-logo--auth-inline .tp-brand-logo__icons--auth .tp-brand-logo__icon {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 1rem;
+  color: color-mix(in srgb, var(--pak-primary) 45%, var(--tp-auth-canvas-1));
+}
+
+.tp-brand-logo__rule--vertical {
+  display: inline-block;
+  width: 1px;
+  height: 1.35rem;
+  background: color-mix(in srgb, var(--pak-border) 85%, transparent);
+  flex-shrink: 0;
+}
+
+.tp-auth-role-field__label {
+  letter-spacing: 0.06em;
+  color: var(--bs-secondary-color);
+}
+
+body.dark-theme .tp-auth-v2__glass .tp-auth-role-field__label {
+  color: #94a3b8;
+}
+
+.tp-role-selector--enterprise {
+  gap: 0.65rem !important;
+}
+
+.tp-role-selector--enterprise .tp-role-selector__btn {
+  flex: 1 1 140px;
+  min-height: 2.65rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  border-radius: 0.5rem !important;
+  border: 1px solid var(--pak-border);
+  background: var(--pak-card-bg);
+  color: var(--bs-body-color, #0f172a);
+}
+
+.tp-role-selector--enterprise .btn-check:checked + .tp-role-selector__btn {
+  background: linear-gradient(180deg, var(--pak-primary) 0%, var(--pak-primary-dark) 100%);
+  border-color: var(--pak-primary-dark);
+  color: #fff;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--pak-primary) 32%, transparent);
+}
+
+.tp-role-selector--enterprise .btn-check:focus-visible + .tp-role-selector__btn {
+  outline: 2px solid var(--pak-primary);
+  outline-offset: 2px;
+}
+
+body.dark-theme .tp-auth-v2__glass .tp-role-selector--enterprise .tp-role-selector__btn {
+  background: color-mix(in srgb, var(--tp-bg) 92%, var(--pak-card-bg));
+  border-color: var(--pak-border);
+  color: #e2e8f0;
+}
+
+body.dark-theme .tp-auth-v2__glass .tp-role-selector--enterprise .btn-check:checked + .tp-role-selector__btn {
+  background: linear-gradient(180deg, var(--pak-primary) 0%, var(--pak-primary-dark) 100%);
+  border-color: var(--pak-primary-dark);
+  color: #fff;
 }
 
 /* Role selector: spacing between shipper / carrier (match sign-in primary) */
@@ -1018,26 +1251,36 @@ body.dark-theme .tp-logo-text .tp-logo-tagline {
   text-align: right;
 }
 
-/* App shell: subtle logistics-themed surface (no heavy assets) */
+/* App shell: same canvas language as auth (gradient + primary veils) — cards stay readable */
 .tp-app-surface {
-  background-color: var(--tp-bg);
-  background-image:
-    radial-gradient(1200px 500px at 10% 0%, rgba(22, 163, 74, 0.12), transparent 55%),
-    radial-gradient(900px 420px at 90% 10%, rgba(15, 118, 110, 0.1), transparent 50%),
-    repeating-linear-gradient(
-      -8deg,
-      rgba(15, 23, 42, 0.02) 0,
-      rgba(15, 23, 42, 0.02) 1px,
-      transparent 1px,
-      transparent 10px
-    );
+  background-color: var(--tp-auth-canvas-2);
+  background-image: linear-gradient(
+      165deg,
+      var(--tp-auth-canvas-0) 0%,
+      var(--tp-auth-canvas-1) 42%,
+      var(--tp-auth-canvas-2) 100%
+    ),
+    radial-gradient(
+      ellipse 120% 80% at 20% 0%,
+      rgba(var(--bs-primary-rgb), 0.14),
+      transparent 55%
+    ),
+    radial-gradient(ellipse 90% 70% at 100% 100%, rgba(var(--bs-primary-rgb), 0.08), transparent 50%);
 }
 
 body.dark-theme .tp-app-surface {
-  background-image:
-    radial-gradient(1200px 500px at 10% 0%, rgba(34, 197, 94, 0.12), transparent 55%),
-    radial-gradient(900px 420px at 90% 10%, rgba(20, 184, 166, 0.08), transparent 50%),
-    repeating-linear-gradient(-8deg, rgba(255, 255, 255, 0.03) 0, rgba(255, 255, 255, 0.03) 1px, transparent 1px, transparent 10px);
+  background-image: linear-gradient(
+      165deg,
+      var(--tp-auth-canvas-0) 0%,
+      var(--tp-auth-canvas-1) 42%,
+      var(--tp-auth-canvas-2) 100%
+    ),
+    radial-gradient(
+      ellipse 120% 80% at 20% 0%,
+      rgba(var(--bs-primary-rgb), 0.12),
+      transparent 55%
+    ),
+    radial-gradient(ellipse 90% 70% at 100% 100%, rgba(var(--bs-primary-rgb), 0.06), transparent 50%);
 }
 
 /* Shipment progress pipeline */
@@ -1117,54 +1360,78 @@ body.dark-theme .tp-app-surface {
   }
 }
 
-/* --- TransPak global shell: logistics motion (CSS only) --- */
+/* --- TransPak global shell: per-page logistics texture (CSS only, low contrast) --- */
 .tp-main-shell {
   position: relative;
+  z-index: 0;
   min-height: 60vh;
 }
 
-.tp-main-shell::before {
+/* Login/register/about/contact: no double texture behind full-viewport auth shells */
+.tp-main-shell.tp-main-shell--bare-auth {
+  min-height: 0;
+  background: transparent;
+}
+
+.tp-main-shell.tp-main-shell--bare-auth::before {
+  display: none;
+}
+
+/* Unified inner-page overlay (auth-style grid, low contrast) */
+.tp-main-shell:not(.tp-main-shell--bare-auth)::before {
   content: '';
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.35;
-  background-image: repeating-linear-gradient(
-      -18deg,
-      transparent,
-      transparent 38px,
-      rgba(22, 163, 74, 0.06) 38px,
-      rgba(22, 163, 74, 0.06) 40px
-    ),
-    radial-gradient(800px 400px at 20% 0%, rgba(22, 163, 74, 0.08), transparent 55%);
+  z-index: 0;
+  opacity: 0.22;
+  background-image: linear-gradient(color-mix(in srgb, var(--pak-border) 55%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--pak-border) 55%, transparent) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(ellipse 85% 75% at 50% 45%, #000 15%, transparent 70%);
 }
 
-body.dark-theme .tp-main-shell::before {
-  opacity: 0.5;
-  background-image: repeating-linear-gradient(
-      -18deg,
-      transparent,
-      transparent 38px,
-      rgba(34, 197, 94, 0.07) 38px,
-      rgba(34, 197, 94, 0.07) 40px
-    ),
-    radial-gradient(800px 400px at 20% 0%, rgba(34, 197, 94, 0.1), transparent 55%);
+body.dark-theme .tp-main-shell:not(.tp-main-shell--bare-auth)::before {
+  opacity: 0.14;
+}
+
+.tp-main-shell > * {
+  position: relative;
+  z-index: 1;
 }
 
 .tp-navbar-surface {
-  background: rgba(255, 255, 255, 0.92) !important;
-  backdrop-filter: blur(8px);
+  background: color-mix(in srgb, var(--pak-card-bg) 78%, transparent) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid color-mix(in srgb, var(--pak-border) 70%, transparent) !important;
+  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.06);
+}
+
+body:not(.dark-theme) .tp-navbar-surface.navbar-light .nav-link {
+  color: color-mix(in srgb, #1e293b 86%, var(--bs-primary) 14%);
+}
+
+body:not(.dark-theme) .tp-navbar-surface.navbar-light .nav-link:hover,
+body:not(.dark-theme) .tp-navbar-surface.navbar-light .nav-link:focus {
+  color: var(--pak-primary-dark);
+}
+
+body:not(.dark-theme) .tp-navbar-surface.navbar-light .nav-link svg,
+body:not(.dark-theme) .tp-navbar-surface.navbar-light .btn-link svg {
+  color: color-mix(in srgb, #334155 72%, var(--bs-primary) 28%);
 }
 
 body.dark-theme .tp-navbar-surface {
   background: rgba(17, 24, 39, 0.92) !important;
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.35);
 }
 
 .tp-auth-shell {
-  background: var(--tp-bg);
-  background-image: radial-gradient(900px 480px at 0% 0%, rgba(22, 163, 74, 0.14), transparent 55%),
-    radial-gradient(700px 400px at 100% 20%, rgba(15, 118, 110, 0.12), transparent 50%),
-    repeating-linear-gradient(0deg, rgba(15, 23, 42, 0.03) 0, rgba(15, 23, 42, 0.03) 1px, transparent 1px, transparent 14px);
+  background: linear-gradient(165deg, #f1f8f4 0%, #e8f5e9 35%, #dcefe0 100%);
+  background-image: radial-gradient(900px 480px at 0% 0%, rgba(22, 163, 74, 0.12), transparent 55%),
+    radial-gradient(700px 400px at 100% 25%, rgba(129, 199, 132, 0.2), transparent 50%),
+    linear-gradient(165deg, #f1f8f4 0%, #e8f5e9 35%, #dcedc8 100%);
 }
 
 body.dark-theme .tp-auth-shell {
@@ -1173,34 +1440,245 @@ body.dark-theme .tp-auth-shell {
     repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.04) 0, rgba(255, 255, 255, 0.04) 1px, transparent 1px, transparent 14px);
 }
 
+/* Auth hero: soft green (not dark / not plain white), DAT-style clarity */
 .tp-auth-hero {
-  background: linear-gradient(165deg, #14532d 0%, #166534 38%, #0f766e 100%);
+  --tp-hero-fg: #1b4332;
+  --tp-hero-muted: rgba(27, 67, 50, 0.72);
+  background: linear-gradient(155deg, #e8f5e9 0%, #c8e6c9 42%, #aed581 100%);
+  color: var(--tp-hero-fg);
   position: relative;
   overflow: hidden;
+  min-height: 280px;
 }
 
-.tp-auth-hero::after {
-  content: '';
+.tp-auth-hero__scene {
   position: absolute;
   inset: 0;
-  opacity: 0.2;
-  background-image: repeating-linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0.12) 0,
-    rgba(255, 255, 255, 0.12) 2px,
-    transparent 2px,
-    transparent 48px
-  );
-  animation: tpRoadDrift 22s linear infinite;
+  pointer-events: none;
+  z-index: 0;
 }
 
-@keyframes tpRoadDrift {
-  from {
+.tp-auth-hero__route {
+  position: absolute;
+  border-radius: 999px;
+  opacity: 0.14;
+  border: 2px dashed rgba(27, 67, 50, 0.45);
+}
+
+.tp-auth-hero__route--a {
+  width: 140%;
+  height: 42%;
+  left: -20%;
+  top: 18%;
+  transform: rotate(-8deg);
+  animation: tpHeroRouteDrift 28s ease-in-out infinite;
+}
+
+.tp-auth-hero__route--b {
+  width: 90%;
+  height: 38%;
+  right: -25%;
+  bottom: 12%;
+  transform: rotate(12deg);
+  animation: tpHeroRouteDriftB 36s ease-in-out infinite;
+}
+
+@keyframes tpHeroRouteDrift {
+  0%,
+  100% {
+    transform: rotate(-8deg) translateX(0);
+    opacity: 0.12;
+  }
+  50% {
+    transform: rotate(-8deg) translateX(-24px);
+    opacity: 0.18;
+  }
+}
+
+@keyframes tpHeroRouteDriftB {
+  0%,
+  100% {
+    transform: rotate(12deg) translateX(0);
+    opacity: 0.1;
+  }
+  50% {
+    transform: rotate(12deg) translateX(20px);
+    opacity: 0.16;
+  }
+}
+
+.tp-auth-hero__glyph {
+  position: absolute;
+  opacity: 0.11;
+  background: rgba(27, 67, 50, 0.85);
+  border-radius: 4px;
+}
+
+.tp-auth-hero__glyph--truck {
+  width: 36px;
+  height: 18px;
+  bottom: 28%;
+  left: 8%;
+  animation: tpTruckCrawl 22s linear infinite;
+  box-shadow: 22px 6px 0 -4px rgba(27, 67, 50, 0.5);
+}
+
+.tp-auth-hero__glyph--ship {
+  width: 44px;
+  height: 12px;
+  bottom: 12%;
+  right: 18%;
+  border-radius: 0 0 12px 12px;
+  animation: tpShipRock 14s ease-in-out infinite;
+}
+
+.tp-auth-hero__glyph--plane {
+  width: 28px;
+  height: 8px;
+  top: 14%;
+  right: 12%;
+  border-radius: 0 40% 40% 0;
+  animation: tpPlaneFly 18s ease-in-out infinite;
+}
+
+.tp-auth-hero__glyph--cargo {
+  width: 24px;
+  height: 24px;
+  top: 38%;
+  left: 22%;
+  border-radius: 2px;
+  animation: tpCargoFloat 12s ease-in-out infinite;
+}
+
+@keyframes tpTruckCrawl {
+  0% {
     transform: translateX(0);
   }
-  to {
-    transform: translateX(-48px);
+  100% {
+    transform: translateX(240px);
   }
+}
+
+@keyframes tpShipRock {
+  0%,
+  100% {
+    transform: translateX(0) rotate(0deg);
+  }
+  50% {
+    transform: translateX(-12px) rotate(-2deg);
+  }
+}
+
+@keyframes tpPlaneFly {
+  0% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(-40px, 16px);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+@keyframes tpCargoFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.tp-auth-hero__copy,
+.tp-auth-hero__footnote {
+  z-index: 1;
+}
+
+/* Left-edge clipped wordmark (corporate freight; LTR island for Urdu layout) */
+.tp-auth-brand-wrap {
+  direction: ltr;
+  unicode-bidi: isolate;
+  max-width: min(100%, 11rem);
+  overflow: hidden;
+  margin-inline-end: auto;
+}
+
+.tp-auth-brand-clip {
+  display: block;
+  font-size: clamp(2.25rem, 4vw + 1.25rem, 4.5rem);
+  letter-spacing: 0.14em;
+  color: #0d2818;
+  text-shadow: 0 2px 0 rgba(255, 255, 255, 0.35);
+  white-space: nowrap;
+  line-height: 1.05;
+  transform: translateX(-24%);
+}
+
+.tp-auth-brand-wrap--compact {
+  max-width: 9rem;
+}
+
+.tp-auth-brand-clip--compact {
+  font-size: clamp(1.5rem, 6vw, 2rem);
+  letter-spacing: 0.12em;
+  transform: translateX(-20%);
+}
+
+.tp-auth-hero__logo {
+  font-size: clamp(2.25rem, 4vw + 1.25rem, 4.5rem);
+  letter-spacing: 0.14em;
+  color: #0d2818;
+  text-shadow: 0 2px 0 rgba(255, 255, 255, 0.35);
+}
+
+.tp-auth-hero__logo--compact {
+  font-size: clamp(1.75rem, 7vw, 2.25rem);
+  letter-spacing: 0.12em;
+  color: #0d2818;
+}
+
+.tp-auth-hero__subtitle {
+  color: var(--tp-hero-muted);
+  max-width: 22rem;
+}
+
+.tp-auth-hero__footnote {
+  color: var(--tp-hero-muted);
+}
+
+.tp-auth-hero__rule {
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+  background: linear-gradient(90deg, rgba(27, 67, 50, 0.12), rgba(27, 67, 50, 0.55), rgba(27, 67, 50, 0.12));
+}
+
+body.dark-theme .tp-auth-hero {
+  --tp-hero-fg: #ecfdf5;
+  --tp-hero-muted: rgba(236, 253, 245, 0.75);
+  background: linear-gradient(155deg, #14532d 0%, #166534 45%, #0f766e 100%);
+  color: var(--tp-hero-fg);
+}
+
+body.dark-theme .tp-auth-hero__logo,
+body.dark-theme .tp-auth-hero__logo--compact,
+body.dark-theme .tp-auth-brand-clip,
+body.dark-theme .tp-auth-brand-clip--compact {
+  color: #f0fdf4;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+}
+
+body.dark-theme .tp-auth-hero__glyph {
+  background: rgba(240, 253, 244, 0.35);
+}
+
+body.dark-theme .tp-auth-hero__route {
+  border-color: rgba(240, 253, 244, 0.35);
+  opacity: 0.2;
+}
+
+body.dark-theme .tp-auth-hero__rule {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.08));
 }
 
 .tp-auth-form-wrap {
@@ -1225,8 +1703,129 @@ body.dark-theme .tp-auth-form-wrap {
 }
 
 .tp-auth-hero-compact {
-  background: linear-gradient(135deg, #166534, #0f766e);
-  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
+  background: linear-gradient(130deg, #e8f5e9 0%, #c8e6c9 55%, #aed581 100%);
+  box-shadow: 0 10px 28px rgba(27, 67, 50, 0.12);
+  color: #1b4332;
+  position: relative;
+  overflow: hidden;
+}
+
+.tp-auth-hero-compact__scene {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent,
+    transparent 36px,
+    rgba(27, 67, 50, 0.07) 36px,
+    rgba(27, 67, 50, 0.07) 37px
+  );
+  animation: tpRoadDrift 24s linear infinite;
+}
+
+@keyframes tpRoadDrift {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-36px);
+  }
+}
+
+body.dark-theme .tp-auth-hero-compact {
+  background: linear-gradient(130deg, #166534, #0f766e);
+  color: #ecfdf5;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+}
+
+body.dark-theme .tp-auth-hero-compact__scene {
+  opacity: 0.25;
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent,
+    transparent 36px,
+    rgba(255, 255, 255, 0.06) 36px,
+    rgba(255, 255, 255, 0.06) 37px
+  );
+}
+
+/* Shipment progress card (tracking) */
+.tp-progress-box {
+  border-radius: 1rem;
+  border: 1px solid rgba(22, 163, 74, 0.2);
+  background: linear-gradient(180deg, rgba(232, 245, 233, 0.45), var(--pak-card-bg, #fff));
+}
+
+body.dark-theme .tp-progress-box {
+  background: linear-gradient(180deg, rgba(22, 163, 74, 0.12), rgba(31, 41, 55, 0.95));
+  border-color: rgba(74, 222, 128, 0.2);
+}
+
+.tp-progress-box .tp-progress-status {
+  font-size: clamp(1.35rem, 2.5vw, 1.75rem);
+}
+
+.tp-progress-seg {
+  background: rgba(22, 163, 74, 0.12);
+  transition: background 0.25s ease;
+}
+
+.tp-progress-seg--on {
+  background: linear-gradient(90deg, #22c55e, #16a34a);
+}
+
+.tp-map-card .leaflet-container {
+  min-height: clamp(220px, 45vh, 420px);
+}
+
+/* Structured shipment steps (above map) */
+.tp-progress-steps {
+  margin: 0;
+  padding: 0;
+}
+
+.tp-progress-steps li {
+  display: grid;
+  grid-template-columns: 1.25rem 1fr;
+  gap: 0.5rem 0.75rem;
+  align-items: flex-start;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid rgba(22, 163, 74, 0.12);
+}
+
+.tp-progress-steps li:last-child {
+  border-bottom: 0;
+}
+
+.tp-progress-steps__dot {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 999px;
+  margin-top: 0.35rem;
+  background: rgba(22, 163, 74, 0.25);
+  border: 2px solid rgba(22, 163, 74, 0.35);
+}
+
+.tp-progress-steps li.tp-progress-steps__done .tp-progress-steps__dot {
+  background: #16a34a;
+  border-color: #15803d;
+}
+
+.tp-progress-steps li.tp-progress-steps__current .tp-progress-steps__dot {
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.25);
+  background: #fff;
+  border-color: #16a34a;
+}
+
+.tp-progress-steps li.tp-progress-steps__pending .tp-progress-steps__label {
+  color: var(--bs-secondary-color, #6c757d);
+}
+
+.tp-progress-steps li.tp-progress-steps__current .tp-progress-steps__label {
+  font-weight: 600;
+  color: #166534;
 }
 
 .tp-static-page .card {
@@ -1250,5 +1849,458 @@ body.dark-theme .tp-static-page .card {
 
 .tp-star-btn {
   min-width: 2.25rem;
+}
+
+/* ----- Auth v2: viewport-locked shell (tokens + single header brand) ----- */
+.tp-auth-v2--locked {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  width: 100%;
+}
+
+.tp-auth-v2__bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background: linear-gradient(
+    165deg,
+    var(--tp-auth-canvas-0) 0%,
+    var(--tp-auth-canvas-1) 42%,
+    var(--tp-auth-canvas-2) 100%
+  );
+}
+
+.tp-auth-v2__veil {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+      ellipse 120% 80% at 20% 0%,
+      rgba(var(--bs-primary-rgb), 0.14),
+      transparent 55%
+    ),
+    radial-gradient(ellipse 90% 70% at 100% 100%, rgba(var(--bs-primary-rgb), 0.08), transparent 50%);
+  pointer-events: none;
+}
+
+.tp-auth-v2__accent-slab {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: min(55vw, 520px);
+  height: 100%;
+  background: linear-gradient(
+    115deg,
+    transparent 0%,
+    rgba(var(--bs-primary-rgb), 0.07) 40%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+.tp-auth-v2__grid {
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(color-mix(in srgb, var(--pak-border) 55%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--pak-border) 55%, transparent) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(ellipse 85% 75% at 50% 45%, #000 15%, transparent 70%);
+  pointer-events: none;
+}
+
+.tp-auth-v2__route-line {
+  position: absolute;
+  border-radius: 999px;
+  border: 1px dashed color-mix(in srgb, var(--pak-border) 70%, var(--tp-auth-canvas-1));
+  pointer-events: none;
+}
+
+.tp-auth-v2__route-line--1 {
+  width: 120%;
+  height: 32%;
+  left: -18%;
+  top: 18%;
+  transform: rotate(-7deg);
+}
+
+.tp-auth-v2__route-line--2 {
+  width: 85%;
+  height: 28%;
+  right: -22%;
+  bottom: 12%;
+  transform: rotate(9deg);
+  opacity: 0.85;
+}
+
+.tp-auth-v2__top--bar {
+  flex-shrink: 0;
+  height: var(--tp-auth-header-h);
+  min-height: var(--tp-auth-header-h);
+  position: relative;
+  z-index: 3;
+  background: var(--tp-auth-header-bar-bg);
+  border-bottom: 1px solid color-mix(in srgb, var(--pak-border) 40%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* Auth header wordmark — dark slate bar: high-contrast light text + glow */
+body.dark-theme .tp-auth-v2__header-brand .tp-brand-logo__text--auth {
+  color: var(--pak-light);
+  font-size: clamp(1.12rem, 2.6vw, 1.42rem);
+  font-weight: 800;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 0 22px color-mix(in srgb, var(--bs-primary) 45%, transparent);
+}
+
+body.dark-theme .tp-auth-v2__header-brand .tp-brand-logo__rule--vertical {
+  background: color-mix(in srgb, var(--pak-light) 32%, transparent);
+}
+
+body.dark-theme .tp-auth-v2__header-brand .tp-brand-logo__icons--auth .tp-brand-logo__icon {
+  color: color-mix(in srgb, var(--pak-primary) 50%, var(--pak-light));
+  opacity: 0.96;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
+}
+
+/* Light gradient bar: dark wordmark + soft lift (was illegible with pak-light fill) */
+body:not(.dark-theme) .tp-auth-v2__header-brand .tp-brand-logo__text--auth {
+  color: color-mix(in srgb, #0f172a 84%, var(--bs-primary) 16%);
+  font-size: clamp(1.18rem, 2.8vw, 1.52rem);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-shadow: 0 1px 0 color-mix(in srgb, #fff 65%, transparent),
+    0 0 26px color-mix(in srgb, var(--bs-primary) 32%, transparent);
+}
+
+body:not(.dark-theme) .tp-auth-v2__header-brand .tp-brand-logo__rule--vertical {
+  background: color-mix(in srgb, var(--bs-primary) 38%, var(--pak-border));
+}
+
+body:not(.dark-theme) .tp-auth-v2__header-brand .tp-brand-logo__icons--auth .tp-brand-logo__icon {
+  color: var(--pak-primary-dark);
+  opacity: 1;
+  filter: drop-shadow(0 1px 1px color-mix(in srgb, var(--bs-primary) 25%, transparent));
+}
+
+body:not(.dark-theme) .tp-auth-v2__top--bar {
+  background: color-mix(in srgb, var(--pak-card-bg) 52%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--bs-primary) 24%, var(--pak-border));
+  box-shadow: 0 3px 16px rgba(15, 23, 42, 0.07);
+}
+
+body.dark-theme .tp-auth-v2__header-btn {
+  border-color: color-mix(in srgb, var(--pak-light) 45%, transparent) !important;
+  color: var(--pak-light) !important;
+  background: color-mix(in srgb, var(--tp-auth-canvas-2) 78%, rgba(255, 255, 255, 0.12)) !important;
+  font-weight: 600;
+  font-size: 0.8rem;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.28), 0 0 0 1px color-mix(in srgb, var(--pak-light) 14%, transparent) inset;
+}
+
+body.dark-theme .tp-auth-v2__header-btn:hover {
+  background: color-mix(in srgb, var(--tp-auth-canvas-2) 62%, rgba(255, 255, 255, 0.18)) !important;
+  border-color: color-mix(in srgb, var(--pak-light) 58%, transparent) !important;
+  color: #fff !important;
+}
+
+body.dark-theme .tp-auth-v2__header-btn:active {
+  transform: translateY(1px);
+}
+
+body:not(.dark-theme) .tp-auth-v2__header-btn {
+  border-color: color-mix(in srgb, var(--bs-primary) 40%, var(--pak-border)) !important;
+  color: color-mix(in srgb, #0f172a 86%, var(--bs-primary) 14%) !important;
+  background: color-mix(in srgb, var(--pak-card-bg) 94%, var(--bs-primary) 6%) !important;
+  font-weight: 600;
+  font-size: 0.8rem;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.09), 0 0 0 1px color-mix(in srgb, #fff 50%, transparent) inset;
+}
+
+body:not(.dark-theme) .tp-auth-v2__header-btn:hover {
+  background: color-mix(in srgb, var(--pak-card-bg) 78%, var(--bs-primary) 22%) !important;
+  border-color: var(--pak-primary) !important;
+  color: var(--pak-primary-dark) !important;
+}
+
+body:not(.dark-theme) .tp-auth-v2__header-btn:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12) inset;
+}
+
+body:not(.dark-theme) .tp-auth-v2__header-btn--demo {
+  border-color: color-mix(in srgb, var(--pak-primary) 52%, var(--pak-border)) !important;
+  color: var(--pak-primary-dark) !important;
+  background: color-mix(in srgb, var(--pak-light-green-bg) 48%, var(--pak-card-bg) 52%) !important;
+}
+
+body:not(.dark-theme) .tp-auth-v2__header-btn--demo:hover {
+  border-color: var(--pak-primary) !important;
+  background: color-mix(in srgb, var(--pak-light-green-bg) 65%, var(--pak-card-bg) 35%) !important;
+  color: var(--pak-primary-hover) !important;
+}
+
+body.dark-theme .tp-auth-v2__header-btn--demo {
+  border-color: color-mix(in srgb, var(--pak-primary) 48%, var(--pak-light)) !important;
+  color: color-mix(in srgb, var(--pak-light) 92%, var(--pak-primary)) !important;
+  background: color-mix(in srgb, var(--tp-auth-canvas-2) 72%, rgba(34, 197, 94, 0.12)) !important;
+}
+
+body.dark-theme .tp-auth-v2__header-btn--demo:hover {
+  border-color: var(--pak-primary) !important;
+  color: #fff !important;
+  background: color-mix(in srgb, var(--tp-auth-canvas-2) 55%, rgba(34, 197, 94, 0.22)) !important;
+}
+
+/* Language toggle on inner app pages (exclude auth bar — uses .tp-auth-v2__header-btn) */
+body:not(.dark-theme) .tp-lang-toggle.btn-outline-secondary:not(.tp-auth-v2__header-btn) {
+  background-color: color-mix(in srgb, var(--pak-card-bg) 92%, var(--bs-primary) 8%) !important;
+  border-color: color-mix(in srgb, var(--bs-primary) 36%, var(--pak-border)) !important;
+  color: color-mix(in srgb, #1e293b 86%, var(--bs-primary) 14%) !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+}
+
+body:not(.dark-theme) .tp-lang-toggle.btn-outline-secondary:not(.tp-auth-v2__header-btn):hover {
+  border-color: var(--pak-primary);
+  color: var(--pak-primary-dark);
+  background-color: color-mix(in srgb, var(--pak-light-green-bg) 45%, var(--pak-card-bg) 55%) !important;
+}
+
+body.dark-theme .tp-lang-toggle.btn-outline-secondary:not(.tp-auth-v2__header-btn) {
+  background-color: color-mix(in srgb, var(--tp-bg) 88%, rgba(255, 255, 255, 0.06)) !important;
+  border-color: color-mix(in srgb, var(--pak-border) 70%, var(--bs-primary) 30%) !important;
+  color: #e5e7eb !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+body.dark-theme .tp-lang-toggle.btn-outline-secondary:not(.tp-auth-v2__header-btn):hover {
+  border-color: var(--pak-primary);
+  color: #fff !important;
+  background-color: rgba(22, 163, 74, 0.18) !important;
+}
+
+.tp-rtl .tp-auth-v2__top--bar {
+  flex-direction: row-reverse;
+}
+
+.tp-rtl .tp-auth-v2__actions {
+  flex-direction: row-reverse;
+}
+
+.tp-auth-v2__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 0.75rem 0.5rem;
+  position: relative;
+  z-index: 2;
+  overflow: hidden;
+}
+
+.tp-auth-v2__glass {
+  width: 100%;
+  max-width: 420px;
+  max-height: calc(100dvh - var(--tp-auth-header-h) - 0.75rem);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--tp-auth-glass-bg);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-color: var(--tp-auth-glass-border) !important;
+  box-shadow: var(--pak-shadow), 0 0 0 1px color-mix(in srgb, var(--pak-border) 35%, transparent) inset;
+}
+
+body:not(.dark-theme) .tp-auth-v2__glass {
+  background: color-mix(in srgb, var(--pak-card-bg) 90%, transparent);
+  box-shadow: 0 22px 52px rgba(15, 23, 42, 0.14), var(--pak-shadow),
+    0 0 0 1px color-mix(in srgb, var(--pak-border) 48%, transparent) inset;
+}
+
+body.dark-theme .tp-auth-v2__glass {
+  box-shadow: 0 28px 64px rgba(0, 0, 0, 0.45), 0 0 0 1px color-mix(in srgb, var(--pak-border) 25%, transparent) inset;
+}
+
+body.dark-theme .tp-auth-v2__glass .text-muted {
+  color: #94a3b8 !important;
+}
+
+.tp-auth-v2__glass-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  padding: 0.85rem 1rem 0.65rem;
+}
+
+.tp-auth-v2__glass-content--register {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+@media (min-width: 576px) {
+  .tp-auth-v2__glass-content {
+    padding: 1.1rem 1.35rem 0.85rem;
+  }
+}
+
+.tp-auth-v2__title {
+  line-height: 1.25;
+}
+
+.tp-auth-v2__lede {
+  line-height: 1.35;
+}
+
+.tp-auth-v2__footer-line {
+  flex-shrink: 0;
+}
+
+/* Tighter register fields so card fits small viewports */
+.tp-auth-v2--locked .tp-auth-register-form .mb-3 {
+  margin-bottom: 0.45rem !important;
+}
+
+.tp-auth-v2--locked .tp-auth-register-form .mb-2 {
+  margin-bottom: 0.3rem !important;
+}
+
+.tp-auth-v2--locked .tp-auth-register-form .input-group-sm > .form-control {
+  min-height: calc(1.5em + 0.4rem + 2px);
+}
+
+.tp-auth-role-field__hint {
+  color: var(--bs-secondary-color);
+  line-height: 1.35;
+}
+
+.tp-auth-role-field--primary {
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--pak-primary) 35%, var(--pak-border));
+  background: color-mix(in srgb, var(--pak-primary) 6%, var(--pak-card-bg));
+}
+
+body.dark-theme .tp-auth-v2__glass .tp-auth-role-field--primary {
+  background: color-mix(in srgb, var(--pak-primary) 12%, var(--tp-bg));
+  border-color: color-mix(in srgb, var(--pak-primary) 40%, var(--pak-border));
+}
+
+/* Horizontal shipment lifecycle rail */
+.tp-progress-lane__label {
+  display: block;
+  font-size: clamp(0.52rem, 1.35vw, 0.72rem);
+  line-height: 1.15;
+  font-weight: 500;
+}
+
+.tp-progress-lane__label--done {
+  color: #16a34a;
+}
+
+.tp-progress-lane__label--current {
+  color: #ca8a04;
+  font-weight: 700;
+  text-shadow: 0 0 14px rgba(234, 179, 8, 0.55);
+}
+
+.tp-progress-lane__label--upcoming {
+  color: #64748b;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.35);
+}
+
+body.dark-theme .tp-progress-lane__label--upcoming {
+  color: #e2e8f0;
+  text-shadow: 0 0 12px rgba(255, 255, 255, 0.2);
+}
+
+.tp-progress-lane__bar-row {
+  height: 1.35rem;
+}
+
+.tp-progress-lane__bar-bg {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 4px;
+  background: rgba(22, 163, 74, 0.14);
+}
+
+body.dark-theme .tp-progress-lane__bar-bg {
+  background: rgba(148, 163, 184, 0.2);
+}
+
+.tp-progress-lane__bar-fill {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 4px;
+  background: linear-gradient(90deg, #22c55e, #16a34a);
+  transition: width 0.35s ease;
+  max-width: 100%;
+}
+
+.tp-progress-lane__nodes {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.tp-progress-lane__node {
+  width: 0.72rem;
+  height: 0.72rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+  z-index: 1;
+  border: 2px solid transparent;
+}
+
+.tp-progress-lane__node--done {
+  background: #22c55e;
+  border-color: #15803d;
+}
+
+.tp-progress-lane__node--current {
+  background: #eab308;
+  border-color: #a16207;
+  box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.45);
+  animation: tpProgressPulse 1.6s ease-in-out infinite;
+}
+
+.tp-progress-lane__node--upcoming {
+  background: #ffffff;
+  border-color: rgba(148, 163, 184, 0.65);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.65);
+}
+
+body.dark-theme .tp-progress-lane__node--upcoming {
+  background: #f8fafc;
+  box-shadow: 0 0 14px rgba(248, 250, 252, 0.35);
+}
+
+@keyframes tpProgressPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.45);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(234, 179, 8, 0.2);
+    transform: scale(1.08);
+  }
 }
 

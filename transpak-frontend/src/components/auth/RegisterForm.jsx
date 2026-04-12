@@ -30,13 +30,12 @@ const RegisterForm = ({ prefill: prefillProp = null, upgradeRole: upgradeRolePro
     confirmPassword: '',
     cnic: prefill?.cnic || '',
     phone: prefill?.phone || '',
-    role: upgradeRole || 'shipper'
+    role: upgradeRole || ''
   }));
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [demoVideo, setDemoVideo] = useState(null);
 
   useEffect(() => {
     // If navigation state changes (rare), sync prefill once
@@ -156,7 +155,7 @@ const RegisterForm = ({ prefill: prefillProp = null, upgradeRole: upgradeRolePro
   };
 
   return (
-    <form onSubmit={handleSubmit} className="mt-3">
+    <form onSubmit={handleSubmit} className="tp-auth-register-form mt-2">
       {error && (
         <div className="alert alert-danger py-2 small" role="alert">
           {error}
@@ -167,15 +166,15 @@ const RegisterForm = ({ prefill: prefillProp = null, upgradeRole: upgradeRolePro
           {success}
         </div>
       )}
-      <RoleSelector
-        value={form.role}
-        onChange={(role) => setForm((prev) => ({ ...prev, role }))}
-        onlyRole={upgradeRole || undefined}
-      />
+      {!upgradeRole && (
+        <RoleSelector value={form.role} onChange={(role) => setForm((prev) => ({ ...prev, role }))} />
+      )}
       {upgradeRole && (
-        <div className="alert alert-info py-2 small" role="alert">
-          {t('auth.creatingAdditionalRole', { role: form.role })}
-        </div>
+        <RoleSelector
+          value={form.role}
+          onChange={(role) => setForm((prev) => ({ ...prev, role }))}
+          onlyRole={upgradeRole}
+        />
       )}
       <div className="mb-2">
         <label className="form-label small">{t('auth.fullName')} *</label>
@@ -284,33 +283,29 @@ const RegisterForm = ({ prefill: prefillProp = null, upgradeRole: upgradeRolePro
         </div>
         {errors.confirmPassword && <div className="invalid-feedback">{errors.confirmPassword}</div>}
       </div>
-      <div className="mb-3">
-        <label className="form-label small">{t('auth.demoVideoLabel')}</label>
-        <input
-          type="file"
-          accept="video/*"
-          className="form-control form-control-sm rounded-3"
-          onChange={(e) => setDemoVideo(e.target.files?.[0] || null)}
-        />
-        <div className="form-text small">{t('auth.demoVideoHint')}</div>
-        {demoVideo && (
-          <div className="small text-muted mt-1">
-            {demoVideo.name} ({Math.round(demoVideo.size / 1024)} KB)
-          </div>
-        )}
+      <div className="d-flex flex-column flex-sm-row gap-2">
+        <Button
+          variant="outline-secondary"
+          type="button"
+          className="flex-sm-fill py-2 rounded-lg"
+          disabled={loading}
+          onClick={() => (upgradeRole ? navigate(-1) : navigate('/login', { replace: false }))}
+        >
+          {t('auth.cancelRegistration')}
+        </Button>
+        <Button
+          variant="primary"
+          className="flex-sm-fill py-2 d-flex justify-content-center align-items-center rounded-lg"
+          type="submit"
+          disabled={
+            loading ||
+            (form.password && form.confirmPassword && form.password !== form.confirmPassword) ||
+            !form.role
+          }
+        >
+          {loading ? <Loader light /> : t('auth.createAccountButton')}
+        </Button>
       </div>
-      <Button
-        variant="primary"
-        className="w-100 py-2 d-flex justify-content-center align-items-center rounded-lg"
-        type="submit"
-        disabled={
-          loading ||
-          (form.password && form.confirmPassword && form.password !== form.confirmPassword) ||
-          !form.role
-        }
-      >
-        {loading ? <Loader light /> : t('auth.createAccountButton')}
-      </Button>
     </form>
   );
 };

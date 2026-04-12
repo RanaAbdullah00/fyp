@@ -22,7 +22,7 @@ const MobileNav = () => {
       : { to: '/notifications', icon: <FaTools />, label: t('common.admin') };
 
   const loadsPath = activeRole === 'shipper' ? '/loads/manage' : '/loads';
-  const trackPath = activeRole === 'shipper' ? '/bids' : '/shipments/tracking';
+  const trackPath = '/shipments/tracking';
 
   return (
     <nav className={`mobile-bottom-nav d-md-none ${isUrdu ? 'tp-rtl' : ''}`}>
@@ -35,7 +35,7 @@ const MobileNav = () => {
           <FaListUl />
           <span>{t('common.loads')}</span>
         </NavLink>
-        <NavLink to={trackPath} className={mobileNavClass} end={trackPath === '/bids'}>
+        <NavLink to={trackPath} className={mobileNavClass} end>
           <FaTruck />
           <span>{t('common.track')}</span>
         </NavLink>

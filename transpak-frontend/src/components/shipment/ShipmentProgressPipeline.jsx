@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import Card from '../ui/Card.jsx';
 import { normalizeShipmentStatus, SHIPMENT_ORDER } from '../../utils/shipmentStatus.js';
 
-const DEFAULT_LABELS = ['Posted', 'Booked', 'Picked up', 'In transit', 'Delivered']; // matches SHIPMENT_ORDER length
+const DEFAULT_LABELS = ['Posted', 'Booked', 'Picked up', 'In transit', 'Delivered', 'Closed'];
 
 function stepIndexFromStatus(status) {
   const c = normalizeShipmentStatus(status) || 'posted';

@@ -11,6 +11,7 @@ const StatusBadge = ({ status, size }) => {
     pickedup: 'warning',
     intransit: 'primary',
     delivered: 'success',
+    closed: 'secondary',
     pending: 'warning',
     in_transit: 'primary',
     cancelled: 'secondary'
@@ -21,6 +22,7 @@ const StatusBadge = ({ status, size }) => {
     pickedup: 'Picked up',
     intransit: 'In transit',
     delivered: 'Delivered',
+    closed: 'Closed',
     pending: 'Pending',
     in_transit: 'In transit',
     cancelled: 'Cancelled'

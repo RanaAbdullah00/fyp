@@ -2,7 +2,9 @@ require("dotenv").config();
 
 const path = require("path");
 const fs = require("fs");
+const http = require("http");
 const express = require("express");
+const { Server } = require("socket.io");
 const cors = require("cors");
 const helmet = require("helmet");
 const mongoSanitize = require("express-mongo-sanitize");
@@ -12,12 +14,19 @@ const authRoutes = require("./routes/authRoutes");
 const shipmentRoutes = require("./routes/shipmentRoutes");
 const loadRoutes = require("./routes/loadRoutes");
 const bidRoutes = require("./routes/bidRoutes");
+const bookingRoutes = require("./routes/bookingRoutes");
 const truckRoutes = require("./routes/truckRoutes");
 const userRoutes = require("./routes/userRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const reviewRoutes = require("./routes/reviewRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
+const paymentRoutes = require("./routes/paymentRoutes");
+const chatRoutes = require("./routes/chatRoutes");
+const walletRoutes = require("./routes/walletRoutes");
 const demoVideoRoutes = require("./routes/demoVideoRoutes");
+const { globalApiLimiter } = require("./middleware/apiRateLimit");
+const realtimeHub = require("./services/realtimeHub");
+const registerSocketHandlers = require("./sockets");
 
 const app = express();
 
@@ -53,6 +62,8 @@ const envOrigins = (process.env.CORS_ORIGIN || "")
 const allowedOrigins =
   envOrigins.length > 0 ? [...new Set([...defaultDevOrigins, ...envOrigins])] : null;
 
+const socketCorsOrigin = allowedOrigins === null ? true : allowedOrigins;
+
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -64,6 +75,8 @@ app.use(
     credentials: true
   })
 );
+
+app.use("/api", globalApiLimiter);
 
 // Routes
 app.get("/api/health", (req, res) =>
@@ -210,11 +223,15 @@ app.use("/api/auth", authRoutes);
 app.use("/api/shipments", shipmentRoutes);
 app.use("/api/loads", loadRoutes);
 app.use("/api/bids", bidRoutes);
+app.use("/api/bookings", bookingRoutes);
 app.use("/api/trucks", truckRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/payments", paymentRoutes);
+app.use("/api/chat", chatRoutes);
+app.use("/api/wallet", walletRoutes);
 
 // Not found handler
 app.use((req, res) => {
@@ -225,9 +242,12 @@ app.use((req, res) => {
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
   const status = err.statusCode || 500;
+  const isProd = process.env.NODE_ENV === "production";
+  const safeMessage =
+    isProd && status >= 500 ? "Server error" : err.message || "Server error";
   res.status(status).json({
     success: false,
-    message: err.message || "Server error",
+    message: safeMessage,
     data: null
   });
 });
@@ -272,18 +292,34 @@ async function start() {
     const basePort = Number(PORT) || 5000;
     const maxAttempts = 20;
     const tryListen = (port, attempt = 0) => {
-      const server = app.listen(port, () => {
-        console.log(`TransPak backend running on port ${port}`);
+      const httpServer = http.createServer(app);
+      const io = new Server(httpServer, {
+        cors: {
+          origin: socketCorsOrigin,
+          credentials: true
+        }
       });
-      server.on("error", (err) => {
+      realtimeHub.setIO(io);
+      registerSocketHandlers(io);
+
+      httpServer.listen(port, () => {
+        console.log(`TransPak backend (HTTP + Socket.io) on port ${port}`);
+      });
+      httpServer.on("error", (err) => {
         if (err && err.code === "EADDRINUSE" && attempt < maxAttempts) {
           console.warn(`Port ${port} already in use. Trying ${port + 1}...`);
+          try {
+            io.close();
+            httpServer.close();
+          } catch {
+            // ignore
+          }
           return tryListen(port + 1, attempt + 1);
         }
         console.error("Server listen failed:", err.message || err);
         process.exit(1);
       });
-      return server;
+      return httpServer;
     };
     tryListen(basePort);
   } catch (err) {

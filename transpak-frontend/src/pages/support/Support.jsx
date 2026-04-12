@@ -1,8 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import Card from '../../components/ui/Card.jsx';
+import DemoVideoWatchButton from '../../components/demo/DemoVideoWatchButton.jsx';
+import { useLanguage } from '../../hooks/useLanguage.js';
 
-// Basic support contact screen.
+// FAQ / Help — includes full official walkthrough access (demo video not on dashboards).
 const Support = () => {
+  const { t } = useLanguage();
   const faqs = useMemo(
     () => [
       { q: 'How do I post a load?', a: 'Go to Loads → Post Load, fill details, choose pickup date and deadline, then publish.' },
@@ -23,6 +26,14 @@ const Support = () => {
         </p>
         <p className="small mb-0">Hotline: +92-300-0000000</p>
       </Card>
+
+      <div id="help-demo" className="mt-3">
+        <h6 className="mb-2">{t('pages.support.demoSectionTitle')}</h6>
+        <Card className="p-3">
+          <p className="small text-muted mb-3">{t('pages.support.demoSectionBody')}</p>
+          <DemoVideoWatchButton />
+        </Card>
+      </div>
 
       <div id="faq" className="mt-3">
         <h6 className="mb-2">FAQ</h6>

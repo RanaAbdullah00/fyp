@@ -63,7 +63,8 @@ export const fallbackTracking = {
   tracking: {
     status: 'intransit',
     eta: 'Tonight 11:30 PM',
-    currentLocation: [28.4, 70.3]
+    currentLocation: [28.4, 70.3],
+    locationUnavailable: false
   },
   history: [
     { event: 'Picked up', time: 'Today 8:15 AM', location: 'Lahore' },

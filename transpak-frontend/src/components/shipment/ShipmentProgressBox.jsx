@@ -1,67 +1,58 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import Card from '../ui/Card.jsx';
-import {
-  SHIPMENT_ORDER,
-  normalizeShipmentStatus,
-  nextShipmentStatus
-} from '../../utils/shipmentStatus.js';
+import { SHIPMENT_ORDER, normalizeShipmentStatus } from '../../utils/shipmentStatus.js';
 
 const PRETTY = {
   posted: 'Posted',
   booked: 'Booked',
   pickedup: 'Picked up',
   intransit: 'In transit',
-  delivered: 'Delivered'
+  delivered: 'Delivered',
+  closed: 'Closed'
 };
 
-const ShipmentProgressBox = ({ status, eta, mapHint, labels }) => {
+/** Horizontal lifecycle line: labels on the rail; done=green, current=yellow pulse, upcoming=white glow. */
+const ShipmentProgressBox = ({ status, eta }) => {
   const cur = normalizeShipmentStatus(status) || 'posted';
   const idx = Math.max(0, SHIPMENT_ORDER.indexOf(cur));
-  const next = nextShipmentStatus(cur);
-  const labelList =
-    labels ||
-    SHIPMENT_ORDER.map((k) => PRETTY[k] || k);
+  const n = SHIPMENT_ORDER.length;
+  const fillPct = n <= 1 ? 0 : (idx / (n - 1)) * 100;
 
-  const filled = useMemo(() => idx + 1, [idx]);
+  const stepClass = (i) => {
+    if (i < idx) return 'done';
+    if (i === idx) return 'current';
+    return 'upcoming';
+  };
 
   return (
-    <Card className="tp-progress-box mb-3 mb-lg-0">
-      <div className="small text-muted text-uppercase mb-1">Shipment progress</div>
-      <h3 className="h4 fw-bold text-success mb-1">{PRETTY[cur] || cur}</h3>
-      <div className="small text-muted mb-2">
-        {next ? (
-          <>
-            Next: <span className="fw-semibold text-body">{PRETTY[next]}</span>
-          </>
-        ) : (
-          <span className="fw-semibold text-body">Final stage reached</span>
-        )}
+    <Card className="tp-progress-box mb-0 h-100">
+      <div className="d-flex flex-wrap align-items-baseline justify-content-between gap-2 mb-3">
+        <span className="small text-muted text-uppercase">Shipment</span>
+        {eta ? <span className="small text-muted">{eta}</span> : null}
       </div>
-      {eta && <div className="small mb-2">ETA: {eta}</div>}
-      {mapHint != null && (
-        <div className="small text-muted mb-3">
-          Map:{' '}
-          {Array.isArray(mapHint)
-            ? `Near ${Number(mapHint[0]).toFixed(2)}°, ${Number(mapHint[1]).toFixed(2)}°`
-            : String(mapHint)}
+      <div className="tp-progress-lane px-1">
+        <div className="tp-progress-lane__labels d-flex justify-content-between gap-1">
+          {SHIPMENT_ORDER.map((step, i) => (
+            <div key={step} className="tp-progress-lane__label-cell flex-fill text-center">
+              <span className={`tp-progress-lane__label tp-progress-lane__label--${stepClass(i)}`}>
+                {PRETTY[step] || step}
+              </span>
+            </div>
+          ))}
         </div>
-      )}
-      <div className="d-flex gap-1 mb-2" role="progressbar" aria-valuenow={filled} aria-valuemin={0} aria-valuemax={5}>
-        {SHIPMENT_ORDER.map((step, i) => (
-          <div
-            key={step}
-            className={`flex-grow-1 rounded-pill tp-progress-seg ${i < filled ? 'tp-progress-seg--on' : ''}`}
-            style={{ height: 8 }}
-            title={labelList[i] || step}
-          />
-        ))}
-      </div>
-      <div className="d-flex justify-content-between small text-muted">
-        {labelList.map((lbl, i) => (
-          <span key={lbl} className={`text-truncate px-0 ${i === idx ? 'fw-bold text-success' : ''}`} style={{ maxWidth: '20%' }}>
-            {lbl}
-          </span>
-        ))}
+        <div className="tp-progress-lane__bar-row position-relative mx-1 my-2">
+          <div className="tp-progress-lane__bar-bg rounded-pill" />
+          <div className="tp-progress-lane__bar-fill rounded-pill" style={{ width: `${fillPct}%` }} />
+          <div className="tp-progress-lane__nodes d-flex justify-content-between align-items-center position-relative">
+            {SHIPMENT_ORDER.map((step, i) => (
+              <div
+                key={step}
+                className={`tp-progress-lane__node tp-progress-lane__node--${stepClass(i)}`}
+                aria-hidden
+              />
+            ))}
+          </div>
+        </div>
       </div>
     </Card>
   );

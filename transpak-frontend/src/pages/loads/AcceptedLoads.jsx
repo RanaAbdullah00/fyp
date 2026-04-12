@@ -55,7 +55,7 @@ const AcceptedLoads = () => {
               <Badge variant={l.status === 'assigned' ? 'warning' : 'secondary'}>{l.status}</Badge>
             </div>
             <div className="d-flex justify-content-end mt-2">
-              <Button variant="primary" size="sm" onClick={() => navigate('/shipments/tracking')}>
+              <Button variant="primary" size="sm" onClick={() => navigate(`/shipments/tracking/${l.id}`)}>
                 Track
               </Button>
             </div>

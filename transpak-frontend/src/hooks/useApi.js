@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import api from '../services/api.js';
 import { unwrapBody } from '../utils/unwrapApi.js';
-import { fallbackLoads, fallbackBids, fallbackNotifications, fallbackTracking } from '../mocks/fallbackData.js';
+import { fallbackLoads, fallbackBids, fallbackNotifications } from '../mocks/fallbackData.js';
 
 export const useApi = () => {
   const [loading, setLoading] = useState(false);
@@ -26,12 +26,19 @@ export const useApi = () => {
         totalReviews: 0
       };
     }
-    if (method === 'GET' && url.includes('/shipments/track')) return fallbackTracking;
     if (method === 'PUT' && url.includes('/bids/') && (url.endsWith('/accept') || url.endsWith('/reject') || url.endsWith('/suggest') || url.includes('/accept-suggestion') || url.includes('/reject-suggestion') || url.includes('/suggest-carrier'))) {
       return { ok: true };
     }
     if (method === 'POST' && (url.includes('/bids') || url.includes('/loads'))) {
       return { ok: true, id: Date.now() };
+    }
+    if (method === 'POST' && url.includes('/payments/simulate')) {
+      return {
+        paymentStatus: 'success',
+        transactionId: 'offline',
+        amount: Number(config?.data?.amount) || 0,
+        provider: config?.data?.provider || 'wallet'
+      };
     }
     return null;
   };

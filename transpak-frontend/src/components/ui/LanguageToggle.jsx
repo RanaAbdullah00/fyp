@@ -8,7 +8,7 @@ const LanguageToggle = ({ className = '' }) => {
   return (
     <button
       type="button"
-      className={`btn btn-outline-secondary btn-sm rounded-pill ${className}`}
+      className={`btn btn-outline-secondary btn-sm rounded-pill tp-lang-toggle ${className}`}
       onClick={toggleLanguage}
       aria-label={t('auth.language')}
     >

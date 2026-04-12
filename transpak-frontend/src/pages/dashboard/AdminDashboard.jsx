@@ -2,7 +2,6 @@ import React from 'react';
 import StatsCards from '../../components/dashboard/StatsCards.jsx';
 import ActivityFeed from '../../components/dashboard/ActivityFeed.jsx';
 import AnalyticsChart from '../../components/dashboard/AnalyticsChart.jsx';
-
 // High-level admin overview of platform metrics.
 const AdminDashboard = () => {
   const stats = [

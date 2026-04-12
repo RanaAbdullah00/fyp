@@ -18,7 +18,8 @@ const loadSchema = new mongoose.Schema(
     },
     shipperId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     assignedCarrierId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
-    acceptedBidId: { type: mongoose.Schema.Types.ObjectId, ref: "Bid", default: null }
+    acceptedBidId: { type: mongoose.Schema.Types.ObjectId, ref: "Bid", default: null },
+    bookingReference: { type: String, default: null, trim: true, sparse: true, unique: true }
   },
   { timestamps: true }
 );
@@ -39,6 +40,7 @@ loadSchema.methods.toJSONSafe = function toJSONSafe() {
     shipperId: this.shipperId?.toString?.() || String(this.shipperId),
     assignedCarrierId: this.assignedCarrierId?.toString?.() || (this.assignedCarrierId ? String(this.assignedCarrierId) : null),
     acceptedBidId: this.acceptedBidId?.toString?.() || (this.acceptedBidId ? String(this.acceptedBidId) : null),
+    bookingReference: this.bookingReference || null,
     createdAt: this.createdAt,
     updatedAt: this.updatedAt
   };

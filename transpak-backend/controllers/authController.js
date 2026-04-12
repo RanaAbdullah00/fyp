@@ -32,6 +32,9 @@ async function register(req, res) {
   const normalizedRole = String(role).trim().toLowerCase();
 
   const allowedRoles = User.ALLOWED_ROLES || ["shipper", "carrier", "admin"];
+  if (normalizedRole === "admin") {
+    return sendError(res, 403, "Forbidden");
+  }
   if (!allowedRoles.includes(normalizedRole)) {
     return sendError(res, 400, "Missing required fields");
   }

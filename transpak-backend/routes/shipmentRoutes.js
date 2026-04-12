@@ -1,89 +1,115 @@
 const express = require("express");
-const { protect } = require("../middleware/authMiddleware");
+const { protect, requireAnyRole, requireActiveRole } = require("../middleware/authMiddleware");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
+const { normalizeShipmentStatus, validateShipmentTransition } = require("../utils/shipmentStatus");
 const {
-  normalizeShipmentStatus,
-  validateShipmentTransition
-} = require("../utils/shipmentStatus");
+  shipmentIdParam,
+  shipmentStatusPutValidators,
+  handleValidationErrors
+} = require("../middleware/validateShipmentBody");
+const shipmentTrackService = require("../services/shipmentTrackService");
 
 const router = express.Router();
 
-const shipments = new Map();
-
-function getOrCreateShipment(id) {
-  const key = String(id);
-  if (shipments.has(key)) return shipments.get(key);
-
-  const data = {
-    tracking: {
-      status: "posted",
-      eta: "Tonight 11:30 PM",
-      currentLocation: [31.5204, 74.3587]
-    },
-    history: [
-      {
-        event: "Load posted",
-        time: new Date().toLocaleString(),
-        location: "System"
-      }
-    ],
-    liveTrackingMap: {
-      coordinates: [
-        [31.5204, 74.3587],
-        [30.2, 71.5],
-        [28.4, 70.3],
-        [24.8607, 67.0011]
-      ]
-    }
-  };
-
-  shipments.set(key, data);
-  return data;
+function validLatLng(pair) {
+  return (
+    Array.isArray(pair) &&
+    pair.length >= 2 &&
+    Number.isFinite(Number(pair[0])) &&
+    Number.isFinite(Number(pair[1]))
+  );
 }
 
-router.get("/track/:id", protect, (req, res) => {
-  try {
-    const data = getOrCreateShipment(req.params.id);
-    const canonical = normalizeShipmentStatus(data.tracking?.status) || "posted";
-    data.tracking = { ...(data.tracking || {}), status: canonical };
-    return sendSuccess(res, 200, data);
-  } catch (err) {
-    return sendError(res, 500, err.message || "Server error");
-  }
-});
+function attachLocationFields(req, tracking) {
+  const devSimFail =
+    process.env.NODE_ENV !== "production" && String(req.query.simulateGpsFailure || "") === "1";
+  const coords = tracking?.currentLocation;
+  const hasValid = validLatLng(coords);
+  const locationUnavailable = Boolean(tracking?.locationUnavailable) || devSimFail || !hasValid;
+  const location = locationUnavailable ? null : [Number(coords[0]), Number(coords[1])];
+  return {
+    ...tracking,
+    status: normalizeShipmentStatus(tracking?.status) || "posted",
+    location,
+    locationUnavailable,
+    currentLocation: location
+  };
+}
 
-router.put("/:id/status", protect, (req, res) => {
-  try {
-    const { status } = req.body || {};
-    const nextRaw = String(status || "").trim();
-    if (!nextRaw) return sendError(res, 400, "Status is required");
+function toTrackResponse(req, doc) {
+  const raw = {
+    tracking: doc.tracking || {},
+    history: doc.history || [],
+    liveTrackingMap: doc.liveTrackingMap || {}
+  };
+  const tracking = attachLocationFields(req, raw.tracking || {});
+  return {
+    ...raw,
+    tracking
+  };
+}
 
-    const data = getOrCreateShipment(req.params.id);
-    const current = data.tracking?.status;
-    const check = validateShipmentTransition(current, nextRaw);
-    if (!check.ok) return sendError(res, 400, check.message);
-
-    const canonical = check.canonical;
-    if (check.same) {
-      return sendSuccess(res, 200, data);
+router.get(
+  "/track/:id",
+  protect,
+  requireAnyRole(["shipper", "carrier", "admin"]),
+  shipmentIdParam,
+  handleValidationErrors,
+  async (req, res) => {
+    try {
+      const doc = await shipmentTrackService.getOrCreateTrack(req.params.id);
+      return sendSuccess(res, 200, toTrackResponse(req, doc));
+    } catch (err) {
+      return sendError(res, 500, err.message || "Server error");
     }
-
-    data.tracking = {
-      ...(data.tracking || {}),
-      status: canonical
-    };
-    data.history = Array.isArray(data.history) ? data.history : [];
-    data.history.unshift({
-      event: `Status: ${canonical}`,
-      time: new Date().toLocaleString(),
-      location: "System"
-    });
-
-    shipments.set(String(req.params.id), data);
-    return sendSuccess(res, 200, data);
-  } catch (err) {
-    return sendError(res, 500, err.message || "Server error");
   }
-});
+);
+
+router.put(
+  "/:id/status",
+  protect,
+  requireAnyRole(["carrier", "admin"]),
+  requireActiveRole("carrier"),
+  shipmentIdParam,
+  shipmentStatusPutValidators,
+  handleValidationErrors,
+  async (req, res) => {
+    try {
+      const { status } = req.body || {};
+      const nextRaw = String(status || "").trim();
+
+      const doc = await shipmentTrackService.getOrCreateTrack(req.params.id);
+      const current = doc.tracking?.status;
+      const check = validateShipmentTransition(current, nextRaw);
+      if (!check.ok) return sendError(res, 400, check.message);
+
+      const canonical = check.canonical;
+      if (check.same) {
+        return sendSuccess(res, 200, toTrackResponse(req, doc));
+      }
+
+      doc.tracking = {
+        ...(doc.tracking || {}),
+        status: canonical
+      };
+      doc.history = Array.isArray(doc.history) ? doc.history : [];
+      doc.history.unshift({
+        event: `Status: ${canonical}`,
+        time: new Date().toLocaleString(),
+        location: "System"
+      });
+
+      await shipmentTrackService.saveTrack(doc);
+      const payload = toTrackResponse(req, doc);
+      await shipmentTrackService.emitTrackingToParties(doc.loadId, {
+        refKey: doc.refKey,
+        ...payload
+      });
+      return sendSuccess(res, 200, payload);
+    } catch (err) {
+      return sendError(res, 500, err.message || "Server error");
+    }
+  }
+);
 
 module.exports = router;

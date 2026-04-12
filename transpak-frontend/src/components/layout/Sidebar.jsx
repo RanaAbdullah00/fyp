@@ -1,6 +1,21 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { FaTachometerAlt, FaPlusCircle, FaTruck, FaWallet, FaListUl, FaGavel, FaCheckCircle, FaUserShield, FaExclamationTriangle, FaShippingFast, FaCog, FaSignOutAlt } from 'react-icons/fa';
+import {
+  FaTachometerAlt,
+  FaPlusCircle,
+  FaTruck,
+  FaWallet,
+  FaListUl,
+  FaGavel,
+  FaCheckCircle,
+  FaUserShield,
+  FaExclamationTriangle,
+  FaShippingFast,
+  FaHistory,
+  FaCog,
+  FaSignOutAlt,
+  FaQuestionCircle
+} from 'react-icons/fa';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { useAuth } from '../../hooks/useAuth.js';
 import LogoutConfirmModal from '../ui/LogoutConfirmModal.jsx';
@@ -63,6 +78,14 @@ const Sidebar = () => {
               <FaCheckCircle />
               {t('pages.bids.approveCarrier')}
             </NavLink>
+            <NavLink to="/shipments/tracking" className={navLinkClass}>
+              <FaShippingFast />
+              {t('pages.shipments.tracking')}
+            </NavLink>
+            <NavLink to="/shipments/history" className={navLinkClass}>
+              <FaHistory />
+              {t('pages.shipments.history')}
+            </NavLink>
           </>
         )}
         {isCarrier && (
@@ -82,6 +105,14 @@ const Sidebar = () => {
             <NavLink to="/carrier/truck-details" className={navLinkClass}>
               <FaTruck />
               Truck details
+            </NavLink>
+            <NavLink to="/shipments/tracking" className={navLinkClass}>
+              <FaShippingFast />
+              {t('pages.shipments.tracking')}
+            </NavLink>
+            <NavLink to="/shipments/history" className={navLinkClass}>
+              <FaHistory />
+              {t('pages.shipments.history')}
             </NavLink>
           </>
         )}
@@ -117,6 +148,12 @@ const Sidebar = () => {
           <FaWallet />
           {t('common.wallet')}
         </NavLink>
+        {!isAdmin && (
+          <NavLink to="/support" className={navLinkClass}>
+            <FaQuestionCircle />
+            {t('common.support')}
+          </NavLink>
+        )}
         <NavLink to="/settings" className={navLinkClass}>
           <FaCog />
           Settings

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth.js';
 import Splash from './pages/auth/Splash.jsx';
@@ -70,7 +70,7 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   if (!activeRole) return <Navigate to="/role" replace />;
 
   if (allowedRoles && !allowedRoles.includes(activeRole)) {
-    return <Navigate to="/" replace />;
+    return <Navigate to={dashboardPathForRole(activeRole)} replace />;
   }
 
   return children;
@@ -84,10 +84,24 @@ const RoleDashboard = () => {
   return <Navigate to={dashboardPathForRole(activeRole)} replace />;
 };
 
-function App() {
+const PAGE_BG_EXACT = {
+  '/login': 'auth',
+  '/register': 'auth',
+  '/splash': 'auth',
+  '/about': 'auth',
+  '/contact': 'auth'
+};
 
+function resolvePageBackground(pathname) {
+  if (PAGE_BG_EXACT[pathname] != null) return PAGE_BG_EXACT[pathname];
+  return 'unified';
+}
+
+function App() {
   const location = useLocation();
   const isAuthPage = ['/login', '/register', '/splash', '/role', '/about', '/contact'].includes(location.pathname);
+  const isBareAuthMain = ['/login', '/register', '/splash', '/about', '/contact'].includes(location.pathname);
+  const pageBg = useMemo(() => resolvePageBackground(location.pathname), [location.pathname]);
   return (
     <>
 
@@ -95,7 +109,10 @@ function App() {
         {!isAuthPage && <Navbar />}
         <div className="d-flex flex-grow-1">
           {!isAuthPage && <Sidebar />}
-          <main className="flex-grow-1 container-fluid px-0 pb-5 pb-md-0 tp-main-shell">
+          <main
+            className={`flex-grow-1 container-fluid px-0 pb-5 pb-md-0 tp-main-shell${isBareAuthMain ? ' tp-main-shell--bare-auth' : ''}`}
+            data-tp-page-bg={pageBg}
+          >
               <Routes>
               {/* Auth */}
               <Route path="/splash" element={<Splash />} />
@@ -290,9 +307,9 @@ function App() {
 
               {/* Shipments */}
               <Route
-                path="/shipments/tracking"
+                path="/shipments/tracking/:trackId?"
                 element={
-                  <ProtectedRoute allowedRoles={['carrier']}>
+                  <ProtectedRoute allowedRoles={['shipper', 'carrier']}>
                     <ShipmentTracking />
                   </ProtectedRoute>
                 }
@@ -300,7 +317,7 @@ function App() {
               <Route
                 path="/shipments/history"
                 element={
-                  <ProtectedRoute allowedRoles={['carrier']}>
+                  <ProtectedRoute allowedRoles={['shipper', 'carrier']}>
                     <ShipmentHistory />
                   </ProtectedRoute>
                 }

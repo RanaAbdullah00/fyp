@@ -5,6 +5,8 @@ const Bid = require("../models/Bid");
 const Load = require("../models/Load");
 const User = require("../models/User");
 const Truck = require("../models/Truck");
+const { shipperAcceptBid, carrierAcceptSuggestion } = require("../controllers/bookingController");
+const { validateBookingBidParam, bookingConfirmValidation } = require("../middleware/validateBookingConfirm");
 
 const router = express.Router();
 
@@ -74,47 +76,15 @@ router.post("/", protect, requireAnyRole(["carrier", "admin"]), requireActiveRol
   return sendSuccess(res, 201, bid.toJSONSafe(), "Created");
 });
 
-router.put("/:id/accept", protect, requireAnyRole(["shipper", "admin"]), requireActiveRole("shipper"), async (req, res) => {
-  const bid = await Bid.findById(req.params.id);
-  if (!bid) return sendError(res, 404, "Not found");
-
-  if (isExpired(bid)) {
-    bid.status = "expired";
-    await bid.save();
-    return sendError(res, 409, "Bid expired");
-  }
-
-  const load = await Load.findById(bid.loadId);
-  if (!load) return sendError(res, 404, "Not found");
-
-  const roles = req.auth?.roles || [];
-  const isAdmin = roles.includes("admin");
-  const isOwner = String(load.shipperId) === String(req.auth.userId);
-  if (!isAdmin && !isOwner) return sendError(res, 403, "Forbidden");
-
-  if (load.status !== "open") return sendError(res, 409, "Load is not open");
-
-  if (bid.status === "suggested" && bid.suggestedBy === "carrier" && bid.suggestedAmount != null) {
-    bid.amount = bid.suggestedAmount;
-    bid.suggestedAmount = null;
-    bid.suggestedAt = null;
-    bid.suggestedBy = null;
-  }
-
-  await Bid.updateMany(
-    { loadId: load._id, status: { $in: ["pending", "suggested"] }, _id: { $ne: bid._id } },
-    { $set: { status: "rejected" } }
-  );
-  bid.status = "accepted";
-  await bid.save();
-
-  load.status = "assigned";
-  load.assignedCarrierId = bid.carrierId;
-  load.acceptedBidId = bid._id;
-  await load.save();
-
-  return sendSuccess(res, 200, { ok: true });
-});
+router.put(
+  "/:id/accept",
+  protect,
+  requireAnyRole(["shipper", "admin"]),
+  requireActiveRole("shipper"),
+  ...validateBookingBidParam,
+  bookingConfirmValidation,
+  shipperAcceptBid
+);
 
 router.put("/:id/reject", protect, requireAnyRole(["shipper", "admin"]), requireActiveRole("shipper"), async (req, res) => {
   const bid = await Bid.findById(req.params.id);
@@ -182,55 +152,15 @@ async function carrierHasCompleteTrucks(userId) {
   );
 }
 
-router.put("/:id/accept-suggestion", protect, requireAnyRole(["carrier", "admin"]), requireActiveRole("carrier"), async (req, res) => {
-  const roles = req.auth?.roles || [];
-  if (!roles.includes("admin")) {
-    const hasTrucks = await carrierHasCompleteTrucks(req.auth.userId);
-    if (!hasTrucks) {
-      return sendError(res, 403, "Complete truck details before accepting suggestions");
-    }
-  }
-
-  const bid = await Bid.findById(req.params.id);
-  if (!bid) return sendError(res, 404, "Not found");
-
-  const isCarrier = String(bid.carrierId) === String(req.auth.userId);
-  const isAdmin = roles.includes("admin");
-  if (!isAdmin && !isCarrier) return sendError(res, 403, "Forbidden");
-
-  if (bid.status !== "suggested" || !bid.suggestedAmount) {
-    return sendError(res, 409, "No suggestion to accept");
-  }
-
-  if (isExpired(bid)) {
-    bid.status = "expired";
-    await bid.save();
-    return sendError(res, 409, "Bid expired");
-  }
-
-  const load = await Load.findById(bid.loadId);
-  if (!load) return sendError(res, 404, "Not found");
-  if (load.status !== "open") return sendError(res, 409, "Load is not open");
-
-  bid.amount = bid.suggestedAmount;
-  bid.suggestedAmount = null;
-  bid.suggestedAt = null;
-  bid.suggestedBy = null;
-  bid.status = "accepted";
-  await bid.save();
-
-  await Bid.updateMany(
-    { loadId: load._id, status: { $in: ["pending", "suggested"] }, _id: { $ne: bid._id } },
-    { $set: { status: "rejected" } }
-  );
-
-  load.status = "assigned";
-  load.assignedCarrierId = bid.carrierId;
-  load.acceptedBidId = bid._id;
-  await load.save();
-
-  return sendSuccess(res, 200, { ok: true });
-});
+router.put(
+  "/:id/accept-suggestion",
+  protect,
+  requireAnyRole(["carrier", "admin"]),
+  requireActiveRole("carrier"),
+  ...validateBookingBidParam,
+  bookingConfirmValidation,
+  carrierAcceptSuggestion
+);
 
 router.put("/:id/reject-suggestion", protect, requireAnyRole(["carrier", "admin"]), requireActiveRole("carrier"), async (req, res) => {
   const bid = await Bid.findById(req.params.id);

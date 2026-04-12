@@ -3,47 +3,39 @@ import { Link } from 'react-router-dom';
 import RegisterForm from '../../components/auth/RegisterForm.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import BrandLogo from '../../components/layout/BrandLogo.jsx';
-import LanguageToggle from '../../components/ui/LanguageToggle.jsx';
+import AuthHeaderActions from '../../components/auth/AuthHeaderActions.jsx';
+import { useAuthViewportLock } from '../../hooks/useAuthViewportLock.js';
 
-// Registration screen: hero + form (matches login layout).
 const Register = () => {
   const { t, isUrdu } = useLanguage();
+  useAuthViewportLock();
 
   return (
-    <div className={`tp-auth-shell min-vh-100 d-flex flex-column ${isUrdu ? 'tp-rtl' : ''}`}>
-      <div className="flex-grow-1 d-flex align-items-stretch">
-        <div className="row g-0 w-100 mx-0 flex-grow-1">
-          <div className="col-lg-5 tp-auth-hero d-none d-lg-flex flex-column justify-content-between p-4 p-xl-5 text-white">
-            <div>
-              <div className="tp-route-lines mb-4" aria-hidden />
-              <h1 className="display-4 fw-bold lh-1 mb-3 tp-hero-mark">TRANSPAK</h1>
-              <p className="lead fs-6 opacity-90 mb-0">{t('auth.registerSubtitle')}</p>
-            </div>
-            <div className="small opacity-75">Shippers &amp; carriers · one network</div>
-          </div>
-          <div className="col-12 col-lg-7 tp-auth-form-wrap d-flex flex-column">
-            <div className="container py-4 flex-grow-1 d-flex flex-column justify-content-center tp-auth-page">
-              <div className="mx-auto w-100" style={{ maxWidth: 440 }}>
-                <div className="d-flex justify-content-end mb-2">
-                  <LanguageToggle />
-                </div>
-                <div className="d-lg-none tp-auth-hero-compact rounded-3 p-3 mb-3 text-center text-white">
-                  <div className="fs-2 fw-bold tp-hero-mark mb-0">TRANSPAK</div>
-                </div>
-                <div className="text-center mb-4">
-                  <BrandLogo
-                    className="auth-logo mb-2"
-                    onClick={() => window.dispatchEvent(new CustomEvent('tp_register_reset_role'))}
-                  />
-                  <h4 className="fw-bold">{t('auth.registerTitle')}</h4>
-                  <p className="text-muted small mb-0">{t('auth.registerSubtitle')}</p>
-                </div>
-                <RegisterForm />
-                <p className="small text-center mt-3 mb-0">
-                  {t('auth.alreadyHaveAccount')} <Link to="/login">{t('auth.signIn')}</Link>
-                </p>
-              </div>
-            </div>
+    <div className={`tp-auth-v2 tp-auth-v2--locked position-relative ${isUrdu ? 'tp-rtl' : ''}`}>
+      <div className="tp-auth-v2__bg" aria-hidden="true">
+        <div className="tp-auth-v2__veil" />
+        <div className="tp-auth-v2__accent-slab" />
+        <div className="tp-auth-v2__grid" />
+        <div className="tp-auth-v2__route-line tp-auth-v2__route-line--1" />
+        <div className="tp-auth-v2__route-line tp-auth-v2__route-line--2" />
+      </div>
+      <header className="tp-auth-v2__top tp-auth-v2__top--bar d-flex align-items-center justify-content-between w-100 px-3 z-3">
+        <BrandLogo
+          variant="auth"
+          title="TransPak"
+          className="tp-auth-v2__header-brand flex-shrink-0"
+          onClick={() => window.dispatchEvent(new CustomEvent('tp_register_reset_role'))}
+        />
+        <AuthHeaderActions />
+      </header>
+      <div className="tp-auth-v2__body">
+        <div className="tp-auth-v2__glass rounded-4 shadow-lg border">
+          <div className="tp-auth-v2__glass-content tp-auth-v2__glass-content--register">
+            <h1 className="h5 fw-bold mb-3 text-body tp-auth-v2__title">{t('auth.createAccountButton')}</h1>
+            <RegisterForm />
+            <p className="small text-center mt-auto pt-2 mb-0 text-muted tp-auth-v2__footer-line">
+              {t('auth.alreadyHaveAccount')} <Link to="/login">{t('auth.signIn')}</Link>
+            </p>
           </div>
         </div>
       </div>

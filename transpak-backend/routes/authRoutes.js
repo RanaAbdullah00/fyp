@@ -8,6 +8,7 @@ const User = require("../models/User");
 const router = express.Router();
 
 const allowedRoles = User.ALLOWED_ROLES || ["shipper", "carrier", "admin"];
+const registerableRoles = allowedRoles.filter((r) => r !== "admin");
 
 // Basic brute-force protection for login
 const loginLimiter = rateLimit({
@@ -54,8 +55,8 @@ router.post(
     body("role")
       .trim()
       .toLowerCase()
-      .isIn(allowedRoles)
-      .withMessage(`Role must be one of: ${allowedRoles.join(", ")}`)
+      .isIn(registerableRoles)
+      .withMessage(`Role must be one of: ${registerableRoles.join(", ")}`)
   ],
   register
 );

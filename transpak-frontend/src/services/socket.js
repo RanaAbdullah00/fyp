@@ -1,36 +1,36 @@
 import { io } from 'socket.io-client';
 
-// Safe socket wrapper: never throws, supports offline simulated events.
-export function createSocketClient({ userId, onNotification, onTracking }) {
-  const url = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
+/**
+ * Socket.io client (JWT in handshake). Falls back to simulated notifications if server unreachable.
+ */
+export function createSocketClient({
+  token,
+  onNotification,
+  onTracking,
+  onChatMessage,
+  onChatSeen
+}) {
+  const url =
+    import.meta.env.VITE_SOCKET_URL ||
+    (import.meta.env.DEV ? window.location.origin : 'http://localhost:5000');
+
   let socket = null;
   let simulatedTimer = null;
 
   const startSimulated = () => {
-    if (simulatedTimer) return;
+    if (simulatedTimer || token) return;
     simulatedTimer = window.setInterval(() => {
       onNotification?.({
         id: Date.now(),
         senderId: 'system',
-        receiverId: userId || 'local',
+        receiverId: 'local',
         roleType: 'shipper',
         type: 'INFO',
-        message: 'Simulated: shipment update for shippers.',
+        message: 'Simulated: connect backend + login for live notifications.',
         createdAt: new Date().toISOString(),
         read: false
       });
-
-      onNotification?.({
-        id: Date.now() + 1,
-        senderId: 'system',
-        receiverId: userId || 'local',
-        roleType: 'carrier',
-        type: 'INFO',
-        message: 'Simulated: bid update for carriers.',
-        createdAt: new Date().toISOString(),
-        read: false
-      });
-    }, 12000);
+    }, 20000);
   };
 
   const stopSimulated = () => {
@@ -38,12 +38,23 @@ export function createSocketClient({ userId, onNotification, onTracking }) {
     simulatedTimer = null;
   };
 
+  if (!token) {
+    startSimulated();
+    return {
+      socket: null,
+      disconnect: () => stopSimulated()
+    };
+  }
+
   try {
-    socket = io(url, { autoConnect: true, transports: ['websocket', 'polling'] });
+    socket = io(url, {
+      auth: { token },
+      transports: ['websocket', 'polling'],
+      autoConnect: true
+    });
 
     socket.on('connect', () => {
       stopSimulated();
-      if (userId) socket.emit('auth:join', { userId });
     });
 
     socket.on('connect_error', () => {
@@ -52,6 +63,8 @@ export function createSocketClient({ userId, onNotification, onTracking }) {
 
     socket.on('notification:new', (n) => onNotification?.(n));
     socket.on('tracking:update', (p) => onTracking?.(p));
+    socket.on('chat:message', (m) => onChatMessage?.(m));
+    socket.on('chat:seen', (p) => onChatSeen?.(p));
   } catch {
     startSimulated();
   }
@@ -68,4 +81,3 @@ export function createSocketClient({ userId, onNotification, onTracking }) {
     }
   };
 }
-
