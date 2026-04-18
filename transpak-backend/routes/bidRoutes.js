@@ -1,4 +1,5 @@
 const express = require("express");
+const { body, param, validationResult } = require("express-validator");
 const { protect, requireAnyRole, requireActiveRole } = require("../middleware/authMiddleware");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
 const Bid = require("../models/Bid");
@@ -9,6 +10,16 @@ const { shipperAcceptBid, carrierAcceptSuggestion } = require("../controllers/bo
 const { validateBookingBidParam, bookingConfirmValidation } = require("../middleware/validateBookingConfirm");
 
 const router = express.Router();
+
+function validate(req, res, next) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return sendError(res, 400, errors.array()[0]?.msg || "Validation error", {
+      fields: errors.array().map((e) => e.path)
+    });
+  }
+  return next();
+}
 
 function isExpired(bid) {
   const exp = bid?.expiresAt ? new Date(bid.expiresAt).getTime() : 0;
@@ -51,7 +62,20 @@ router.get("/mine", protect, requireAnyRole(["carrier", "admin"]), requireActive
   return sendSuccess(res, 200, bids.map((b) => b.toJSONSafe()));
 });
 
-router.post("/", protect, requireAnyRole(["carrier", "admin"]), requireActiveRole("carrier"), async (req, res) => {
+router.post(
+  "/",
+  protect,
+  requireAnyRole(["carrier", "admin"]),
+  requireActiveRole("carrier"),
+  [
+    body("loadId").isMongoId().withMessage("loadId is required"),
+    body("amount").toFloat().isFloat({ gt: 0 }).withMessage("amount must be greater than 0"),
+    body("currency").optional().trim().isLength({ min: 1, max: 8 }).withMessage("Invalid currency"),
+    body("transitTime").toInt().isInt({ min: 1, max: 30 }).withMessage("transitTime must be 1-30"),
+    body("note").optional().trim().isLength({ max: 500 }).withMessage("note too long")
+  ],
+  validate,
+  async (req, res) => {
   const { loadId, amount, currency, transitTime, note } = req.body || {};
   if (!loadId) return sendError(res, 400, "loadId is required");
 
@@ -86,7 +110,14 @@ router.put(
   shipperAcceptBid
 );
 
-router.put("/:id/reject", protect, requireAnyRole(["shipper", "admin"]), requireActiveRole("shipper"), async (req, res) => {
+router.put(
+  "/:id/reject",
+  protect,
+  requireAnyRole(["shipper", "admin"]),
+  requireActiveRole("shipper"),
+  [param("id").isMongoId().withMessage("Invalid bid id")],
+  validate,
+  async (req, res) => {
   const bid = await Bid.findById(req.params.id);
   if (!bid) return sendError(res, 404, "Not found");
 
@@ -105,7 +136,17 @@ router.put("/:id/reject", protect, requireAnyRole(["shipper", "admin"]), require
   return sendSuccess(res, 200, { ok: true });
 });
 
-router.put("/:id/suggest", protect, requireAnyRole(["shipper", "admin"]), requireActiveRole("shipper"), async (req, res) => {
+router.put(
+  "/:id/suggest",
+  protect,
+  requireAnyRole(["shipper", "admin"]),
+  requireActiveRole("shipper"),
+  [
+    param("id").isMongoId().withMessage("Invalid bid id"),
+    body("amount").toFloat().isFloat({ gt: 0 }).withMessage("Valid amount is required")
+  ],
+  validate,
+  async (req, res) => {
   const { amount } = req.body || {};
   const amt = Number(amount);
   if (!amount || amt < 0 || Number.isNaN(amt)) {
@@ -162,7 +203,14 @@ router.put(
   carrierAcceptSuggestion
 );
 
-router.put("/:id/reject-suggestion", protect, requireAnyRole(["carrier", "admin"]), requireActiveRole("carrier"), async (req, res) => {
+router.put(
+  "/:id/reject-suggestion",
+  protect,
+  requireAnyRole(["carrier", "admin"]),
+  requireActiveRole("carrier"),
+  [param("id").isMongoId().withMessage("Invalid bid id")],
+  validate,
+  async (req, res) => {
   const bid = await Bid.findById(req.params.id);
   if (!bid) return sendError(res, 404, "Not found");
 
@@ -182,7 +230,17 @@ router.put("/:id/reject-suggestion", protect, requireAnyRole(["carrier", "admin"
   return sendSuccess(res, 200, { ok: true });
 });
 
-router.put("/:id/suggest-carrier", protect, requireAnyRole(["carrier", "admin"]), requireActiveRole("carrier"), async (req, res) => {
+router.put(
+  "/:id/suggest-carrier",
+  protect,
+  requireAnyRole(["carrier", "admin"]),
+  requireActiveRole("carrier"),
+  [
+    param("id").isMongoId().withMessage("Invalid bid id"),
+    body("amount").toFloat().isFloat({ gt: 0 }).withMessage("Valid amount is required")
+  ],
+  validate,
+  async (req, res) => {
   const roles = req.auth?.roles || [];
   if (!roles.includes("admin")) {
     const hasTrucks = await carrierHasCompleteTrucks(req.auth.userId);

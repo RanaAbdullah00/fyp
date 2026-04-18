@@ -1,7 +1,10 @@
 const express = require("express");
+const mongoose = require("mongoose");
 const { protect, requireAnyRole, requireActiveRole } = require("../middleware/authMiddleware");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
 const { normalizeShipmentStatus, validateShipmentTransition } = require("../utils/shipmentStatus");
+const Load = require("../models/Load");
+const escrowService = require("../services/escrowService");
 const {
   shipmentIdParam,
   shipmentStatusPutValidators,
@@ -49,6 +52,29 @@ function toTrackResponse(req, doc) {
   };
 }
 
+async function resolveLoadForRef(refKey) {
+  const key = String(refKey || "").trim();
+  if (!key) return null;
+  if (mongoose.isValidObjectId(key)) {
+    const byId = await Load.findById(key).select("_id shipperId assignedCarrierId");
+    if (byId) return byId;
+  }
+  return Load.findOne({ code: key }).select("_id shipperId assignedCarrierId");
+}
+
+function assertTrackAccessOrThrow(load, auth, { allowCarrierStatusWrite = false } = {}) {
+  const roles = auth?.roles || [];
+  const isAdmin = roles.includes("admin");
+  if (isAdmin) return;
+
+  const uid = String(auth?.userId || "");
+  const isShipper = String(load?.shipperId || "") === uid;
+  const isAssignedCarrier = String(load?.assignedCarrierId || "") === uid;
+  if (isShipper) return;
+  if (allowCarrierStatusWrite && isAssignedCarrier) return;
+  throw Object.assign(new Error("Forbidden"), { statusCode: 403 });
+}
+
 router.get(
   "/track/:id",
   protect,
@@ -57,10 +83,19 @@ router.get(
   handleValidationErrors,
   async (req, res) => {
     try {
+      const load = await resolveLoadForRef(req.params.id);
+      if (!load) return sendError(res, 404, "Not found");
+      assertTrackAccessOrThrow(load, req.auth, { allowCarrierStatusWrite: false });
+
       const doc = await shipmentTrackService.getOrCreateTrack(req.params.id);
+      if (!doc.loadId) {
+        doc.loadId = load._id;
+        await shipmentTrackService.saveTrack(doc);
+      }
       return sendSuccess(res, 200, toTrackResponse(req, doc));
     } catch (err) {
-      return sendError(res, 500, err.message || "Server error");
+      const status = err.statusCode || 500;
+      return sendError(res, status, err.message || "Server error");
     }
   }
 );
@@ -75,6 +110,10 @@ router.put(
   handleValidationErrors,
   async (req, res) => {
     try {
+      const load = await resolveLoadForRef(req.params.id);
+      if (!load) return sendError(res, 404, "Not found");
+      assertTrackAccessOrThrow(load, req.auth, { allowCarrierStatusWrite: true });
+
       const { status } = req.body || {};
       const nextRaw = String(status || "").trim();
 
@@ -100,14 +139,18 @@ router.put(
       });
 
       await shipmentTrackService.saveTrack(doc);
+      if (canonical === "delivered") {
+        await escrowService.transitionEscrowByBooking(load.bookingReference, ["held"], "released");
+      }
       const payload = toTrackResponse(req, doc);
-      await shipmentTrackService.emitTrackingToParties(doc.loadId, {
+      await shipmentTrackService.emitTrackingToParties(load._id, {
         refKey: doc.refKey,
         ...payload
       });
       return sendSuccess(res, 200, payload);
     } catch (err) {
-      return sendError(res, 500, err.message || "Server error");
+      const status = err.statusCode || 500;
+      return sendError(res, status, err.message || "Server error");
     }
   }
 );

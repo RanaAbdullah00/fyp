@@ -14,7 +14,6 @@ const authRoutes = require("./routes/authRoutes");
 const shipmentRoutes = require("./routes/shipmentRoutes");
 const loadRoutes = require("./routes/loadRoutes");
 const bidRoutes = require("./routes/bidRoutes");
-const bookingRoutes = require("./routes/bookingRoutes");
 const truckRoutes = require("./routes/truckRoutes");
 const userRoutes = require("./routes/userRoutes");
 const adminRoutes = require("./routes/adminRoutes");
@@ -24,6 +23,7 @@ const paymentRoutes = require("./routes/paymentRoutes");
 const chatRoutes = require("./routes/chatRoutes");
 const walletRoutes = require("./routes/walletRoutes");
 const demoVideoRoutes = require("./routes/demoVideoRoutes");
+const disputeRoutes = require("./routes/disputeRoutes");
 const { globalApiLimiter } = require("./middleware/apiRateLimit");
 const realtimeHub = require("./services/realtimeHub");
 const registerSocketHandlers = require("./sockets");
@@ -85,145 +85,10 @@ app.get("/api/health", (req, res) =>
 
 app.use("/api/demo-video", demoVideoRoutes);
 
-// Dev-only: seed admin user into current DB (for in-memory MongoDB)
-if (process.env.NODE_ENV === "development") {
-  const bcrypt = require("bcrypt");
-  const User = require("./models/User");
-  app.get("/api/dev/env", (req, res) => {
-    res.json({ nodeEnv: process.env.NODE_ENV });
-  });
-  app.post("/api/dev/seed", async (req, res) => {
-    try {
-      const hash = await bcrypt.hash("11221122", 10);
-      let u = await User.findOne({ email: "mrrajpoot.327@gmail.com" }).select("+passwordHash");
-      if (!u) {
-        u = await User.create({
-          name: "Admin User",
-          email: "mrrajpoot.327@gmail.com",
-          phone: "+923001234567",
-          cnic: "12345-1234567-0",
-          passwordHash: hash,
-          roles: ["admin"],
-          activeRole: "admin",
-          verified: true
-        });
-      } else {
-        const ok = await bcrypt.compare("11221122", u.passwordHash);
-        if (!ok) u.passwordHash = hash;
-        u.roles = Array.from(new Set([...(u.roles || []), "admin"]));
-        u.activeRole = "admin";
-        u.verified = u.verified ?? true;
-        await u.save();
-      }
-      res.json({ ok: true, message: "Admin seeded (mrrajpoot.327@gmail.com / 11221122)" });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  // Dev-only debug to verify admin passwordHash + role consistency.
-  // DO NOT expose passwordHash in responses.
-  app.get("/api/dev/admin-debug", async (req, res) => {
-    try {
-      const adminEmail = "mrrajpoot.327@gmail.com";
-      const adminPassword = "11221122";
-      const normalizedEmail = String(adminEmail).trim().toLowerCase();
-
-      const u = await User.findOne({ email: normalizedEmail }).select("+passwordHash");
-      if (!u) return res.json({ ok: false, found: false });
-
-      const ok = await bcrypt.compare(String(adminPassword), u.passwordHash);
-      return res.json({
-        ok: true,
-        found: true,
-        roles: u.roles,
-        activeRole: u.activeRole,
-        blocked: Boolean(u.blocked),
-        passwordHashPresent: Boolean(u.passwordHash),
-        passwordMatchesSeed: ok
-      });
-    } catch (err) {
-      return res.status(500).json({ ok: false, error: err.message });
-    }
-  });
-
-  // Dev-only presence check (does not select passwordHash).
-  app.get("/api/dev/admin-presence", async (req, res) => {
-    try {
-      const adminEmail = "mrrajpoot.327@gmail.com";
-      const normalizedEmail = String(adminEmail).trim().toLowerCase();
-      const u = await User.findOne({ email: normalizedEmail });
-      return res.json({
-        ok: true,
-        found: Boolean(u),
-        roles: u?.roles || [],
-        activeRole: u?.activeRole || null,
-        blocked: Boolean(u?.blocked)
-      });
-    } catch (err) {
-      return res.status(500).json({ ok: false, error: err.message });
-    }
-  });
-
-  // Dev-only: enumerate potential duplicate admin records.
-  app.get("/api/dev/admin-multi", async (req, res) => {
-    try {
-      const adminEmail = "mrrajpoot.327@gmail.com";
-      const normalizedEmail = String(adminEmail).trim().toLowerCase();
-      const adminPassword = "11221122";
-
-      const list = await User.find({ email: normalizedEmail }).select("+passwordHash");
-      const results = await Promise.all(
-        list.map(async (u) => {
-          const ok = await bcrypt.compare(String(adminPassword), u.passwordHash);
-          return {
-            id: u._id.toString(),
-            roles: u.roles || [],
-            activeRole: u.activeRole,
-            blocked: Boolean(u.blocked),
-            passwordMatchesSeed: ok
-          };
-        })
-      );
-
-      return res.json({
-        ok: true,
-        count: list.length,
-        results
-      });
-    } catch (err) {
-      return res.status(500).json({ ok: false, error: err.message });
-    }
-  });
-
-  // Dev-only: run bcrypt.compare using the same inputs as login.
-  app.post("/api/dev/login-compare", async (req, res) => {
-    try {
-      const { email, password } = req.body || {};
-      const normalizedEmail = String(email || "").trim().toLowerCase();
-      const adminPassword = password;
-
-      const u = await User.findOne({ email: normalizedEmail }).select("+passwordHash");
-      if (!u) return res.json({ ok: false, found: false });
-
-      const ok = await bcrypt.compare(String(adminPassword), u.passwordHash);
-      return res.json({
-        ok,
-        found: true,
-        roles: u.roles || [],
-        activeRole: u.activeRole || null
-      });
-    } catch (err) {
-      return res.status(500).json({ ok: false, error: err.message });
-    }
-  });
-}
-
 app.use("/api/auth", authRoutes);
 app.use("/api/shipments", shipmentRoutes);
 app.use("/api/loads", loadRoutes);
 app.use("/api/bids", bidRoutes);
-app.use("/api/bookings", bookingRoutes);
 app.use("/api/trucks", truckRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/admin", adminRoutes);
@@ -232,6 +97,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/wallet", walletRoutes);
+app.use("/api/disputes", disputeRoutes);
 
 // Not found handler
 app.use((req, res) => {
@@ -254,31 +120,45 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 
+function getDevSeedAdminConfig() {
+  if (process.env.NODE_ENV !== "development") return null;
+  const email = String(process.env.DEV_ADMIN_EMAIL || "").trim().toLowerCase();
+  const password = String(process.env.DEV_ADMIN_PASSWORD || "").trim();
+  const phone = String(process.env.DEV_ADMIN_PHONE || "").trim();
+  const cnic = String(process.env.DEV_ADMIN_CNIC || "").trim();
+  if (!email || !password || !phone || !cnic) return null;
+  return {
+    name: String(process.env.DEV_ADMIN_NAME || "Admin User").trim() || "Admin User",
+    email,
+    password,
+    phone,
+    cnic
+  };
+}
+
 async function seedAdminIfNeeded() {
-  if (process.env.NODE_ENV === "production") return;
+  const cfg = getDevSeedAdminConfig();
+  if (!cfg) return;
   try {
     const bcrypt = require("bcrypt");
     const User = require("./models/User");
-    const adminEmail = "mrrajpoot.327@gmail.com";
-    const adminPassword = "11221122";
-    const normalizedEmail = adminEmail.trim().toLowerCase();
-    const passwordHash = await bcrypt.hash(adminPassword, 10);
+    const passwordHash = await bcrypt.hash(cfg.password, 10);
 
-    const existing = await User.findOne({ email: normalizedEmail }).select("+passwordHash");
+    const existing = await User.findOne({ email: cfg.email }).select("+passwordHash");
 
     // Only create admin if missing — do not modify existing users on every restart.
     if (!existing) {
       await User.create({
-        name: "Admin User",
-        email: normalizedEmail,
-        phone: "+923001234567",
-        cnic: "12345-1234567-0",
+        name: cfg.name,
+        email: cfg.email,
+        phone: cfg.phone,
+        cnic: cfg.cnic,
         passwordHash,
         roles: ["admin"],
         activeRole: "admin",
         verified: true
       });
-      console.log("Admin seeded: mrrajpoot.327@gmail.com / 11221122");
+      console.log(`Admin seeded: ${cfg.email}`);
     }
   } catch (err) {
     console.warn("Seed admin skipped:", err.message);

@@ -22,7 +22,7 @@ router.post(
     body("toUser").trim().notEmpty().withMessage("toUser is required"),
     body("rating").isInt({ min: 1, max: 5 }).withMessage("rating must be 1–5"),
     body("comment").optional().isString(),
-    body("loadId").optional().trim()
+    body("loadId").trim().notEmpty().withMessage("loadId is required")
   ],
   validate,
   createReview

@@ -9,32 +9,38 @@ const User = require("../models/User");
  * Run: npm run seed
  */
 async function seed() {
+  if (process.env.NODE_ENV !== "development") {
+    throw new Error("Seeding is allowed only in development");
+  }
+
   await connectDB();
 
-  const password = process.env.SEED_PASSWORD || "Password123!";
+  const password = String(process.env.SEED_PASSWORD || "").trim();
+  if (!password) {
+    throw new Error("SEED_PASSWORD is required");
+  }
   const passwordHash = await bcrypt.hash(password, 10);
-  const adminPasswordHash = await bcrypt.hash("11221122", 10);
+  const adminEmail = String(process.env.SEED_ADMIN_EMAIL || "").trim().toLowerCase();
+  const adminPhone = String(process.env.SEED_ADMIN_PHONE || "").trim();
+  const adminCnic = String(process.env.SEED_ADMIN_CNIC || "").trim();
+  const adminPassword = String(process.env.SEED_ADMIN_PASSWORD || "").trim();
+  const adminPasswordHash = adminPassword ? await bcrypt.hash(adminPassword, 10) : null;
 
   const defaults = [
-    {
-      name: "Admin User",
-      email: "mrrajpoot.327@gmail.com",
-      phone: "+923001234567",
-      cnic: "12345-1234567-0",
-      roles: ["admin"],
-      activeRole: "admin",
-      verified: true,
-      passwordHash: adminPasswordHash
-    },
-    {
-      name: "Admin User (legacy)",
-      email: "admin@transpak.com",
-      phone: "+923000000001",
-      cnic: "12345-1234567-1",
-      roles: ["admin"],
-      activeRole: "admin",
-      verified: true
-    },
+    ...(adminEmail && adminPhone && adminCnic && adminPasswordHash
+      ? [
+          {
+            name: "Admin User",
+            email: adminEmail,
+            phone: adminPhone,
+            cnic: adminCnic,
+            roles: ["admin"],
+            activeRole: "admin",
+            verified: true,
+            passwordHash: adminPasswordHash
+          }
+        ]
+      : []),
     {
       name: "Shipper User",
       email: "shipper@transpak.com",
@@ -61,19 +67,10 @@ async function seed() {
       const hash = u.passwordHash || passwordHash;
       const { passwordHash: _ph, ...rest } = u;
       await User.create({ ...rest, passwordHash: hash });
-      const pwd = u.passwordHash ? "11221122" : password;
+      const pwd = u.passwordHash ? "[from env]" : "[SEED_PASSWORD]";
       console.log(`Seeded: ${u.email} (password: ${pwd})`);
     } else {
-      const existingWithHash = await User.findOne({ email: u.email }).select("+passwordHash");
-      if (u.email === "mrrajpoot.327@gmail.com" && !existingWithHash?.passwordHash) {
-        existingWithHash.passwordHash = adminPasswordHash;
-        existingWithHash.roles = ["admin"];
-        existingWithHash.activeRole = "admin";
-        await existingWithHash.save();
-        console.log(`Updated admin: ${u.email} (password: 11221122)`);
-      } else {
-        console.log(`Exists, skipped: ${u.email}`);
-      }
+      console.log(`Exists, skipped: ${u.email}`);
     }
   }
 

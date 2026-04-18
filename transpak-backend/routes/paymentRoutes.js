@@ -9,12 +9,12 @@ const logger = require("../utils/logger");
 
 const router = express.Router();
 
-const PAYMENT_STATUSES = ["pending", "success", "failed"];
+const PAYMENT_STATUSES = ["pending", "held", "released", "refunded", "failed"];
 
 function resolvePaymentStatus(req) {
   const raw = String(req.body?.outcome || "").trim().toLowerCase();
   if (PAYMENT_STATUSES.includes(raw)) return raw;
-  return "success";
+  return "pending";
 }
 
 router.post(
@@ -34,7 +34,9 @@ router.post(
       .optional()
       .trim()
       .isIn(PAYMENT_STATUSES)
-      .withMessage("outcome must be pending, success, or failed")
+      .withMessage("outcome must be pending, held, released, refunded, or failed"),
+    body("bookingReference").optional().trim().isLength({ min: 1, max: 80 }).withMessage("Invalid bookingReference"),
+    body("shipmentId").optional().trim().isLength({ min: 1, max: 80 }).withMessage("Invalid shipmentId")
   ],
   async (req, res) => {
     try {
@@ -51,31 +53,32 @@ router.post(
       const amount = Number(req.body.amount);
       const provider = String(req.body.provider || "wallet").slice(0, 64);
 
-      if (paymentStatus === "success") {
-        const user = await User.findById(req.auth.userId).select("activeRole roles");
-        const roles = user?.roles || [];
-        const active = user?.activeRole || "";
-        const isCarrier = active === "carrier" || roles.includes("carrier");
-        const type = isCarrier ? "credit" : "debit";
-        const description = isCarrier ? `Received via ${provider}` : `Payment via ${provider}`;
-
-        try {
-          await WalletLedger.create({
-            userId: new mongoose.Types.ObjectId(String(req.auth.userId)),
-            amount,
-            type,
-            description,
-            provider,
-            externalId: transactionId,
-            status: "success",
-            meta: { simulated: true }
-          });
-        } catch (err) {
-          if (err && err.code === 11000) {
-            logger.warn("wallet_ledger_duplicate_tx", { transactionId });
-          } else {
-            logger.error("wallet_ledger_write_failed", { err: err.message });
+      const user = await User.findById(req.auth.userId).select("activeRole roles");
+      const roles = user?.roles || [];
+      const active = user?.activeRole || "";
+      const isCarrier = active === "carrier" || roles.includes("carrier");
+      const type = isCarrier ? "credit" : "debit";
+      const description = isCarrier ? `Received via ${provider}` : `Payment via ${provider}`;
+      try {
+        await WalletLedger.create({
+          userId: new mongoose.Types.ObjectId(String(req.auth.userId)),
+          amount,
+          type,
+          description,
+          provider,
+          externalId: transactionId,
+          status: paymentStatus,
+          meta: {
+            simulated: true,
+            bookingReference: req.body?.bookingReference ? String(req.body.bookingReference).trim() : undefined,
+            shipmentId: req.body?.shipmentId ? String(req.body.shipmentId).trim() : undefined
           }
+        });
+      } catch (err) {
+        if (err && err.code === 11000) {
+          logger.warn("wallet_ledger_duplicate_tx", { transactionId });
+        } else {
+          logger.error("wallet_ledger_write_failed", { err: err.message });
         }
       }
 
@@ -88,11 +91,15 @@ router.post(
           amount,
           provider
         },
-        paymentStatus === "success"
-          ? "Payment completed"
-          : paymentStatus === "pending"
-            ? "Payment pending"
-            : "Payment failed"
+        paymentStatus === "released"
+          ? "Payment released"
+          : paymentStatus === "held"
+            ? "Payment held in escrow"
+            : paymentStatus === "refunded"
+              ? "Payment refunded"
+              : paymentStatus === "pending"
+                ? "Payment pending"
+                : "Payment failed"
       );
     } catch (err) {
       logger.error("payment_simulate_failed", { err: err.message });

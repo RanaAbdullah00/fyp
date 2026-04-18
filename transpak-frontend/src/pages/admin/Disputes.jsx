@@ -3,24 +3,20 @@ import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
 import Loader from '../../components/ui/Loader.jsx';
 import { useApi } from '../../hooks/useApi.js';
-import { notifySuccess } from '../../components/ui/ToastProvider.jsx';
-
-const fallbackDisputes = [
-  { id: 'd1', loadCode: 'L-101', reason: 'POD unclear', status: 'open' },
-  { id: 'd2', loadCode: 'L-102', reason: 'Route deviation', status: 'open' }
-];
+import { notifyError, notifySuccess } from '../../components/ui/ToastProvider.jsx';
 
 const Disputes = () => {
   const { request, loading } = useApi();
-  const [disputes, setDisputes] = useState(fallbackDisputes);
+  const [disputes, setDisputes] = useState([]);
 
   useEffect(() => {
     (async () => {
       try {
         const data = await request({ url: '/admin/disputes' });
-        if (Array.isArray(data) && data.length) setDisputes(data);
-      } catch {
-        // offline mock
+        setDisputes(Array.isArray(data) ? data : []);
+      } catch (e) {
+        notifyError(e?.response?.data?.message || 'Failed to load disputes');
+        setDisputes([]);
       }
     })();
   }, [request]);
@@ -31,8 +27,7 @@ const Disputes = () => {
       setDisputes((prev) => prev.map((d) => (d.id === id ? { ...d, status: 'resolved' } : d)));
       notifySuccess('Dispute resolved');
     } catch {
-      setDisputes((prev) => prev.map((d) => (d.id === id ? { ...d, status: 'resolved' } : d)));
-      notifySuccess('Dispute resolved (offline)');
+      notifyError('Failed to resolve dispute');
     }
   };
 

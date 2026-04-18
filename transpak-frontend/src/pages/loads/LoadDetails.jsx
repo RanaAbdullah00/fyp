@@ -78,7 +78,8 @@ const LoadDetails = () => {
   if (!load) return <div>No load found</div>;
 
   const activeRole = user?.activeRole || user?.role;
-  const isOwner = activeRole === 'shipper';
+  const uid = user?.id || user?._id;
+  const isOwner = activeRole === 'shipper' && String(load.shipperId) === String(uid);
   const approvedBid = bids.find((b) => b.status === 'accepted');
 
   return (

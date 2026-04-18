@@ -1,11 +1,36 @@
 const express = require("express");
+const { body, param, validationResult } = require("express-validator");
 const { protect, requireAnyRole, requireActiveRole } = require("../middleware/authMiddleware");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
 const Truck = require("../models/Truck");
 
 const router = express.Router();
 
-router.post("/", protect, requireAnyRole(["carrier", "admin"]), requireActiveRole("carrier"), async (req, res) => {
+function validate(req, res, next) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return sendError(res, 400, errors.array()[0]?.msg || "Validation error", {
+      fields: errors.array().map((e) => e.path)
+    });
+  }
+  return next();
+}
+
+router.post(
+  "/",
+  protect,
+  requireAnyRole(["carrier", "admin"]),
+  requireActiveRole("carrier"),
+  [
+    body("engineNumber").trim().isLength({ min: 2, max: 80 }).withMessage("engineNumber is required"),
+    body("truckType").trim().isLength({ min: 2, max: 80 }).withMessage("truckType is required"),
+    body("licensePlate").trim().isLength({ min: 2, max: 80 }).withMessage("licensePlate is required"),
+    body("capacity").optional().toFloat().isFloat({ min: 0 }).withMessage("capacity must be non-negative"),
+    body("truckCardFrontImage").trim().isLength({ min: 1 }).withMessage("truckCardFrontImage is required"),
+    body("truckCardBackImage").trim().isLength({ min: 1 }).withMessage("truckCardBackImage is required")
+  ],
+  validate,
+  async (req, res) => {
   const { engineNumber, truckType, capacity, licensePlate, truckCardFrontImage, truckCardBackImage } = req.body || {};
   if (!engineNumber || !truckType || !licensePlate || !truckCardFrontImage || !truckCardBackImage) {
     return sendError(
@@ -33,7 +58,22 @@ router.get("/mine", protect, requireAnyRole(["carrier", "admin"]), requireActive
   return sendSuccess(res, 200, trucks.map((t) => t.toJSONSafe()));
 });
 
-router.put("/:id", protect, requireAnyRole(["carrier", "admin"]), requireActiveRole("carrier"), async (req, res) => {
+router.put(
+  "/:id",
+  protect,
+  requireAnyRole(["carrier", "admin"]),
+  requireActiveRole("carrier"),
+  [
+    param("id").isMongoId().withMessage("Invalid truck id"),
+    body("engineNumber").optional().trim().isLength({ min: 2, max: 80 }).withMessage("Invalid engineNumber"),
+    body("truckType").optional().trim().isLength({ min: 2, max: 80 }).withMessage("Invalid truckType"),
+    body("capacity").optional().toFloat().isFloat({ min: 0 }).withMessage("capacity must be non-negative"),
+    body("licensePlate").optional().trim().isLength({ min: 2, max: 80 }).withMessage("Invalid licensePlate"),
+    body("truckCardFrontImage").optional().trim().isLength({ min: 1 }).withMessage("Invalid truckCardFrontImage"),
+    body("truckCardBackImage").optional().trim().isLength({ min: 1 }).withMessage("Invalid truckCardBackImage")
+  ],
+  validate,
+  async (req, res) => {
   const truck = await Truck.findById(req.params.id);
   if (!truck) return sendError(res, 404, "Not found");
 

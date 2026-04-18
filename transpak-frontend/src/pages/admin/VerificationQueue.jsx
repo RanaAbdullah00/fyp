@@ -5,23 +5,18 @@ import Loader from '../../components/ui/Loader.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { notifySuccess, notifyError } from '../../components/ui/ToastProvider.jsx';
 
-const fallbackUsers = [
-  { id: 'u1', name: 'Alpha Carriers', cnic: '35202-1234567-1', verified: false },
-  { id: 'u2', name: 'PakTrans Logistics', cnic: '35202-7654321-2', verified: true }
-];
-
 const VerificationQueue = () => {
   const { request, loading } = useApi();
-  const [users, setUsers] = useState(fallbackUsers);
+  const [users, setUsers] = useState([]);
 
   useEffect(() => {
-    // If backend provides users endpoint later, this will use it; otherwise stays mock.
     (async () => {
       try {
         const data = await request({ url: '/admin/users' });
-        if (Array.isArray(data) && data.length) setUsers(data);
-      } catch {
-        // stay on mock
+        setUsers(Array.isArray(data) ? data : []);
+      } catch (e) {
+        notifyError(e?.response?.data?.message || 'Failed to load verification queue');
+        setUsers([]);
       }
     })();
   }, [request]);
@@ -32,8 +27,7 @@ const VerificationQueue = () => {
       setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, verified } : u)));
       notifySuccess(verified ? 'User verified' : 'Verification removed');
     } catch {
-      setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, verified } : u)));
-      notifySuccess(verified ? 'User verified (offline)' : 'Verification removed (offline)');
+      notifyError('Failed to update verification');
     }
   };
 

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
+import api from '../../services/api.js';
+import { notifyError, notifySuccess } from '../../components/ui/ToastProvider.jsx';
 
 // Simple feedback form.
 const Feedback = () => {
@@ -10,10 +12,26 @@ const Feedback = () => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  const handleSubmit = (e) => {
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    alert('Feedback submitted (demo only).');
-    setForm({ subject: '', message: '' });
+    if (!form.subject.trim() || !form.message.trim()) return;
+    setSubmitting(true);
+    try {
+      await api.post('/notifications', {
+        title: form.subject.trim().slice(0, 120),
+        message: form.message.trim().slice(0, 2000),
+        roleType: 'support',
+        meta: { type: 'FEEDBACK' }
+      });
+      notifySuccess('Feedback submitted');
+      setForm({ subject: '', message: '' });
+    } catch (err) {
+      notifyError(err?.response?.data?.message || 'Failed to submit feedback');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -42,8 +60,13 @@ const Feedback = () => {
               onChange={handleChange}
             />
           </div>
-          <Button variant="primary" className="w-100" type="submit">
-            Submit feedback
+          <Button
+            variant="primary"
+            className="w-100"
+            type="submit"
+            disabled={submitting || !form.subject.trim() || !form.message.trim()}
+          >
+            {submitting ? 'Submitting…' : 'Submit feedback'}
           </Button>
         </form>
       </Card>

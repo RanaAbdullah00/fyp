@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { FaHome, FaListUl, FaWallet, FaTruck, FaTools } from 'react-icons/fa';
+import { FaHome, FaListUl, FaWallet, FaTruck, FaTools, FaShippingFast } from 'react-icons/fa';
 import { useAuth } from '../../hooks/useAuth.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
 
@@ -22,7 +22,10 @@ const MobileNav = () => {
       : { to: '/notifications', icon: <FaTools />, label: t('common.admin') };
 
   const loadsPath = activeRole === 'shipper' ? '/loads/manage' : '/loads';
-  const trackPath = '/shipments/tracking';
+  const trackSlot =
+    activeRole === 'admin'
+      ? { to: '/admin/shipments', icon: <FaShippingFast />, label: t('nav.shipments') }
+      : { to: '/shipments/tracking', icon: <FaTruck />, label: t('common.track') };
 
   return (
     <nav className={`mobile-bottom-nav d-md-none ${isUrdu ? 'tp-rtl' : ''}`}>
@@ -35,9 +38,9 @@ const MobileNav = () => {
           <FaListUl />
           <span>{t('common.loads')}</span>
         </NavLink>
-        <NavLink to={trackPath} className={mobileNavClass} end>
-          <FaTruck />
-          <span>{t('common.track')}</span>
+        <NavLink to={trackSlot.to} className={mobileNavClass} end>
+          {trackSlot.icon}
+          <span>{trackSlot.label}</span>
         </NavLink>
         <NavLink to="/wallet" className={mobileNavClass}>
           <FaWallet />

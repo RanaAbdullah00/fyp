@@ -5,8 +5,9 @@ const { sendSuccess, sendError } = require("../utils/apiResponse");
 async function summary(req, res) {
   try {
     const uid = new mongoose.Types.ObjectId(String(req.auth.userId));
+    const BALANCE_STATES = ["released", "success"];
     const agg = await WalletLedger.aggregate([
-      { $match: { userId: uid } },
+      { $match: { userId: uid, status: { $in: BALANCE_STATES } } },
       {
         $group: {
           _id: null,

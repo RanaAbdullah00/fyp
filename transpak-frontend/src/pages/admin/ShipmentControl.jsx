@@ -3,24 +3,20 @@ import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
 import Loader from '../../components/ui/Loader.jsx';
 import { useApi } from '../../hooks/useApi.js';
-import { notifySuccess } from '../../components/ui/ToastProvider.jsx';
-
-const fallbackShipments = [
-  { id: 's1', code: 'PK-INV-001', status: 'in_transit', origin: 'Lahore', destination: 'Karachi' },
-  { id: 's2', code: 'PK-INV-002', status: 'pending', origin: 'Faisalabad', destination: 'Islamabad' }
-];
+import { notifyError, notifySuccess } from '../../components/ui/ToastProvider.jsx';
 
 const ShipmentControl = () => {
   const { request, loading } = useApi();
-  const [shipments, setShipments] = useState(fallbackShipments);
+  const [shipments, setShipments] = useState([]);
 
   useEffect(() => {
     (async () => {
       try {
         const data = await request({ url: '/admin/shipments' });
-        if (Array.isArray(data) && data.length) setShipments(data);
-      } catch {
-        // offline mock
+        setShipments(Array.isArray(data) ? data : []);
+      } catch (e) {
+        notifyError(e?.response?.data?.message || 'Failed to load shipments');
+        setShipments([]);
       }
     })();
   }, [request]);
@@ -31,8 +27,7 @@ const ShipmentControl = () => {
       setShipments((prev) => prev.map((s) => (s.id === id ? { ...s, status } : s)));
       notifySuccess('Shipment status updated');
     } catch {
-      setShipments((prev) => prev.map((s) => (s.id === id ? { ...s, status } : s)));
-      notifySuccess('Shipment status updated (offline)');
+      notifyError('Failed to update shipment status');
     }
   };
 

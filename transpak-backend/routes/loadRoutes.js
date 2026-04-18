@@ -1,4 +1,5 @@
 const express = require("express");
+const { body, validationResult } = require("express-validator");
 const { protect, requireAnyRole, requireActiveRole } = require("../middleware/authMiddleware");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
 const Load = require("../models/Load");
@@ -19,16 +20,30 @@ function generateCode() {
   return `L-${Math.floor(100000 + Math.random() * 900000)}`;
 }
 
+function escapeRegexLiteral(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function validate(req, res, next) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return sendError(res, 400, errors.array()[0]?.msg || "Validation error", {
+      fields: errors.array().map((e) => e.path)
+    });
+  }
+  return next();
+}
+
 router.get("/", protect, requireAnyRole(["carrier", "admin"]), requireActiveRole("carrier"), async (req, res) => {
   try {
     const { origin, destination, vehicleType, city, minPrice, maxPrice } = req.query || {};
     const and = [{ status: "open" }];
 
-    if (origin) and.push({ origin: new RegExp(String(origin).trim(), "i") });
-    if (destination) and.push({ destination: new RegExp(String(destination).trim(), "i") });
-    if (vehicleType) and.push({ vehicleType: new RegExp(String(vehicleType).trim(), "i") });
+    if (origin) and.push({ origin: new RegExp(escapeRegexLiteral(String(origin).trim()), "i") });
+    if (destination) and.push({ destination: new RegExp(escapeRegexLiteral(String(destination).trim()), "i") });
+    if (vehicleType) and.push({ vehicleType: new RegExp(escapeRegexLiteral(String(vehicleType).trim()), "i") });
     if (city) {
-      const c = new RegExp(String(city).trim(), "i");
+      const c = new RegExp(escapeRegexLiteral(String(city).trim()), "i");
       and.push({ $or: [{ origin: c }, { destination: c }] });
     }
 
@@ -67,7 +82,6 @@ router.get("/:id", protect, async (req, res) => {
   const isAdmin = roles.includes("admin");
   const isOwner = String(load.shipperId) === String(req.auth.userId);
   const isAssignedCarrier = load.assignedCarrierId && String(load.assignedCarrierId) === String(req.auth.userId);
-
   if (!isAdmin && !isOwner && !isAssignedCarrier) return sendError(res, 403, "Forbidden");
   return sendSuccess(res, 200, load.toJSONSafe());
 });
@@ -107,7 +121,35 @@ async function createLoad(req, res) {
   return sendSuccess(res, 201, load.toJSONSafe(), "Created");
 }
 
-router.post("/", protect, requireAnyRole(["shipper", "admin"]), requireActiveRole("shipper"), createLoad);
-router.post("/create", protect, requireAnyRole(["shipper", "admin"]), requireActiveRole("shipper"), createLoad);
+const createLoadValidators = [
+  body("cargo").trim().isLength({ min: 2, max: 200 }).withMessage("cargo must be 2-200 chars"),
+  body("origin").trim().isLength({ min: 2, max: 120 }).withMessage("origin must be 2-120 chars"),
+  body("destination").trim().isLength({ min: 2, max: 120 }).withMessage("destination must be 2-120 chars"),
+  body("weight").toFloat().isFloat({ min: 0 }).withMessage("weight must be a non-negative number"),
+  body("vehicleType")
+    .optional()
+    .trim()
+    .isLength({ min: 2, max: 80 })
+    .withMessage("vehicleType must be 2-80 chars"),
+  body("expectedPrice")
+    .optional({ nullable: true })
+    .toFloat()
+    .isFloat({ min: 0 })
+    .withMessage("expectedPrice must be non-negative"),
+  body("price")
+    .optional({ nullable: true })
+    .toFloat()
+    .isFloat({ min: 0 })
+    .withMessage("price must be non-negative"),
+  body("pickupDate").trim().matches(/^\d{4}-\d{2}-\d{2}$/).withMessage("pickupDate must be YYYY-MM-DD"),
+  body("deadlineHours")
+    .optional({ nullable: true })
+    .toInt()
+    .isInt({ min: 1, max: 72 })
+    .withMessage("deadlineHours must be 1-72")
+];
+
+router.post("/", protect, requireAnyRole(["shipper", "admin"]), requireActiveRole("shipper"), createLoadValidators, validate, createLoad);
+router.post("/create", protect, requireAnyRole(["shipper", "admin"]), requireActiveRole("shipper"), createLoadValidators, validate, createLoad);
 
 module.exports = router;

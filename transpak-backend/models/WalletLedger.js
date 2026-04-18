@@ -8,7 +8,12 @@ const walletLedgerSchema = new mongoose.Schema(
     description: { type: String, trim: true, maxlength: 500, default: "" },
     provider: { type: String, trim: true, maxlength: 64, default: "" },
     externalId: { type: String, trim: true, maxlength: 128, default: "" },
-    status: { type: String, trim: true, maxlength: 32, default: "success" },
+    status: {
+      type: String,
+      trim: true,
+      enum: ["pending", "held", "released", "refunded", "failed", "success"],
+      default: "pending"
+    },
     meta: { type: mongoose.Schema.Types.Mixed, default: null }
   },
   { timestamps: true }

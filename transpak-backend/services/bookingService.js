@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Bid = require("../models/Bid");
 const Load = require("../models/Load");
+const escrowService = require("./escrowService");
 const { BookingError, BOOKING_ERROR_CODES } = require("../utils/bookingErrors");
 
 function isExpired(bid) {
@@ -114,6 +115,17 @@ async function claimLoadAndSettleBids(bid, session) {
         },
         { $set: { status: "rejected" } },
         session ? { session } : {}
+      );
+      await escrowService.createHeldEntriesForBooking(
+        {
+          loadId: updatedLoad._id,
+          bidId: bid._id,
+          bookingReference: ref,
+          shipperId: updatedLoad.shipperId,
+          carrierId: updatedLoad.assignedCarrierId,
+          amount: bid.amount
+        },
+        session
       );
       return {
         bookingReference: ref,
