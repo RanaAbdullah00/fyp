@@ -14,10 +14,12 @@ import ShipmentControl from './pages/admin/ShipmentControl.jsx';
 import AdminDashboardPage from './pages/admin/AdminDashboardPage.jsx';
 import AdminUsers from './pages/admin/AdminUsers.jsx';
 import AdminLoads from './pages/admin/AdminLoads.jsx';
+import AdminRoleManagement from './pages/admin/AdminRoleManagement.jsx';
 import PostLoad from './pages/loads/PostLoad.jsx';
 import ManageLoads from './pages/loads/ManageLoads.jsx';
 import AvailableLoads from './pages/loads/AvailableLoads.jsx';
 import LoadDetails from './pages/loads/LoadDetails.jsx';
+import EditLoad from './pages/loads/EditLoad.jsx';
 import BidManagement from './pages/bids/BidManagement.jsx';
 import PlaceBid from './pages/bids/PlaceBid.jsx';
 import ApproveCarrier from './pages/bids/ApproveCarrier.jsx';
@@ -66,7 +68,7 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
     return <Navigate to="/login" replace />;
   }
 
-  const activeRole = user.activeRole || user.role;
+  const activeRole = user.activeRole ?? user.roles?.[0];
   if (!activeRole) return <Navigate to="/role" replace />;
 
   if (allowedRoles && !allowedRoles.includes(activeRole)) {
@@ -79,7 +81,7 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
 const RoleDashboard = () => {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
-  const activeRole = user.activeRole || user.role;
+  const activeRole = user.activeRole ?? user.roles?.[0];
   if (!activeRole) return <Navigate to="/role" replace />;
   return <Navigate to={dashboardPathForRole(activeRole)} replace />;
 };
@@ -139,6 +141,14 @@ function App() {
                 }
               />
               <Route
+                path="/dashboard"
+                element={
+                  <ProtectedRoute>
+                    <RoleDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/dashboard/shipper"
                 element={
                   <ProtectedRoute allowedRoles={['shipper']}>
@@ -175,6 +185,14 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={['admin']}>
                     <AdminUsers />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/roles"
+                element={
+                  <ProtectedRoute allowedRoles={['admin']}>
+                    <AdminRoleManagement />
                   </ProtectedRoute>
                 }
               />
@@ -241,6 +259,14 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={['carrier']}>
                     <AcceptedLoads />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/loads/:id/edit"
+                element={
+                  <ProtectedRoute allowedRoles={['shipper']}>
+                    <EditLoad />
                   </ProtectedRoute>
                 }
               />

@@ -8,8 +8,9 @@ import { loginApi } from '../../services/authService.js';
 import { notifySuccess, notifyError } from '../ui/ToastProvider.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { unwrapResponseData, unwrapErrorMessage } from '../../utils/unwrapApi.js';
-import { dashboardPathForRole } from '../../utils/dashboardPath.js';
 import { FaEnvelope, FaLock } from 'react-icons/fa';
+
+const DEMO_ADMIN_EMAIL = 'mrabdullah0456@gmail.com';
 
 const LoginForm = () => {
   const navigate = useNavigate();
@@ -29,9 +30,12 @@ const LoginForm = () => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
+  const emailNorm = form.email.trim().toLowerCase();
+  const isDemoAdmin = emailNorm === DEMO_ADMIN_EMAIL;
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!uiRolePref) {
+    if (!uiRolePref && !isDemoAdmin) {
       notifyError(t('errors.roleRequired'));
       return;
     }
@@ -40,15 +44,18 @@ const LoginForm = () => {
       const res = await loginApi({
         email: form.email,
         password: form.password,
-        roleHint: uiRolePref
+        ...(isDemoAdmin ? {} : { roleHint: uiRolePref })
       });
       const payload = unwrapResponseData(res) || {};
       const { token, user, currentRole } = payload;
       if (token) localStorage.setItem('transpak_token', token);
       if (user) login(payload);
       notifySuccess(t('auth.welcomeBack'));
-      const roleToNavigate = currentRole || user?.activeRole || user?.role;
-      navigate(dashboardPathForRole(roleToNavigate), { replace: true });
+      const activeRole = user?.activeRole ?? currentRole;
+      let path = '/dashboard';
+      if (activeRole === 'admin') path = '/admin/dashboard';
+      else if (activeRole === 'carrier') path = '/dashboard/carrier';
+      navigate(path, { replace: true });
     } catch (err) {
       const raw =
         unwrapErrorMessage(err) ||
@@ -107,7 +114,7 @@ const LoginForm = () => {
         variant="primary"
         className="w-100 py-2 d-flex justify-content-center align-items-center rounded-lg"
         type="submit"
-        disabled={loading || !uiRolePref}
+        disabled={loading || (!isDemoAdmin && !uiRolePref)}
       >
         {loading ? <Loader light /> : t('auth.signInButton')}
       </Button>

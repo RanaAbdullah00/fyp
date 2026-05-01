@@ -5,12 +5,27 @@ const { sendSuccess, sendError } = require("../utils/apiResponse");
 const User = require("../models/User");
 const Load = require("../models/Load");
 const Bid = require("../models/Bid");
-const Review = require("../models/Review");
 const Dispute = require("../models/Dispute");
 const ShipmentTrack = require("../models/ShipmentTrack");
 const escrowService = require("../services/escrowService");
+const shipmentTrackService = require("../services/shipmentTrackService");
+const { normalizeShipmentStatus, validateShipmentTransition } = require("../utils/shipmentStatus");
+const { loadStatusFromCanonicalTrack } = require("../utils/shipmentLoadSync");
 const uploadDemo = require("../middleware/uploadDemoVideo");
 const { adminUpload } = require("../controllers/demoVideoController");
+const adminController = require("../controllers/adminController");
+
+/** Map admin UI / legacy body values to canonical next status (before validateShipmentTransition). */
+function resolveAdminNextCanonical(currentCanonical, bodyStatus) {
+  const raw = String(bodyStatus || "").trim();
+  if (!raw) return null;
+  const legacy = raw.toLowerCase();
+  if (legacy === "pending") return "booked";
+  if (legacy === "in_transit" || legacy.replace(/\s+/g, "") === "intransit") {
+    return currentCanonical === "booked" ? "pickedup" : "intransit";
+  }
+  return normalizeShipmentStatus(raw);
+}
 
 const router = express.Router();
 
@@ -26,10 +41,18 @@ function validate(req, res, next) {
 
 router.use(protect, requireRole("admin"));
 
-router.get("/users", async (req, res) => {
-  const users = await User.find({}).sort({ createdAt: -1 }).limit(500);
-  return sendSuccess(res, 200, users.map((u) => u.toAuthJSON()));
-});
+router.get("/stats", adminController.getStats);
+router.get("/users", adminController.getUsers);
+router.get("/loads", adminController.getLoads);
+
+router.delete("/user/:id", [param("id").isMongoId().withMessage("Invalid user id")], validate, adminController.deleteUser);
+
+router.patch(
+  "/user/:id/role",
+  ...adminController.patchUserRoleValidators,
+  validate,
+  adminController.patchUserRole
+);
 
 router.patch(
   "/users/:id/block",
@@ -57,15 +80,13 @@ router.patch(
   return sendSuccess(res, 200, { ok: true, user: user.toAuthJSON() });
 });
 
-router.get("/loads", async (req, res) => {
-  const loads = await Load.find({}).sort({ createdAt: -1 }).limit(500);
-  return sendSuccess(res, 200, loads.map((l) => l.toJSONSafe()));
-});
-
 router.delete("/loads/:id", async (req, res) => {
   const load = await Load.findById(req.params.id);
   if (!load) return sendError(res, 404, "Not found");
   await Bid.deleteMany({ loadId: load._id });
+  await ShipmentTrack.deleteMany({
+    $or: [{ loadId: load._id }, { refKey: load.code }, { refKey: load._id.toString() }]
+  });
   await load.deleteOne();
   return sendSuccess(res, 200, { ok: true });
 });
@@ -88,38 +109,64 @@ router.patch(
   "/shipments/:id/status",
   [
     param("id").isMongoId().withMessage("Invalid shipment id"),
-    body("status").isIn(["pending", "in_transit", "delivered", "cancelled"]).withMessage("Invalid status")
+    body("status")
+      .trim()
+      .isLength({ min: 1, max: 40 })
+      .withMessage("status is required")
   ],
   validate,
   async (req, res) => {
-  const incoming = String(req.body?.status || "").trim().toLowerCase();
-  const map = {
-    pending: "assigned",
-    in_transit: "in_transit",
-    delivered: "delivered",
-    cancelled: "cancelled"
-  };
-  const next = map[incoming];
-  if (!next) return sendError(res, 400, "Invalid status");
+    try {
+      const load = await Load.findById(req.params.id);
+      if (!load) return sendError(res, 404, "Not found");
 
-  const load = await Load.findById(req.params.id);
-  if (!load) return sendError(res, 404, "Not found");
-  load.status = next;
-  await load.save();
+      let doc =
+        (await ShipmentTrack.findOne({ loadId: load._id })) ||
+        (await ShipmentTrack.findOne({ refKey: load.code })) ||
+        (await shipmentTrackService.getOrCreateTrack(load._id.toString()));
+      if (!doc.loadId) {
+        doc.loadId = load._id;
+        await shipmentTrackService.saveTrack(doc);
+      }
 
-  const track = await ShipmentTrack.findOne({ $or: [{ loadId: load._id }, { refKey: load.code }] });
-  if (track) {
-    track.tracking = { ...(track.tracking || {}), status: next === "assigned" ? "booked" : next };
-    await track.save();
+      const current = doc.tracking?.status;
+      const currentCanon = normalizeShipmentStatus(current) || "posted";
+      const desired = resolveAdminNextCanonical(currentCanon, req.body.status);
+      if (!desired) return sendError(res, 400, "Invalid status");
+
+      const check = validateShipmentTransition(current, desired);
+      if (!check.ok) return sendError(res, 400, check.message);
+
+      const canonical = check.canonical;
+      if (check.same) {
+        return sendSuccess(res, 200, { ok: true, trackingStatus: canonical, loadStatus: load.status });
+      }
+
+      doc.tracking = { ...(doc.tracking || {}), status: canonical };
+      doc.history = Array.isArray(doc.history) ? doc.history : [];
+      doc.history.unshift({
+        event: `Status: ${canonical} (admin)`,
+        time: new Date().toLocaleString(),
+        location: "System"
+      });
+      await shipmentTrackService.saveTrack(doc);
+
+      const nextLoadStatus = loadStatusFromCanonicalTrack(load, canonical);
+      if (nextLoadStatus) {
+        load.status = nextLoadStatus;
+        await load.save();
+      }
+
+      if (canonical === "delivered") {
+        await escrowService.transitionEscrowByBooking(load.bookingReference, ["held"], "released");
+      }
+
+      return sendSuccess(res, 200, { ok: true, trackingStatus: canonical, loadStatus: load.status });
+    } catch (err) {
+      return sendError(res, 500, err.message || "Server error");
+    }
   }
-  if (next === "delivered") {
-    await escrowService.transitionEscrowByBooking(load.bookingReference, ["held"], "released");
-  } else if (next === "cancelled") {
-    await escrowService.transitionEscrowByBooking(load.bookingReference, ["held", "released"], "refunded");
-  }
-
-  return sendSuccess(res, 200, { ok: true });
-});
+);
 
 router.get("/disputes", async (req, res) => {
   const list = await Dispute.find({}).sort({ createdAt: -1 }).limit(500);
@@ -168,27 +215,5 @@ router.post("/demo-video", (req, res, next) => {
     next();
   });
 }, adminUpload);
-
-router.get("/stats", async (req, res) => {
-  try {
-    const [users, loads, bids, activeShipments, reviews] = await Promise.all([
-      User.countDocuments({}),
-      Load.countDocuments({}),
-      Bid.countDocuments({}),
-      Load.countDocuments({ status: { $in: ["assigned", "in_transit"] } }),
-      Review.countDocuments({})
-    ]);
-    return sendSuccess(res, 200, {
-      totalUsers: users,
-      totalLoads: loads,
-      totalShipments: loads,
-      activeShipments,
-      totalBids: bids,
-      totalReviews: reviews
-    });
-  } catch (err) {
-    return sendError(res, 500, err.message || "Server error");
-  }
-});
 
 module.exports = router;

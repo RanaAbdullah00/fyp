@@ -77,9 +77,10 @@ router.post(
       } catch (err) {
         if (err && err.code === 11000) {
           logger.warn("wallet_ledger_duplicate_tx", { transactionId });
-        } else {
-          logger.error("wallet_ledger_write_failed", { err: err.message });
+          return sendError(res, 409, "Duplicate transaction id");
         }
+        logger.error("wallet_ledger_write_failed", { err: err.message });
+        return sendError(res, 500, err.message || "Server error");
       }
 
       return sendSuccess(

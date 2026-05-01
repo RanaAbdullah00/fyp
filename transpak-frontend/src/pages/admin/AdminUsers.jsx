@@ -1,83 +1,135 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
-import Loader from '../../components/ui/Loader.jsx';
+import ConfirmActionModal from '../../components/ui/ConfirmActionModal.jsx';
+import { SkeletonTable } from '../../components/ui/Skeleton.jsx';
 import { useApi } from '../../hooks/useApi.js';
+import { useLanguage } from '../../hooks/useLanguage.js';
 import { notifyError, notifySuccess } from '../../components/ui/ToastProvider.jsx';
+import { unwrapErrorMessage } from '../../utils/unwrapApi.js';
 
 const AdminUsers = () => {
-  const { request, loading } = useApi();
+  const { request } = useApi();
+  const { t } = useLanguage();
   const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [userPendingDelete, setUserPendingDelete] = useState(null);
 
-  const refresh = async () => {
-    const data = await request({ url: '/admin/users' });
-    setUsers(Array.isArray(data) ? data : []);
-  };
+  const refresh = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await request({ url: '/admin/users' });
+      setUsers(Array.isArray(data) ? data : []);
+    } catch (e) {
+      notifyError(unwrapErrorMessage(e) || t('pages.admin.statsError'));
+      setUsers([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [request, t]);
 
   useEffect(() => {
-    refresh().catch(() => {});
-  }, []);
+    refresh();
+  }, [refresh]);
 
   const setBlocked = async (id, blocked) => {
     try {
       const res = await request({ method: 'PATCH', url: `/admin/users/${id}/block`, data: { blocked } });
       const u = res?.user;
       setUsers((prev) => prev.map((x) => (x.id === id ? { ...x, blocked: u?.blocked ?? blocked } : x)));
-      notifySuccess(blocked ? 'User blocked' : 'User unblocked');
+      notifySuccess(blocked ? t('pages.admin.userBlocked') : t('pages.admin.userUnblocked'));
     } catch (e) {
-      notifyError('Update failed');
+      notifyError(unwrapErrorMessage(e) || t('pages.admin.updateFailed'));
+    }
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!userPendingDelete?.id) return;
+    try {
+      await request({ method: 'DELETE', url: `/admin/user/${userPendingDelete.id}` });
+      setUsers((prev) => prev.filter((x) => x.id !== userPendingDelete.id));
+      notifySuccess(t('pages.admin.userDeleted'));
+    } catch (e) {
+      notifyError(unwrapErrorMessage(e) || t('pages.admin.deleteUserFailed'));
     }
   };
 
   return (
     <div className="container py-3">
-      <h5 className="mb-3">Users</h5>
-      {loading && users.length === 0 ? (
-        <div className="d-flex justify-content-center py-5">
-          <Loader />
-        </div>
+      <h5 className="mb-3">{t('pages.admin.usersTitle')}</h5>
+      {loading ? (
+        <SkeletonTable cols={6} rows={8} />
       ) : users.length === 0 ? (
-        <div className="text-muted text-center py-5">No users.</div>
+        <div className="text-muted text-center py-5">{t('pages.admin.emptyUsers')}</div>
       ) : (
         <Card className="p-0 overflow-hidden">
           <div className="table-responsive">
             <table className="table table-hover table-sm mb-0 align-middle">
               <thead className="table-light">
                 <tr>
-                  <th className="ps-3 py-3">Name</th>
-                  <th className="py-3">Email</th>
-                  <th className="py-3 d-none d-md-table-cell">CNIC</th>
-                  <th className="py-3">Roles</th>
-                  <th className="pe-3 py-3 text-end">Status</th>
+                  <th className="ps-3 py-3">{t('auth.fullName')}</th>
+                  <th className="py-3">{t('auth.email')}</th>
+                  <th className="py-3 d-none d-md-table-cell">{t('auth.cnic')}</th>
+                  <th className="py-3">{t('auth.role')}</th>
+                  <th className="py-3 text-end">{t('pages.admin.block')}</th>
+                  <th className="pe-3 py-3 text-end">{t('pages.admin.deleteUser')}</th>
                 </tr>
               </thead>
               <tbody>
-                {users.map((u) => (
-                  <tr key={u.id}>
-                    <td className="ps-3 py-3 fw-semibold">{u.name}</td>
-                    <td className="py-3"><small>{u.email}</small></td>
-                    <td className="py-3 d-none d-md-table-cell"><small className="text-muted">{u.cnic}</small></td>
-                    <td className="py-3"><span className="badge bg-secondary">{(u.roles || []).join(', ')}</span></td>
-                    <td className="pe-3 py-3 text-end">
-                      <Button
-                        variant={u.blocked ? 'success' : 'outline-danger'}
-                        size="sm"
-                        onClick={() => setBlocked(u.id, !u.blocked)}
-                        className="rounded-lg"
-                      >
-                        {u.blocked ? 'Unblock' : 'Block'}
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
+                {users.map((u) => {
+                  const isAdmin = (u.roles || []).includes('admin');
+                  return (
+                    <tr key={u.id}>
+                      <td className="ps-3 py-3 fw-semibold">{u.name}</td>
+                      <td className="py-3">
+                        <small>{u.email}</small>
+                      </td>
+                      <td className="py-3 d-none d-md-table-cell">
+                        <small className="text-muted">{u.cnic}</small>
+                      </td>
+                      <td className="py-3">
+                        <span className="badge bg-secondary">{(u.roles || []).join(', ')}</span>
+                      </td>
+                      <td className="py-3 text-end">
+                        <Button
+                          variant={u.blocked ? 'success' : 'outline-danger'}
+                          onClick={() => setBlocked(u.id, !u.blocked)}
+                          className="btn-sm rounded-lg"
+                        >
+                          {u.blocked ? t('pages.admin.unblock') : t('pages.admin.block')}
+                        </Button>
+                      </td>
+                      <td className="pe-3 py-3 text-end">
+                        <Button
+                          variant="outline-danger"
+                          disabled={isAdmin}
+                          title={isAdmin ? t('pages.admin.deleteUserDisabledAdmin') : undefined}
+                          onClick={() => !isAdmin && setUserPendingDelete(u)}
+                          className="btn-sm rounded-lg"
+                        >
+                          {t('pages.admin.deleteUser')}
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </Card>
       )}
+
+      <ConfirmActionModal
+        show={Boolean(userPendingDelete)}
+        title={t('pages.admin.deleteUserTitle')}
+        message={t('pages.admin.deleteUserMessage')}
+        confirmText={t('pages.admin.deleteUser')}
+        confirmVariant="danger"
+        onClose={() => setUserPendingDelete(null)}
+        onConfirm={confirmDeleteUser}
+      />
     </div>
   );
 };
 
 export default AdminUsers;
-

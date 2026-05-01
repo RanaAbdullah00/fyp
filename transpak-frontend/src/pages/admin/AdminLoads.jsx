@@ -1,42 +1,62 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
-import Loader from '../../components/ui/Loader.jsx';
+import { SkeletonTable } from '../../components/ui/Skeleton.jsx';
 import { useApi } from '../../hooks/useApi.js';
+import { useLanguage } from '../../hooks/useLanguage.js';
 import { notifyError, notifySuccess } from '../../components/ui/ToastProvider.jsx';
+import { unwrapErrorMessage } from '../../utils/unwrapApi.js';
 
 const AdminLoads = () => {
-  const { request, loading } = useApi();
+  const { request } = useApi();
+  const { t } = useLanguage();
   const [loads, setLoads] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const refresh = async () => {
-    const data = await request({ url: '/admin/loads' });
-    setLoads(Array.isArray(data) ? data : []);
-  };
+  const refresh = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await request({ url: '/admin/loads' });
+      setLoads(Array.isArray(data) ? data : []);
+    } catch (e) {
+      notifyError(unwrapErrorMessage(e) || t('pages.admin.statsError'));
+      setLoads([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [request, t]);
 
   useEffect(() => {
-    refresh().catch(() => {});
-  }, []);
+    refresh();
+  }, [refresh]);
 
   const del = async (id) => {
     try {
       await request({ method: 'DELETE', url: `/admin/loads/${id}` });
       setLoads((prev) => prev.filter((l) => l.id !== id));
-      notifySuccess('Load deleted');
-    } catch {
-      notifyError('Delete failed');
+      notifySuccess(t('pages.admin.loadDeleted'));
+    } catch (e) {
+      notifyError(unwrapErrorMessage(e) || t('pages.admin.deleteLoadFailed'));
     }
+  };
+
+  const statusBadgeClass = (status) => {
+    const s = String(status || '');
+    if (s === 'open') return 'bg-success';
+    if (s === 'assigned') return 'bg-warning text-dark';
+    if (s === 'in_transit') return 'bg-info text-dark';
+    if (s === 'delivered') return 'bg-primary';
+    if (s === 'cancelled') return 'bg-secondary';
+    return 'bg-secondary';
   };
 
   return (
     <div className="container py-3">
-      <h5 className="mb-3">Loads</h5>
-      {loading && loads.length === 0 ? (
-        <div className="d-flex justify-content-center py-5">
-          <Loader />
-        </div>
+      <h5 className="mb-3">{t('pages.admin.loadsTitle')}</h5>
+      {loading ? (
+        <SkeletonTable cols={6} rows={8} />
       ) : loads.length === 0 ? (
-        <div className="text-muted text-center py-5">No loads.</div>
+        <div className="text-muted text-center py-5">{t('pages.admin.emptyLoads')}</div>
       ) : (
         <Card className="p-0 overflow-hidden">
           <div className="table-responsive">
@@ -55,13 +75,25 @@ const AdminLoads = () => {
                 {loads.map((l) => (
                   <tr key={l.id}>
                     <td className="ps-3 py-3 fw-semibold">{l.code}</td>
-                    <td className="py-3"><small>{l.cargo || '—'}</small></td>
-                    <td className="py-3 d-none d-lg-table-cell"><small className="text-muted">{l.origin || '—'} → {l.destination || '—'}</small></td>
-                    <td className="py-3"><small>{l.pickupDate || '—'}</small></td>
-                    <td className="py-3"><span className="badge bg-info">{String(l.status || '').replaceAll('_', ' ')}</span></td>
+                    <td className="py-3">
+                      <small>{l.cargo || '—'}</small>
+                    </td>
+                    <td className="py-3 d-none d-lg-table-cell">
+                      <small className="text-muted">
+                        {l.origin || '—'} → {l.destination || '—'}
+                      </small>
+                    </td>
+                    <td className="py-3">
+                      <small>{l.pickupDate || '—'}</small>
+                    </td>
+                    <td className="py-3">
+                      <span className={`badge rounded-pill ${statusBadgeClass(l.status)}`}>
+                        {String(l.status || '').replaceAll('_', ' ')}
+                      </span>
+                    </td>
                     <td className="pe-3 py-3 text-end">
-                      <Button variant="outline-danger" size="sm" onClick={() => del(l.id)} className="rounded-lg">
-                        Delete
+                      <Button variant="outline-danger" onClick={() => del(l.id)} className="btn-sm rounded-lg">
+                        {t('pages.loads.delete')}
                       </Button>
                     </td>
                   </tr>
@@ -76,4 +108,3 @@ const AdminLoads = () => {
 };
 
 export default AdminLoads;
-

@@ -14,7 +14,8 @@ import {
   FaHistory,
   FaCog,
   FaSignOutAlt,
-  FaQuestionCircle
+  FaQuestionCircle,
+  FaUserTag
 } from 'react-icons/fa';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { useAuth } from '../../hooks/useAuth.js';
@@ -28,7 +29,7 @@ const Sidebar = () => {
   const { t } = useLanguage();
   const [showLogoutModal, setShowLogoutModal] = React.useState(false);
 
-  const activeRole = user?.activeRole || user?.role;
+  const activeRole = user?.activeRole ?? user?.roles?.[0];
   const isAdmin = activeRole === 'admin';
   const isCarrier = activeRole === 'carrier';
   const isShipper = activeRole === 'shipper';
@@ -125,6 +126,10 @@ const Sidebar = () => {
             <NavLink to="/admin/users" className={navLinkClass}>
               <FaUserShield />
               Users
+            </NavLink>
+            <NavLink to="/admin/roles" className={navLinkClass}>
+              <FaUserTag />
+              {t('nav.roleManagement')}
             </NavLink>
             <NavLink to="/admin/loads" className={navLinkClass}>
               <FaListUl />

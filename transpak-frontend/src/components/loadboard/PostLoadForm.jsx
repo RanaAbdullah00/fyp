@@ -1,18 +1,29 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Button from '../ui/Button.jsx';
 
-// Form used by shippers to post a new load.
-const PostLoadForm = ({ onSubmit }) => {
-  const [form, setForm] = useState({
-    cargo: '',
-    origin: '',
-    destination: '',
-    weight: '',
-    vehicleType: 'Truck',
-    expectedPrice: '',
-    pickupDate: '',
-    deadlineHours: '2'
-  });
+const defaultForm = () => ({
+  cargo: '',
+  origin: '',
+  destination: '',
+  weight: '',
+  vehicleType: 'Truck',
+  expectedPrice: '',
+  pickupDate: '',
+  deadlineHours: '2'
+});
+
+// Form used by shippers to post or edit a load.
+const PostLoadForm = ({ onSubmit, initialValues = null, submitLabel = 'Post load' }) => {
+  const [form, setForm] = useState(() => ({
+    ...defaultForm(),
+    ...(initialValues || {})
+  }));
+
+  useEffect(() => {
+    if (initialValues && typeof initialValues === 'object') {
+      setForm({ ...defaultForm(), ...initialValues });
+    }
+  }, [initialValues]);
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -37,6 +48,11 @@ const PostLoadForm = ({ onSubmit }) => {
     d.setDate(d.getDate() + 1);
     return d.toISOString().slice(0, 10);
   })();
+
+  const minPickupDate =
+    initialValues?.pickupDate && String(initialValues.pickupDate) < tomorrow
+      ? String(initialValues.pickupDate)
+      : tomorrow;
 
   return (
     <form onSubmit={handleSubmit}>
@@ -124,7 +140,7 @@ const PostLoadForm = ({ onSubmit }) => {
             className="form-control form-control-sm rounded-3"
             value={form.pickupDate}
             onChange={handleChange}
-            min={tomorrow}
+            min={minPickupDate}
             required
           />
         </div>
@@ -144,8 +160,8 @@ const PostLoadForm = ({ onSubmit }) => {
           </select>
         </div>
       </div>
-      <Button variant="primary" className="w-100 mt-3 py-2" type="submit">
-        Post load
+      <Button variant="primary" className="w-100 mt-3 py-2 rounded-lg" type="submit">
+        {submitLabel}
       </Button>
     </form>
   );

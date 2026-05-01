@@ -11,6 +11,7 @@ const {
   handleValidationErrors
 } = require("../middleware/validateShipmentBody");
 const shipmentTrackService = require("../services/shipmentTrackService");
+const { loadStatusFromCanonicalTrack } = require("../utils/shipmentLoadSync");
 
 const router = express.Router();
 
@@ -139,6 +140,16 @@ router.put(
       });
 
       await shipmentTrackService.saveTrack(doc);
+
+      const loadFull = await Load.findById(load._id);
+      if (loadFull) {
+        const nextLoadStatus = loadStatusFromCanonicalTrack(loadFull, canonical);
+        if (nextLoadStatus) {
+          loadFull.status = nextLoadStatus;
+          await loadFull.save();
+        }
+      }
+
       if (canonical === "delivered") {
         await escrowService.transitionEscrowByBooking(load.bookingReference, ["held"], "released");
       }

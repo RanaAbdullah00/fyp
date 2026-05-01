@@ -11,7 +11,7 @@ const MobileNav = () => {
   const { user } = useAuth();
   const { t, isUrdu } = useLanguage();
 
-  const activeRole = user?.activeRole || user?.role;
+  const activeRole = user?.activeRole ?? user?.roles?.[0];
   const dashboardPath = activeRole === 'carrier' ? '/dashboard/carrier' : activeRole === 'admin' ? '/dashboard/admin' : '/dashboard/shipper';
 
   const roleSlot =

@@ -84,7 +84,7 @@ const AvailableLoads = () => {
   }, [filters, request]);
 
   const handleBid = (load) => {
-    const activeRole = user?.activeRole || user?.role;
+    const activeRole = user?.activeRole ?? user?.roles?.[0];
     if (activeRole === 'carrier') {
       navigate('/bids/place', { state: { load } });
       return;

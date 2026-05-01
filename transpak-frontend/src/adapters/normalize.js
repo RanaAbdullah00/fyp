@@ -12,6 +12,8 @@ export const normalizeLoad = (raw) => {
     pickup: raw.pickup ?? raw.origin ?? '',
     delivery: raw.delivery ?? raw.destination ?? '',
     status: raw.status ?? 'open',
+    shipperId: raw.shipperId ?? null,
+    assignedCarrierId: raw.assignedCarrierId ?? null,
     // backward-compatible fields used by existing components
     code: raw.code ?? `L-${String(id ?? '').slice(-4)}`,
     cargo: raw.cargo ?? raw.title ?? raw.description ?? 'Load',
@@ -22,6 +24,7 @@ export const normalizeLoad = (raw) => {
     distance: raw.distance ?? 0,
     expectedPrice: price,
     pickupDate: raw.pickupDate ?? raw.date ?? '',
+    deadlineHours: raw.deadlineHours != null ? raw.deadlineHours : 2,
     deadline: raw.deadline
   };
 };

@@ -32,7 +32,7 @@ function formatTime(iso) {
 const Messages = () => {
   const { user } = useAuth();
   const { t, isUrdu } = useLanguage();
-  const activeRole = user?.activeRole || user?.role || '';
+  const activeRole = user?.activeRole ?? user?.roles?.[0] ?? '';
   const uid = user?.id || user?._id;
   const app = useContext(AppContext);
   const getSocket = app?.getSocket;

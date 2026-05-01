@@ -165,10 +165,60 @@ async function seedAdminIfNeeded() {
   }
 }
 
+/** FYP demo admin: always present after boot (create or update). Override phone/CNIC via env if they collide. */
+const TRANSPAK_DEMO_ADMIN_EMAIL = "mrabdullah0456@gmail.com";
+const TRANSPAK_DEMO_ADMIN_NAME = "Demo Admin";
+const TRANSPAK_DEMO_ADMIN_PASSWORD = "12345678";
+
+async function ensureTranspakDemoAdmin() {
+  const bcrypt = require("bcrypt");
+  const User = require("./models/User");
+  const email = TRANSPAK_DEMO_ADMIN_EMAIL.trim().toLowerCase();
+  const phone = String(process.env.TRANSPAK_DEMO_ADMIN_PHONE || "+923001234568").trim();
+  const cnic = String(process.env.TRANSPAK_DEMO_ADMIN_CNIC || "TP-DEMO-ADMIN-001").trim();
+
+  try {
+    let user = await User.findOne({ email }).select("+passwordHash");
+    const demoRoles = ["admin", "shipper", "carrier"];
+
+    if (!user) {
+      const passwordHash = await bcrypt.hash(TRANSPAK_DEMO_ADMIN_PASSWORD, 10);
+      await User.create({
+        name: TRANSPAK_DEMO_ADMIN_NAME,
+        email,
+        phone,
+        cnic,
+        passwordHash,
+        roles: demoRoles,
+        activeRole: "admin",
+        verified: true
+      });
+      console.log("Admin user created");
+      return;
+    }
+
+    const roleSet = new Set(Array.isArray(user.roles) ? user.roles : []);
+    demoRoles.forEach((r) => roleSet.add(r));
+    user.roles = Array.from(roleSet);
+    user.activeRole = "admin";
+
+    const pwdOk = await bcrypt.compare(TRANSPAK_DEMO_ADMIN_PASSWORD, user.passwordHash);
+    if (!pwdOk) {
+      user.passwordHash = await bcrypt.hash(TRANSPAK_DEMO_ADMIN_PASSWORD, 10);
+    }
+
+    await user.save();
+    console.log("Admin user updated");
+  } catch (err) {
+    console.error("TransPak: ensureTranspakDemoAdmin failed:", err.message || err);
+  }
+}
+
 async function start() {
   try {
     await connectDB();
     await seedAdminIfNeeded();
+    await ensureTranspakDemoAdmin();
     const basePort = Number(PORT) || 5000;
     const maxAttempts = 20;
     const tryListen = (port, attempt = 0) => {

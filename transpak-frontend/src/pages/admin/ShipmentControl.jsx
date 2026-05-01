@@ -21,10 +21,16 @@ const ShipmentControl = () => {
     })();
   }, [request]);
 
+  const mapLoadStatusToRow = (loadStatus) => {
+    if (loadStatus === 'assigned') return 'pending';
+    return loadStatus;
+  };
+
   const updateStatus = async (id, status) => {
     try {
-      await request({ method: 'PATCH', url: `/admin/shipments/${id}/status`, data: { status } });
-      setShipments((prev) => prev.map((s) => (s.id === id ? { ...s, status } : s)));
+      const data = await request({ method: 'PATCH', url: `/admin/shipments/${id}/status`, data: { status } });
+      const nextRow = data?.loadStatus != null ? mapLoadStatusToRow(data.loadStatus) : mapLoadStatusToRow(status);
+      setShipments((prev) => prev.map((s) => (s.id === id ? { ...s, status: nextRow } : s)));
       notifySuccess('Shipment status updated');
     } catch {
       notifyError('Failed to update shipment status');
@@ -52,10 +58,13 @@ const ShipmentControl = () => {
                 </div>
               </div>
               <div className="d-flex gap-2 flex-wrap justify-content-end">
-                <Button variant="outline-primary" className="btn-sm rounded-lg" onClick={() => updateStatus(s.id, 'pending')}>
-                  Pending
+                <Button variant="outline-primary" className="btn-sm rounded-lg" onClick={() => updateStatus(s.id, 'booked')}>
+                  Booked
                 </Button>
-                <Button variant="primary" className="btn-sm rounded-lg" onClick={() => updateStatus(s.id, 'in_transit')}>
+                <Button variant="outline-secondary" className="btn-sm rounded-lg" onClick={() => updateStatus(s.id, 'pickedup')}>
+                  Picked up
+                </Button>
+                <Button variant="primary" className="btn-sm rounded-lg" onClick={() => updateStatus(s.id, 'intransit')}>
                   In transit
                 </Button>
                 <Button variant="success" className="btn-sm rounded-lg" onClick={() => updateStatus(s.id, 'delivered')}>

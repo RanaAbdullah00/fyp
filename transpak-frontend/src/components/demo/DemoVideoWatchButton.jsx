@@ -1,10 +1,11 @@
 import React, { useCallback, useState } from 'react';
+import { FaPlay, FaChevronRight } from 'react-icons/fa';
 import DemoVideoModal from './DemoVideoModal.jsx';
 import { fetchDemoVideoInfo } from '../../services/demoVideoService.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
 
 /**
- * Opens official walkthrough modal. variant="authHeader" for login/register top bar; default on Help.
+ * Segmented, form-field-style CTA for the official demo video (auth header, help, compact).
  */
 const DemoVideoWatchButton = ({ className = '', variant = 'default' }) => {
   const { t } = useLanguage();
@@ -22,17 +23,32 @@ const DemoVideoWatchButton = ({ className = '', variant = 'default' }) => {
   }, []);
 
   const videoUrl = info?.hasVideo ? '/api/demo-video/stream' : null;
-  const btnClass =
-    variant === 'authHeader'
-      ? `btn btn-sm rounded-pill tp-auth-v2__header-btn tp-auth-v2__header-btn--demo ${className}`.trim()
-      : variant === 'compact'
-        ? `btn btn-link btn-sm text-decoration-none p-0 align-baseline ${className}`.trim()
-        : `btn btn-outline-primary btn-sm rounded-pill ${className}`.trim();
+
+  const rootClass = [
+    'tp-watch-demo-segmented',
+    variant === 'authHeader' && 'tp-watch-demo-segmented--header',
+    variant === 'compact' && 'tp-watch-demo-segmented--compact',
+    variant === 'block' && 'tp-watch-demo-segmented--block',
+    className
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return (
     <>
-      <button type="button" className={btnClass} onClick={loadAndOpen}>
-        {t('common.watchDemo')}
+      <button
+        type="button"
+        className={rootClass}
+        onClick={loadAndOpen}
+        aria-label={t('common.watchDemo')}
+      >
+        <span className="tp-watch-demo-segmented__left">
+          <FaPlay className="tp-watch-demo-segmented__play" aria-hidden />
+          <span className="tp-watch-demo-segmented__label">{t('common.watchDemoCta')}</span>
+        </span>
+        <span className="tp-watch-demo-segmented__right" aria-hidden>
+          <FaChevronRight className="tp-watch-demo-segmented__chevron" />
+        </span>
       </button>
       <DemoVideoModal
         open={open}

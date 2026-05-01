@@ -124,7 +124,7 @@ const RegisterForm = ({ prefill: prefillProp = null, upgradeRole: upgradeRolePro
         if (token) localStorage.setItem('transpak_token', token);
         if (user) login(payload);
         onDone?.(user);
-        const role = currentRole || user?.activeRole || user?.role;
+        const role = currentRole || user?.activeRole || user?.roles?.[0];
         navigate(dashboardPathForRole(role), { replace: true });
         return;
       }

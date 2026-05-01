@@ -6,12 +6,14 @@ import { useAuth } from '../../hooks/useAuth.js';
 import { useApi } from '../../hooks/useApi.js';
 import { AppContext } from '../../context/AppContext.jsx';
 import { notifySuccess, notifyError, notifyInfo } from '../../components/ui/ToastProvider.jsx';
+import { useLanguage } from '../../hooks/useLanguage.js';
 
 // Screen for shippers to post new loads.
 const PostLoad = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { request } = useApi();
+  const { t } = useLanguage();
   const appContext = React.useContext(AppContext);
   const addNotification = appContext?.addNotification || (() => {});
 
@@ -28,12 +30,14 @@ const PostLoad = () => {
         url: '/loads/create',
         method: 'POST',
         data: {
+          cargo: payload.cargo,
           origin: payload.origin,
           destination: payload.destination,
           weight: Number(payload.weight),
-          type: payload.vehicleType,
-          price: Number(payload.expectedPrice),
-          pickupDate: payload.pickupDate
+          vehicleType: payload.vehicleType,
+          expectedPrice: Number(payload.expectedPrice),
+          pickupDate: payload.pickupDate,
+          deadlineHours: Number(payload.deadlineHours || 2)
         }
       });
       notifySuccess(`Load ${loadData?.code || 'L-' + Date.now()} posted! Bidding open.`);
@@ -58,8 +62,8 @@ const PostLoad = () => {
 
   return (
     <div className="container py-3">
-      <h5 className="mb-3">Post a new load</h5>
-      <PostLoadForm onSubmit={handleSubmit} />
+      <h5 className="mb-3">{t('pages.loads.postLoadScreenTitle')}</h5>
+      <PostLoadForm onSubmit={handleSubmit} submitLabel={t('pages.loads.postLoadCta')} />
     </div>
   );
 };

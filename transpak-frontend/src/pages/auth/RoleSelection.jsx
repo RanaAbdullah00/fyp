@@ -14,14 +14,16 @@ const RoleSelection = () => {
 
   const roles = useMemo(() => {
     if (!user) return [];
-    return Array.isArray(user.roles) ? user.roles : [user.role].filter(Boolean);
+    return Array.isArray(user.roles) && user.roles.length
+      ? user.roles
+      : [user.activeRole].filter(Boolean);
   }, [user]);
 
   const hasShipper = roles.includes('shipper');
   const hasCarrier = roles.includes('carrier');
   const dualRole = hasShipper && hasCarrier;
 
-  const activeRole = user?.activeRole || user?.role || null;
+  const activeRole = user?.activeRole ?? user?.roles?.[0] ?? null;
   const targetRole = useMemo(() => {
     if (!dualRole) return null;
     if (activeRole === 'shipper' && hasCarrier) return 'carrier';

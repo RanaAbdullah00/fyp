@@ -19,7 +19,7 @@ function formatTxRow(r) {
 
 const Wallet = () => {
   const { user } = useAuth();
-  const activeRole = user?.activeRole || user?.role || 'shipper';
+  const activeRole = user?.activeRole ?? user?.roles?.[0] ?? 'shipper';
   const [showPayment, setShowPayment] = useState(false);
   const [balance, setBalance] = useState(0);
   const [retryPayload, setRetryPayload] = useState(null);

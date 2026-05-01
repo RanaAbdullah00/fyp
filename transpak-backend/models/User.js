@@ -52,6 +52,11 @@ const userSchema = new mongoose.Schema(
       required: [true, "Password hash is required"],
       select: false
     },
+    /** Legacy / import: plain bcrypt hash under `password` (prefer passwordHash). */
+    password: {
+      type: String,
+      select: false
+    },
     roles: {
       type: [String],
       required: true,

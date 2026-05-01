@@ -10,6 +10,7 @@ import { dashboardPathForRole } from '../../utils/dashboardPath.js';
 import { notifyError } from '../ui/ToastProvider.jsx';
 import { unwrapErrorMessage } from '../../utils/unwrapApi.js';
 import api from '../../services/api.js';
+import LanguageToggle from '../ui/LanguageToggle.jsx';
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -45,8 +46,8 @@ const Navbar = () => {
     window.addEventListener('tp_notifications_read', onRead);
     return () => window.removeEventListener('tp_notifications_read', onRead);
   }, [user]);
-  const roles = user?.roles || (user?.role ? [user.role] : []);
-  const activeRole = user?.activeRole || user?.role;
+  const roles = user?.roles?.length ? user.roles : [user?.activeRole].filter(Boolean);
+  const activeRole = user?.activeRole ?? roles[0];
 
   const hasShipper = roles.includes('shipper');
   const hasCarrier = roles.includes('carrier');
@@ -112,32 +113,35 @@ const Navbar = () => {
           <Link to="/" className="navbar-brand fw-bold mb-0">
             <BrandLogo />
           </Link>
-          {user && (
-            <div className="d-flex align-items-center gap-2">
-              <NavLink
-                to="/notifications"
-                className="btn btn-outline-secondary btn-sm rounded-lg position-relative d-flex align-items-center justify-content-center"
-                aria-label={t('nav.notificationsAria')}
-              >
-                <FaBell size={14} />
-                {unreadCount > 0 && (
-                  <span className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style={{ fontSize: 9 }}>
-                    {unreadCount}
-                  </span>
-                )}
-              </NavLink>
-              {canSwitch && (
-                <button
-                  type="button"
-                  className="btn btn-outline-success btn-sm rounded-lg px-2 text-nowrap"
-                  onClick={handleSwitchAccount}
-                  title={t('nav.switchAccount')}
+          <div className="d-flex align-items-center gap-2">
+            <LanguageToggle className="rounded-lg" />
+            {user && (
+              <>
+                <NavLink
+                  to="/notifications"
+                  className="btn btn-outline-secondary btn-sm rounded-lg position-relative d-flex align-items-center justify-content-center"
+                  aria-label={t('nav.notificationsAria')}
                 >
-                  {t('nav.switchAccount')}
-                </button>
-              )}
-            </div>
-          )}
+                  <FaBell size={14} />
+                  {unreadCount > 0 && (
+                    <span className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style={{ fontSize: 9 }}>
+                      {unreadCount}
+                    </span>
+                  )}
+                </NavLink>
+                {canSwitch && (
+                  <button
+                    type="button"
+                    className="btn btn-outline-success btn-sm rounded-lg px-2 text-nowrap"
+                    onClick={handleSwitchAccount}
+                    title={t('nav.switchAccount')}
+                  >
+                    {t('nav.switchAccount')}
+                  </button>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </nav>
       <nav
@@ -149,6 +153,7 @@ const Navbar = () => {
           </Link>
 
           <div className="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+            <LanguageToggle className="rounded-lg" />
             {user ? (
               <>
                 <NavLink

@@ -6,13 +6,20 @@ export const AuthContext = createContext(null);
 
 function mergeSession(apiData) {
   const user = apiData.user || apiData;
-  const currentRole = apiData.currentRole ?? user.activeRole ?? user.role;
-  const roles = Array.isArray(user.roles) && user.roles.length ? user.roles : [user.role].filter(Boolean);
+  const id =
+    user.id || (user._id != null ? String(user._id) : null);
+  const currentRole = apiData.currentRole ?? user.activeRole;
+  const roles =
+    Array.isArray(user.roles) && user.roles.length
+      ? user.roles
+      : [user.activeRole].filter(Boolean);
   const next = {
     ...user,
+    id,
     roles,
     activeRole: currentRole
   };
+  delete next.role;
   const hasShipper = roles.includes('shipper');
   const hasCarrier = roles.includes('carrier');
   next.hasShipper = Boolean(apiData.roles?.hasShipper ?? hasShipper);
@@ -29,9 +36,14 @@ export const AuthProvider = ({ children }) => {
     if (storedUser) {
       try {
         const parsed = JSON.parse(storedUser);
-        const roles = Array.isArray(parsed.roles) && parsed.roles.length ? parsed.roles : [parsed.role].filter(Boolean);
-        const activeRole = parsed.activeRole || parsed.role || roles?.[0] || null;
-        setUser({ ...parsed, roles, activeRole });
+        const { role: _legacyRole, ...rest } = parsed;
+        const roles =
+          Array.isArray(rest.roles) && rest.roles.length
+            ? rest.roles
+            : [rest.activeRole].filter(Boolean);
+        const activeRole = rest.activeRole || roles?.[0] || null;
+        const id = rest.id || (rest._id != null ? String(rest._id) : null);
+        setUser({ ...rest, id, roles, activeRole });
       } catch {
         localStorage.removeItem('transpak_user');
       }
@@ -69,10 +81,10 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    const role = user?.activeRole || user?.role || '';
+    const role = user?.activeRole || '';
     if (role) document.body.dataset.role = role;
     else delete document.body.dataset.role;
-  }, [user?.activeRole, user?.role]);
+  }, [user?.activeRole]);
 
   const logout = () => {
     setUser(null);

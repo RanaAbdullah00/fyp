@@ -31,7 +31,7 @@ const Support = () => {
         <h6 className="mb-2">{t('pages.support.demoSectionTitle')}</h6>
         <Card className="p-3">
           <p className="small text-muted mb-3">{t('pages.support.demoSectionBody')}</p>
-          <DemoVideoWatchButton />
+          <DemoVideoWatchButton variant="block" />
         </Card>
       </div>
 

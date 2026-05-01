@@ -1,9 +1,12 @@
 const express = require("express");
-const { body, validationResult } = require("express-validator");
+const mongoose = require("mongoose");
+const { body, param, validationResult } = require("express-validator");
 const { protect, requireAnyRole, requireActiveRole } = require("../middleware/authMiddleware");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
 const Load = require("../models/Load");
 const User = require("../models/User");
+const Bid = require("../models/Bid");
+const ShipmentTrack = require("../models/ShipmentTrack");
 
 const router = express.Router();
 
@@ -70,9 +73,160 @@ router.get("/", protect, requireAnyRole(["carrier", "admin"]), requireActiveRole
 });
 
 router.get("/mine", protect, requireAnyRole(["shipper", "admin"]), requireActiveRole("shipper"), async (req, res) => {
-  const loads = await Load.find({ shipperId: req.auth.userId }).sort({ createdAt: -1 }).limit(200);
-  return sendSuccess(res, 200, loads.map((l) => l.toJSONSafe()));
+  try {
+    const uid = new mongoose.Types.ObjectId(String(req.auth.userId));
+    const rows = await Load.aggregate([
+      { $match: { shipperId: uid } },
+      { $sort: { createdAt: -1 } },
+      { $limit: 200 },
+      {
+        $lookup: {
+          from: "bids",
+          localField: "_id",
+          foreignField: "loadId",
+          as: "_bidDocs"
+        }
+      },
+      { $addFields: { bidCount: { $size: "$_bidDocs" } } },
+      { $project: { _bidDocs: 0 } }
+    ]);
+    const data = rows.map((l) => ({
+      id: l._id.toString(),
+      code: l.code,
+      cargo: l.cargo,
+      origin: l.origin,
+      destination: l.destination,
+      weight: l.weight,
+      vehicleType: l.vehicleType,
+      expectedPrice: l.expectedPrice,
+      pickupDate: l.pickupDate,
+      deadlineHours: l.deadlineHours,
+      status: l.status,
+      shipperId: l.shipperId?.toString?.() || String(l.shipperId),
+      assignedCarrierId: l.assignedCarrierId?.toString?.() || (l.assignedCarrierId ? String(l.assignedCarrierId) : null),
+      acceptedBidId: l.acceptedBidId?.toString?.() || (l.acceptedBidId ? String(l.acceptedBidId) : null),
+      bookingReference: l.bookingReference || null,
+      createdAt: l.createdAt,
+      updatedAt: l.updatedAt,
+      bidCount: l.bidCount || 0
+    }));
+    return sendSuccess(res, 200, data);
+  } catch (err) {
+    return sendError(res, 500, err.message || "Server error");
+  }
 });
+
+const updateLoadValidators = [
+  param("id").isMongoId().withMessage("Invalid load id"),
+  body("cargo").optional().trim().isLength({ min: 2, max: 200 }).withMessage("cargo must be 2-200 chars"),
+  body("origin").optional().trim().isLength({ min: 2, max: 120 }).withMessage("origin must be 2-120 chars"),
+  body("destination").optional().trim().isLength({ min: 2, max: 120 }).withMessage("destination must be 2-120 chars"),
+  body("weight").optional({ nullable: true }).toFloat().isFloat({ min: 0 }).withMessage("weight must be a non-negative number"),
+  body("vehicleType")
+    .optional({ nullable: true })
+    .trim()
+    .isLength({ min: 2, max: 80 })
+    .withMessage("vehicleType must be 2-80 chars"),
+  body("expectedPrice")
+    .optional({ nullable: true })
+    .toFloat()
+    .isFloat({ min: 0 })
+    .withMessage("expectedPrice must be non-negative"),
+  body("price")
+    .optional({ nullable: true })
+    .toFloat()
+    .isFloat({ min: 0 })
+    .withMessage("price must be non-negative"),
+  body("pickupDate")
+    .optional({ nullable: true })
+    .trim()
+    .matches(/^\d{4}-\d{2}-\d{2}$/)
+    .withMessage("pickupDate must be YYYY-MM-DD"),
+  body("deadlineHours")
+    .optional({ nullable: true })
+    .toInt()
+    .isInt({ min: 1, max: 72 })
+    .withMessage("deadlineHours must be 1-72")
+];
+
+async function updateLoad(req, res) {
+  try {
+    const load = await Load.findById(req.params.id);
+    if (!load) return sendError(res, 404, "Not found");
+    if (String(load.shipperId) !== String(req.auth.userId)) return sendError(res, 403, "Forbidden");
+    if (load.status !== "open") return sendError(res, 409, "Only open loads can be updated");
+
+    const { cargo, origin, destination, weight, type, vehicleType, price, expectedPrice, pickupDate, deadlineHours } =
+      req.body || {};
+
+    if (cargo !== undefined) load.cargo = String(cargo).trim();
+    if (origin !== undefined) load.origin = String(origin).trim();
+    if (destination !== undefined) load.destination = String(destination).trim();
+    if (weight !== undefined) load.weight = Number(weight);
+    if (vehicleType !== undefined || type !== undefined) {
+      load.vehicleType = String(vehicleType || type || load.vehicleType).trim();
+    }
+    if (expectedPrice !== undefined || price !== undefined) {
+      load.expectedPrice = Number(expectedPrice ?? price ?? load.expectedPrice);
+    }
+    if (pickupDate !== undefined && pickupDate !== null && String(pickupDate).trim() !== "") {
+      const pickup = String(pickupDate).trim();
+      if (!isISODateOnly(pickup)) return sendError(res, 400, "pickupDate must be YYYY-MM-DD");
+      const today = startOfTodayUTC();
+      const pickupDt = new Date(`${pickup}T00:00:00.000Z`);
+      if (!(pickupDt.getTime() > today.getTime())) {
+        return sendError(res, 400, "Pickup date must be in the future");
+      }
+      load.pickupDate = pickup;
+    }
+    if (deadlineHours !== undefined && deadlineHours !== null && deadlineHours !== "") {
+      load.deadlineHours = Number(deadlineHours);
+    }
+
+    await load.save();
+    return sendSuccess(res, 200, load.toJSONSafe(), "Updated");
+  } catch (err) {
+    return sendError(res, 500, err.message || "Server error");
+  }
+}
+
+async function deleteOwnOpenLoad(req, res) {
+  try {
+    const load = await Load.findById(req.params.id);
+    if (!load) return sendError(res, 404, "Not found");
+    if (String(load.shipperId) !== String(req.auth.userId)) return sendError(res, 403, "Forbidden");
+    if (load.status !== "open") return sendError(res, 409, "Only open loads can be deleted");
+
+    await Bid.deleteMany({ loadId: load._id });
+    await ShipmentTrack.deleteMany({
+      $or: [{ loadId: load._id }, { refKey: load.code }, { refKey: load._id.toString() }]
+    });
+    await load.deleteOne();
+    return sendSuccess(res, 200, { ok: true }, "Deleted");
+  } catch (err) {
+    return sendError(res, 500, err.message || "Server error");
+  }
+}
+
+router.patch(
+  "/:id",
+  protect,
+  requireAnyRole(["shipper", "admin"]),
+  requireActiveRole("shipper"),
+  updateLoadValidators,
+  validate,
+  updateLoad
+);
+
+router.delete(
+  "/:id",
+  protect,
+  requireAnyRole(["shipper", "admin"]),
+  requireActiveRole("shipper"),
+  [param("id").isMongoId().withMessage("Invalid load id")],
+  validate,
+  deleteOwnOpenLoad
+);
 
 router.get("/:id", protect, async (req, res) => {
   const load = await Load.findById(req.params.id);

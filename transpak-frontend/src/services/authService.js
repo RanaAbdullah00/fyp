@@ -30,8 +30,8 @@ const writeDummyUsers = (users) => {
 };
 
 const normalizeUser = (u) => {
-  const roles = Array.isArray(u.roles) && u.roles.length ? u.roles : [u.role].filter(Boolean);
-  const activeRole = u.activeRole || u.role || roles[0] || 'shipper';
+  const roles = Array.isArray(u.roles) && u.roles.length ? u.roles : [u.activeRole].filter(Boolean);
+  const activeRole = u.activeRole || roles[0] || 'shipper';
   return { ...u, roles, activeRole };
 };
 

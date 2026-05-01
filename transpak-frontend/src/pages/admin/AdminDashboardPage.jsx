@@ -1,41 +1,80 @@
 import React, { useEffect, useState } from 'react';
-import Loader from '../../components/ui/Loader.jsx';
+import { SkeletonStatCards } from '../../components/ui/Skeleton.jsx';
 import { useApi } from '../../hooks/useApi.js';
+import { useLanguage } from '../../hooks/useLanguage.js';
+import { unwrapErrorMessage } from '../../utils/unwrapApi.js';
+
 const AdminDashboardPage = () => {
-  const { request, loading } = useApi();
+  const { request } = useApi();
+  const { t } = useLanguage();
   const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(null);
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
-      const data = await request({ url: '/admin/stats' });
-      setStats(data);
+      try {
+        setLoading(true);
+        setFetchError(null);
+        const data = await request({ url: '/admin/stats' });
+        if (!cancelled) setStats(data);
+      } catch (e) {
+        if (!cancelled) {
+          setFetchError(unwrapErrorMessage(e) || t('pages.admin.statsError'));
+          setStats(null);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     })();
-  }, [request]);
+    return () => {
+      cancelled = true;
+    };
+  }, [request, t]);
 
   const cards = [
-    { label: 'Total users', value: stats?.totalUsers ?? '—', subLabel: 'Registered' },
-    { label: 'Total shipments', value: stats?.totalShipments ?? stats?.totalLoads ?? '—', subLabel: 'Load records' },
-    { label: 'Active shipments', value: stats?.activeShipments ?? '—', subLabel: 'Assigned + in transit' },
-    { label: 'Total bids', value: stats?.totalBids ?? '—', subLabel: 'Placed' },
-    { label: 'Total reviews', value: stats?.totalReviews ?? '—', subLabel: 'Ratings stored' }
+    { title: t('pages.admin.usersTitle'), value: stats?.totalUsers ?? '—', hint: t('pages.admin.registeredAccounts') },
+    { title: t('pages.admin.totalBookings'), value: stats?.totalBookings ?? '—', hint: t('pages.admin.bookingsSub') },
+    { title: t('common.loads'), value: stats?.totalShipments ?? stats?.totalLoads ?? '—', hint: t('pages.admin.loadRecords') },
+    {
+      title: t('pages.admin.activeShipments'),
+      value: stats?.activeShipments ?? '—',
+      hint: t('pages.admin.assignedInTransit')
+    },
+    { title: t('pages.bids.bidManagementTitle'), value: stats?.totalBids ?? '—', hint: t('pages.admin.bidsPlaced') },
+    { title: t('pages.admin.reviewsStored'), value: stats?.totalReviews ?? '—', hint: t('pages.admin.reviewsHint') }
   ];
 
   return (
     <div className="container py-3">
-      <h5 className="mb-4">Admin dashboard</h5>
-      {loading && !stats ? (
-        <div className="d-flex justify-content-center py-5">
-          <Loader />
+      <h5 className="mb-4">{t('pages.admin.dashboardTitle')}</h5>
+
+      {loading && <SkeletonStatCards count={6} />}
+
+      {!loading && fetchError && (
+        <div className="alert alert-warning rounded-3 border-0 shadow-sm" role="alert">
+          <div className="fw-semibold mb-1">{t('pages.admin.statsError')}</div>
+          <p className="small mb-3 text-muted">{fetchError}</p>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm rounded-lg"
+            onClick={() => window.location.reload()}
+          >
+            {t('pages.admin.tryAgain')}
+          </button>
         </div>
-      ) : (
+      )}
+
+      {!loading && !fetchError && stats && (
         <div className="row g-3">
           {cards.map((c, i) => (
             <div key={i} className="col-12 col-md-6 col-xl-4">
               <div className="card border-0 shadow-sm h-100 rounded-3 overflow-hidden">
                 <div className="card-body py-4">
-                  <div className="text-muted small text-uppercase mb-1">{c.subLabel}</div>
-                  <div className="h4 fw-bold mb-0">{c.value}</div>
-                  <div className="small fw-semibold mt-1">{c.label}</div>
+                  <div className="text-muted small mb-1">{c.title}</div>
+                  <div className="h4 fw-bold mb-0 text-primary">{c.value}</div>
+                  <div className="small text-body-secondary mt-2">{c.hint}</div>
                 </div>
               </div>
             </div>
@@ -47,4 +86,3 @@ const AdminDashboardPage = () => {
 };
 
 export default AdminDashboardPage;
-

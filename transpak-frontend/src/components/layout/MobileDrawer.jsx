@@ -15,7 +15,7 @@ const MobileDrawer = ({ open, onClose }) => {
   const [showLogoutModal, setShowLogoutModal] = React.useState(false);
   const app = React.useContext(AppContext);
   const unreadCount = Array.isArray(app?.notifications) ? app.notifications.filter((n) => !n.read).length : 0;
-  const activeRole = user?.activeRole || user?.role;
+  const activeRole = user?.activeRole ?? user?.roles?.[0];
 
   if (!open) return null;
 
@@ -81,6 +81,9 @@ const MobileDrawer = ({ open, onClose }) => {
               <>
                 <NavLink to="/admin/dashboard" className={linkClass} onClick={onClose}>
                   {t('nav.adminDashboard')}
+                </NavLink>
+                <NavLink to="/admin/roles" className={linkClass} onClick={onClose}>
+                  {t('nav.roleManagement')}
                 </NavLink>
                 <NavLink to="/admin/verification" className={linkClass} onClick={onClose}>
                   {t('nav.verification')}

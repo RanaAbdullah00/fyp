@@ -8,6 +8,7 @@ const ConfirmActionModal = ({
   message,
   confirmText,
   cancelText,
+  confirmVariant = 'primary',
   onConfirm,
   onClose
 }) => {
@@ -50,7 +51,7 @@ const ConfirmActionModal = ({
           <Button variant="outline-secondary" onClick={onClose} className="px-4">
             {cancelText ?? t('ui.button.cancel')}
           </Button>
-          <Button variant="primary" onClick={handleConfirm} disabled={busy} className="px-4">
+          <Button variant={confirmVariant} onClick={handleConfirm} disabled={busy} className="px-4">
             {busy ? t('common.loading') : confirmText ?? t('ui.button.confirm')}
           </Button>
         </div>
