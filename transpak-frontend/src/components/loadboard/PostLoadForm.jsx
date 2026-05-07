@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import Button from '../ui/Button.jsx';
+import { notifyError } from '../ui/ToastProvider.jsx';
 
 const defaultForm = () => ({
   cargo: '',
@@ -37,7 +38,7 @@ const PostLoadForm = ({ onSubmit, initialValues = null, submitLabel = 'Post load
       .toISOString()
       .slice(0, 10);
     if (pickup && pickup <= todayStr) {
-      alert('Pickup date must be in the future.');
+      notifyError('Pickup date must be in the future.');
       return;
     }
     onSubmit?.(form);

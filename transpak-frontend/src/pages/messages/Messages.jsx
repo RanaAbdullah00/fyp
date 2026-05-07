@@ -347,12 +347,12 @@ const Messages = () => {
                 <button type="button" className="btn-close" aria-label="Close" onClick={() => setShowNew(false)} />
               </div>
               <div className="modal-body">
-                <label className="form-label small">Peer user ID (Mongo)</label>
+                <label className="form-label small">Peer user ID (UUID)</label>
                 <input
                   className="form-control form-control-sm mb-2"
                   value={newPeer}
                   onChange={(e) => setNewPeer(e.target.value)}
-                  placeholder="507f1f77bcf86cd799439011"
+                  placeholder="e.g. 0f1a2b3c-4d5e-678f-9012-3456789abcde"
                 />
                 <label className="form-label small">{isUrdu ? 'لوڈ (اختیاری)' : 'Load ID (optional)'}</label>
                 <input

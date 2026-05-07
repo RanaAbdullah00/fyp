@@ -1,27 +1,46 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import StatsCards from '../../components/dashboard/StatsCards.jsx';
 import ActivityFeed from '../../components/dashboard/ActivityFeed.jsx';
 import AnalyticsChart from '../../components/dashboard/AnalyticsChart.jsx';
+import { useApi } from '../../hooks/useApi.js';
 // High-level admin overview of platform metrics.
 const AdminDashboard = () => {
-  const stats = [
-    { label: 'Total shippers', value: 120 },
-    { label: 'Total carriers', value: 85 },
-    { label: 'Active disputes', value: 3 },
-    { label: 'GMV (PKR)', value: '32M', subLabel: 'Last 30 days' }
-  ];
+  const { request } = useApi();
+  const [statsRow, setStatsRow] = useState(null);
+  const activities = [];
+  const chartData = [];
 
-  const activities = [
-    { id: 1, message: 'New shipper registered: Alpha FMCG.', time: '1 hr ago' },
-    { id: 2, message: 'Carrier profile verified: Pak Logistics.', time: '3 hrs ago' }
-  ];
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await request({ method: 'GET', url: '/admin/stats' });
+        if (!cancelled) setStatsRow(data || null);
+      } catch {
+        if (!cancelled) setStatsRow(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [request]);
 
-  const chartData = [
-    { name: 'Week 1', value: 6 },
-    { name: 'Week 2', value: 9 },
-    { name: 'Week 3', value: 7 },
-    { name: 'Week 4', value: 11 }
-  ];
+  const stats = useMemo(() => {
+    if (!statsRow) {
+      return [
+        { label: 'Users', value: '—' },
+        { label: 'Loads', value: '—' },
+        { label: 'Bookings', value: '—' },
+        { label: 'Active shipments', value: '—' }
+      ];
+    }
+    return [
+      { label: 'Users', value: statsRow.totalUsers ?? 0 },
+      { label: 'Loads', value: statsRow.totalLoads ?? 0 },
+      { label: 'Bookings', value: statsRow.totalBookings ?? 0 },
+      { label: 'Active shipments', value: statsRow.activeShipments ?? 0 }
+    ];
+  }, [statsRow]);
 
   return (
     <div className="container py-3">
@@ -29,7 +48,7 @@ const AdminDashboard = () => {
       <StatsCards stats={stats} />
       <div className="mt-3 row g-2">
         <div className="col-12 col-lg-6">
-          <AnalyticsChart data={chartData} label="New users per week" />
+          <AnalyticsChart data={chartData} label="New users per week" emptyHint="Analytics will appear as the platform gets real usage." />
         </div>
         <div className="col-12 col-lg-6">
           <ActivityFeed activities={activities} />

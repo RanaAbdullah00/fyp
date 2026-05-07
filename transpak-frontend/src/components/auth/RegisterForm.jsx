@@ -234,7 +234,7 @@ const RegisterForm = ({ prefill: prefillProp = null, upgradeRole: upgradeRolePro
           <PhoneInput
             country={'pk'}
             value={form.phone}
-            onChange={(value, data) => {
+            onChange={(value) => {
               const cleaned = String(value || '').replace(/^0+/, '');
               setForm((prev) => ({ ...prev, phone: `+${cleaned}`.trim() }));
               if (errors.phone) setErrors((prev) => ({ ...prev, phone: null }));

@@ -2,48 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import LoadList from '../../components/loadboard/LoadList.jsx';
-import PaymentModal from '../../components/wallet/PaymentModal.jsx';
 import { useAuth } from '../../hooks/useAuth.js';
 import { useApi } from '../../hooks/useApi.js';
 import Loader from '../../components/ui/Loader.jsx';
 import { notifyError } from '../../components/ui/ToastProvider.jsx';
 import { normalizeLoads } from '../../adapters/normalize.js';
 
-const MOCK_LOADS = [
-  {
-    id: 'mock_1',
-    code: 'L-201',
-    cargo: 'Textile rolls',
-    origin: 'Lahore',
-    destination: 'Karachi',
-    weight: 18,
-    vehicleType: 'Trailer',
-    distance: 1210,
-    expectedPrice: 160000,
-    pickupDate: 'Today',
-    status: 'open'
-  },
-  {
-    id: 'mock_2',
-    code: 'L-202',
-    cargo: 'Rice bags',
-    origin: 'Multan',
-    destination: 'Islamabad',
-    weight: 12,
-    vehicleType: 'Truck',
-    distance: 540,
-    expectedPrice: 78000,
-    pickupDate: 'Tomorrow',
-    status: 'open'
-  }
-];
-
 // Marketplace-style list of loads with filters.
 const AvailableLoads = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [showPayment, setShowPayment] = useState(false);
-  const [selectedLoad, setSelectedLoad] = useState(null);
 
   const [filters, setFilters] = useState({
     origin: '',
@@ -55,7 +23,7 @@ const AvailableLoads = () => {
   });
   const [loads, setLoads] = useState([]);
 
-  const { request, loading: apiLoading, error: apiError } = useApi();
+  const { request, loading: apiLoading } = useApi();
 
   useEffect(() => {
     const fetchAvailableLoads = async () => {
@@ -76,7 +44,7 @@ const AvailableLoads = () => {
         setLoads(normalizeLoads(data));
       } catch (err) {
         notifyError('Failed to load available loads');
-        setLoads(MOCK_LOADS);
+        setLoads([]);
       }
     };
 
@@ -85,18 +53,9 @@ const AvailableLoads = () => {
 
   const handleBid = (load) => {
     const activeRole = user?.activeRole ?? user?.roles?.[0];
-    if (activeRole === 'carrier') {
-      navigate('/bids/place', { state: { load } });
-      return;
-    }
-    setSelectedLoad(load);
-    setShowPayment(true);
-  };
-
-  const handlePaymentConfirm = (data) => {
-    console.log('Simulated bid & payment', selectedLoad, data);
-    setShowPayment(false);
-    alert(`Simulated payment of ${data.amount} PKR via ${data.provider} for load ${selectedLoad?.code}.`);
+    // For demo: carriers bid/negotiate; shippers should manage their own posted loads.
+    if (activeRole === 'carrier') return navigate('/bids/place', { state: { load } });
+    return navigate(`/loads/${encodeURIComponent(load.id)}`);
   };
 
   const handleFilterChange = (e) => {
@@ -181,13 +140,6 @@ const AvailableLoads = () => {
         </div>
       ) : (
         <LoadList loads={loads} onBid={handleBid} />
-      )}
-      {showPayment && selectedLoad && (
-        <PaymentModal
-          maxAmount={selectedLoad.expectedPrice}
-          onClose={() => setShowPayment(false)}
-          onConfirm={handlePaymentConfirm}
-        />
       )}
     </div>
   );

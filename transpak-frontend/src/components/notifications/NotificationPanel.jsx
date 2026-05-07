@@ -7,7 +7,10 @@ import api from '../../services/api.js';
 // Panel listing all notifications with read state.
 const NotificationPanel = () => {
   const app = React.useContext(AppContext);
-  const notifications = Array.isArray(app?.notifications) ? app.notifications : [];
+  const notifications = useMemo(
+    () => (Array.isArray(app?.notifications) ? app.notifications : []),
+    [app?.notifications]
+  );
   const markNotificationRead = app?.markNotificationRead || (() => {});
   const [persisted, setPersisted] = useState([]);
 
@@ -37,12 +40,12 @@ const NotificationPanel = () => {
     const byKey = new Map();
     persisted.forEach((n) => {
       const id = String(n.id || n._id || '');
-      if (/^[a-f0-9]{24}$/i.test(id)) byKey.set(id, n);
+      if (id) byKey.set(id, n);
       else byKey.set(`p-${n.message}-${n.createdAt}`, n);
     });
     notifications.forEach((n) => {
       const id = String(n.id || n._id || '');
-      if (/^[a-f0-9]{24}$/i.test(id)) {
+      if (id) {
         if (!byKey.has(id)) byKey.set(id, n);
         return;
       }
@@ -57,7 +60,7 @@ const NotificationPanel = () => {
   const handleOpen = (n) => {
     markNotificationRead(n._id || n.id);
     const id = String(n.id || n._id || '');
-    if (/^[a-f0-9]{24}$/i.test(id)) {
+    if (id) {
       api
         .patch(`/notifications/${id}/read`)
         .then(() => window.dispatchEvent(new CustomEvent('tp_notifications_read')))

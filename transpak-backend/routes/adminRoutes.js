@@ -2,32 +2,20 @@ const express = require("express");
 const { body, param, validationResult } = require("express-validator");
 const { protect, requireRole } = require("../middleware/authMiddleware");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
-const User = require("../models/User");
-const Load = require("../models/Load");
-const Bid = require("../models/Bid");
-const Dispute = require("../models/Dispute");
-const ShipmentTrack = require("../models/ShipmentTrack");
-const escrowService = require("../services/escrowService");
-const shipmentTrackService = require("../services/shipmentTrackService");
-const { normalizeShipmentStatus, validateShipmentTransition } = require("../utils/shipmentStatus");
-const { loadStatusFromCanonicalTrack } = require("../utils/shipmentLoadSync");
-const uploadDemo = require("../middleware/uploadDemoVideo");
-const { adminUpload } = require("../controllers/demoVideoController");
-const adminController = require("../controllers/adminController");
-
-/** Map admin UI / legacy body values to canonical next status (before validateShipmentTransition). */
-function resolveAdminNextCanonical(currentCanonical, bodyStatus) {
-  const raw = String(bodyStatus || "").trim();
-  if (!raw) return null;
-  const legacy = raw.toLowerCase();
-  if (legacy === "pending") return "booked";
-  if (legacy === "in_transit" || legacy.replace(/\s+/g, "") === "intransit") {
-    return currentCanonical === "booked" ? "pickedup" : "intransit";
-  }
-  return normalizeShipmentStatus(raw);
-}
+const { query, getPool } = require("../db/pool");
+const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
+const { adminUpload: uploadDemoVideo } = require("../src/controllers/demoVideoController");
+const disputeController = require("../src/controllers/disputeController");
 
 const router = express.Router();
+
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    String(value || "")
+  );
+}
 
 function validate(req, res, next) {
   const errors = validationResult(req);
@@ -41,179 +29,141 @@ function validate(req, res, next) {
 
 router.use(protect, requireRole("admin"));
 
-router.get("/stats", adminController.getStats);
-router.get("/users", adminController.getUsers);
-router.get("/loads", adminController.getLoads);
+const uploadsDir = path.join(__dirname, "..", "uploads");
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
-router.delete("/user/:id", [param("id").isMongoId().withMessage("Invalid user id")], validate, adminController.deleteUser);
+const demoVideoUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, uploadsDir),
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname || "") || ".mp4";
+      cb(null, `demo_video_${Date.now()}${ext}`);
+    }
+  }),
+  limits: { fileSize: 50 * 1024 * 1024 }
+});
 
-router.patch(
-  "/user/:id/role",
-  ...adminController.patchUserRoleValidators,
+router.post("/demo-video", demoVideoUpload.single("video"), uploadDemoVideo);
+
+router.get("/disputes", disputeController.adminList);
+router.patch("/disputes/:id/resolve", disputeController.adminResolve);
+
+router.get("/stats", async (req, res) => {
+  try {
+    const [
+      totalUsers,
+      totalLoads,
+      totalBids,
+      activeShipments,
+      totalReviews,
+      totalBookings
+    ] = await Promise.all([
+      query(`SELECT COUNT(*)::int AS c FROM users`),
+      query(`SELECT COUNT(*)::int AS c FROM loads`),
+      query(`SELECT COUNT(*)::int AS c FROM bids`),
+      query(`SELECT COUNT(*)::int AS c FROM shipments WHERE status IN ('booked','pickedup','intransit','delivered')`),
+      query(`SELECT COUNT(*)::int AS c FROM ratings`),
+      query(`SELECT COUNT(*)::int AS c FROM bookings`)
+    ]);
+    return sendSuccess(res, 200, {
+      totalUsers: totalUsers.rows[0].c,
+      totalLoads: totalLoads.rows[0].c,
+      totalShipments: totalLoads.rows[0].c,
+      totalBookings: totalBookings.rows[0].c,
+      activeShipments: activeShipments.rows[0].c,
+      totalBids: totalBids.rows[0].c,
+      totalReviews: totalReviews.rows[0].c
+    });
+  } catch (err) {
+    return sendError(res, 500, err.message || "Server error");
+  }
+});
+
+router.get("/users", async (req, res) => {
+  const { rows } = await query(
+    `SELECT id, COALESCE(full_name, email) AS name, email,
+            cnic_number AS cnic, roles, blocked, verified
+     FROM users
+     ORDER BY created_at DESC
+     LIMIT 500`
+  );
+  return sendSuccess(res, 200, rows);
+});
+
+router.get("/loads", async (req, res) => {
+  const { rows } = await query(
+    `SELECT id, code, cargo, origin, destination,
+            pickup_date AS "pickupDate", status,
+            created_at AS "createdAt", updated_at AS "updatedAt"
+     FROM loads
+     ORDER BY created_at DESC
+     LIMIT 500`
+  );
+  return sendSuccess(res, 200, rows);
+});
+
+router.delete(
+  "/user/:id",
+  [param("id").custom((v) => (isUuid(v) ? true : (() => { throw new Error("Invalid user id"); })()))],
   validate,
-  adminController.patchUserRole
+  async (req, res) => {
+    const targetId = String(req.params.id);
+    if (targetId === String(req.auth.userId)) return sendError(res, 403, "Cannot delete your own account");
+
+    const { rows: roleRows } = await query(`SELECT roles FROM users WHERE id = $1`, [targetId]);
+    if (!roleRows[0]) return sendError(res, 404, "Not found");
+    const roles = Array.isArray(roleRows[0].roles) ? roleRows[0].roles : [];
+    if (roles.includes("admin")) return sendError(res, 403, "Cannot delete an admin account");
+
+    await query(`DELETE FROM users WHERE id = $1`, [targetId]);
+    return sendSuccess(res, 200, { ok: true }, "User deleted");
+  }
 );
 
 router.patch(
   "/users/:id/block",
-  [param("id").isMongoId().withMessage("Invalid user id"), body("blocked").isBoolean().withMessage("blocked must be boolean")],
+  [
+    param("id").custom((v) => (isUuid(v) ? true : (() => { throw new Error("Invalid user id"); })())),
+    body("blocked").isBoolean().withMessage("blocked must be boolean")
+  ],
   validate,
   async (req, res) => {
   const { blocked } = req.body || {};
-  const user = await User.findById(req.params.id);
-  if (!user) return sendError(res, 404, "Not found");
-  user.blocked = Boolean(blocked);
-  await user.save();
-  return sendSuccess(res, 200, { ok: true, user: user.toAuthJSON() });
+  const { rows } = await query(
+    `UPDATE users SET blocked = $2, updated_at = now()
+     WHERE id = $1
+     RETURNING id, COALESCE(full_name, email) AS name, email, cnic_number AS cnic, roles, blocked, verified`,
+    [req.params.id, Boolean(blocked)]
+  );
+  if (!rows[0]) return sendError(res, 404, "Not found");
+  return sendSuccess(res, 200, { ok: true, user: rows[0] });
 });
 
 router.patch(
   "/users/:id/verify",
-  [param("id").isMongoId().withMessage("Invalid user id"), body("verified").isBoolean().withMessage("verified must be boolean")],
+  [
+    param("id").custom((v) => (isUuid(v) ? true : (() => { throw new Error("Invalid user id"); })())),
+    body("verified").isBoolean().withMessage("verified must be boolean")
+  ],
   validate,
   async (req, res) => {
   const { verified } = req.body || {};
-  const user = await User.findById(req.params.id);
-  if (!user) return sendError(res, 404, "Not found");
-  user.verified = Boolean(verified);
-  await user.save();
-  return sendSuccess(res, 200, { ok: true, user: user.toAuthJSON() });
+  const { rows } = await query(
+    `UPDATE users SET verified = $2, updated_at = now()
+     WHERE id = $1
+     RETURNING id, COALESCE(full_name, email) AS name, email, cnic_number AS cnic, roles, blocked, verified`,
+    [req.params.id, Boolean(verified)]
+  );
+  if (!rows[0]) return sendError(res, 404, "Not found");
+  return sendSuccess(res, 200, { ok: true, user: rows[0] });
 });
 
 router.delete("/loads/:id", async (req, res) => {
-  const load = await Load.findById(req.params.id);
-  if (!load) return sendError(res, 404, "Not found");
-  await Bid.deleteMany({ loadId: load._id });
-  await ShipmentTrack.deleteMany({
-    $or: [{ loadId: load._id }, { refKey: load.code }, { refKey: load._id.toString() }]
-  });
-  await load.deleteOne();
+  const id = String(req.params.id || "");
+  if (!isUuid(id)) return sendError(res, 400, "Invalid load id");
+  const { rows } = await query(`DELETE FROM loads WHERE id = $1 RETURNING id`, [id]);
+  if (!rows[0]) return sendError(res, 404, "Not found");
   return sendSuccess(res, 200, { ok: true });
 });
-
-router.get("/shipments", async (req, res) => {
-  const loads = await Load.find({ status: { $in: ["assigned", "in_transit", "delivered"] } })
-    .sort({ updatedAt: -1 })
-    .limit(500);
-  const data = loads.map((l) => ({
-    id: l._id.toString(),
-    code: l.code,
-    origin: l.origin,
-    destination: l.destination,
-    status: l.status === "assigned" ? "pending" : l.status
-  }));
-  return sendSuccess(res, 200, data);
-});
-
-router.patch(
-  "/shipments/:id/status",
-  [
-    param("id").isMongoId().withMessage("Invalid shipment id"),
-    body("status")
-      .trim()
-      .isLength({ min: 1, max: 40 })
-      .withMessage("status is required")
-  ],
-  validate,
-  async (req, res) => {
-    try {
-      const load = await Load.findById(req.params.id);
-      if (!load) return sendError(res, 404, "Not found");
-
-      let doc =
-        (await ShipmentTrack.findOne({ loadId: load._id })) ||
-        (await ShipmentTrack.findOne({ refKey: load.code })) ||
-        (await shipmentTrackService.getOrCreateTrack(load._id.toString()));
-      if (!doc.loadId) {
-        doc.loadId = load._id;
-        await shipmentTrackService.saveTrack(doc);
-      }
-
-      const current = doc.tracking?.status;
-      const currentCanon = normalizeShipmentStatus(current) || "posted";
-      const desired = resolveAdminNextCanonical(currentCanon, req.body.status);
-      if (!desired) return sendError(res, 400, "Invalid status");
-
-      const check = validateShipmentTransition(current, desired);
-      if (!check.ok) return sendError(res, 400, check.message);
-
-      const canonical = check.canonical;
-      if (check.same) {
-        return sendSuccess(res, 200, { ok: true, trackingStatus: canonical, loadStatus: load.status });
-      }
-
-      doc.tracking = { ...(doc.tracking || {}), status: canonical };
-      doc.history = Array.isArray(doc.history) ? doc.history : [];
-      doc.history.unshift({
-        event: `Status: ${canonical} (admin)`,
-        time: new Date().toLocaleString(),
-        location: "System"
-      });
-      await shipmentTrackService.saveTrack(doc);
-
-      const nextLoadStatus = loadStatusFromCanonicalTrack(load, canonical);
-      if (nextLoadStatus) {
-        load.status = nextLoadStatus;
-        await load.save();
-      }
-
-      if (canonical === "delivered") {
-        await escrowService.transitionEscrowByBooking(load.bookingReference, ["held"], "released");
-      }
-
-      return sendSuccess(res, 200, { ok: true, trackingStatus: canonical, loadStatus: load.status });
-    } catch (err) {
-      return sendError(res, 500, err.message || "Server error");
-    }
-  }
-);
-
-router.get("/disputes", async (req, res) => {
-  const list = await Dispute.find({}).sort({ createdAt: -1 }).limit(500);
-  return sendSuccess(
-    res,
-    200,
-    list.map((d) => ({
-      id: d._id.toString(),
-      shipmentId: d.shipmentId?.toString?.() || null,
-      loadCode: d.loadCode || null,
-      reason: d.reason,
-      status: d.status,
-      raisedBy: d.raisedBy?.toString?.() || null,
-      createdAt: d.createdAt,
-      updatedAt: d.updatedAt
-    }))
-  );
-});
-
-router.patch(
-  "/disputes/:id/resolve",
-  [
-    param("id").isMongoId().withMessage("Invalid dispute id"),
-    body("status").optional().isIn(["resolved", "rejected"]).withMessage("Invalid status")
-  ],
-  validate,
-  async (req, res) => {
-  const next = String(req.body?.status || "resolved").trim().toLowerCase();
-  if (!["resolved", "rejected"].includes(next)) return sendError(res, 400, "Invalid status");
-  const dispute = await Dispute.findById(req.params.id);
-  if (!dispute) return sendError(res, 404, "Not found");
-  dispute.status = next;
-  dispute.resolvedBy = req.auth.userId;
-  dispute.resolvedAt = new Date();
-  await dispute.save();
-  const load = await Load.findById(dispute.shipmentId).select("bookingReference");
-  if (load?.bookingReference) {
-    await escrowService.transitionEscrowByBooking(load.bookingReference, ["held", "released"], "refunded");
-  }
-  return sendSuccess(res, 200, { ok: true });
-});
-
-router.post("/demo-video", (req, res, next) => {
-  uploadDemo.single("video")(req, res, (err) => {
-    if (err) return sendError(res, 400, err.message || "Upload failed");
-    next();
-  });
-}, adminUpload);
 
 module.exports = router;

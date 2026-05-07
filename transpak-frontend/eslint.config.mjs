@@ -24,9 +24,20 @@ export default [
     rules: {
       ...reactHooks.configs.recommended.rules,
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+      // Count JSX component identifiers as "used" (prevents false no-unused-vars on Route/Routes/etc).
+      'react/jsx-uses-vars': 'warn',
       'react/react-in-jsx-scope': 'off',
       'react/prop-types': 'off',
-      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }]
+      // Too noisy for FYP/demo; keep correctness via hooks lint + build.
+      'react-refresh/only-export-components': 'off',
+      'no-unused-vars': [
+        'warn',
+        {
+          argsIgnorePattern: '^(_|err|error|e)$',
+          varsIgnorePattern: '^(_|React)',
+          caughtErrorsIgnorePattern: '^(_|err|error|e)$'
+        }
+      ]
     },
     settings: { react: { version: 'detect' } }
   }

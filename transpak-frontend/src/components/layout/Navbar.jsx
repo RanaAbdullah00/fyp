@@ -19,11 +19,9 @@ const Navbar = () => {
   const app = React.useContext(AppContext);
   const [serverUnread, setServerUnread] = useState(0);
   const ephemeralUnread = Array.isArray(app?.notifications)
-    ? app.notifications.filter(
-        (n) => !(n.read || n.isRead) && !/^[a-f0-9]{24}$/i.test(String(n.id || n._id || ''))
-      ).length
+    ? app.notifications.filter((n) => !(n.read || n.isRead)).length
     : 0;
-  const unreadCount = serverUnread + ephemeralUnread;
+  const unreadCount = Math.max(serverUnread, ephemeralUnread);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
@@ -35,7 +33,7 @@ const Navbar = () => {
       try {
         const res = await api.get('/notifications/unread-count');
         const body = res.data;
-        const n = typeof body?.unreadCount === 'number' ? body.unreadCount : 0;
+        const n = typeof body?.count === 'number' ? body.count : 0;
         setServerUnread(n);
       } catch {
         setServerUnread(0);

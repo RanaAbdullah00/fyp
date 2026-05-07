@@ -1,19 +1,21 @@
 const express = require("express");
-const mongoose = require("mongoose");
 const { protect, requireAnyRole, requireActiveRole } = require("../middleware/authMiddleware");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
 const { normalizeShipmentStatus, validateShipmentTransition } = require("../utils/shipmentStatus");
-const Load = require("../models/Load");
-const escrowService = require("../services/escrowService");
 const {
   shipmentIdParam,
   shipmentStatusPutValidators,
   handleValidationErrors
 } = require("../middleware/validateShipmentBody");
-const shipmentTrackService = require("../services/shipmentTrackService");
-const { loadStatusFromCanonicalTrack } = require("../utils/shipmentLoadSync");
+const { query } = require("../db/pool");
 
 const router = express.Router();
+
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    String(value || "")
+  );
+}
 
 function validLatLng(pair) {
   return (
@@ -41,26 +43,9 @@ function attachLocationFields(req, tracking) {
 }
 
 function toTrackResponse(req, doc) {
-  const raw = {
-    tracking: doc.tracking || {},
-    history: doc.history || [],
-    liveTrackingMap: doc.liveTrackingMap || {}
-  };
+  const raw = doc || {};
   const tracking = attachLocationFields(req, raw.tracking || {});
-  return {
-    ...raw,
-    tracking
-  };
-}
-
-async function resolveLoadForRef(refKey) {
-  const key = String(refKey || "").trim();
-  if (!key) return null;
-  if (mongoose.isValidObjectId(key)) {
-    const byId = await Load.findById(key).select("_id shipperId assignedCarrierId");
-    if (byId) return byId;
-  }
-  return Load.findOne({ code: key }).select("_id shipperId assignedCarrierId");
+  return { ...raw, tracking };
 }
 
 function assertTrackAccessOrThrow(load, auth, { allowCarrierStatusWrite = false } = {}) {
@@ -69,11 +54,60 @@ function assertTrackAccessOrThrow(load, auth, { allowCarrierStatusWrite = false 
   if (isAdmin) return;
 
   const uid = String(auth?.userId || "");
-  const isShipper = String(load?.shipperId || "") === uid;
-  const isAssignedCarrier = String(load?.assignedCarrierId || "") === uid;
+  const isShipper = String(load?.shipper_id || "") === uid;
+  const isAssignedCarrier = String(load?.assigned_carrier_id || "") === uid;
   if (isShipper) return;
   if (allowCarrierStatusWrite && isAssignedCarrier) return;
   throw Object.assign(new Error("Forbidden"), { statusCode: 403 });
+}
+
+async function resolveLoadForRef(refKey) {
+  const key = String(refKey || "").trim();
+  if (!key) return null;
+  if (isUuid(key)) {
+    const { rows } = await query(
+      `SELECT id, code, shipper_id, assigned_carrier_id, booking_reference
+       FROM loads
+       WHERE id = $1`,
+      [key]
+    );
+    if (rows[0]) return rows[0];
+  }
+  const { rows } = await query(
+    `SELECT id, code, shipper_id, assigned_carrier_id, booking_reference
+     FROM loads
+     WHERE code = $1`,
+    [key]
+  );
+  return rows[0] || null;
+}
+
+async function getOrCreateShipment(loadId) {
+  const { rows } = await query(
+    `INSERT INTO shipments (load_id, status, location_unavailable)
+     VALUES ($1, 'posted', true)
+     ON CONFLICT (load_id)
+     DO UPDATE SET load_id = EXCLUDED.load_id
+     RETURNING id, load_id, status, current_lat, current_lng, location_unavailable, updated_at`,
+    [loadId]
+  );
+  return rows[0];
+}
+
+async function getShipmentHistory(shipmentId) {
+  const { rows } = await query(
+    `SELECT status, note, location_label, created_at
+     FROM shipment_events
+     WHERE shipment_id = $1
+     ORDER BY created_at DESC
+     LIMIT 50`,
+    [shipmentId]
+  );
+  return rows.map((r) => ({
+    event: `Status: ${r.status}`,
+    time: new Date(r.created_at).toLocaleString(),
+    location: r.location_label || r.note || "System"
+  }));
 }
 
 router.get(
@@ -88,12 +122,23 @@ router.get(
       if (!load) return sendError(res, 404, "Not found");
       assertTrackAccessOrThrow(load, req.auth, { allowCarrierStatusWrite: false });
 
-      const doc = await shipmentTrackService.getOrCreateTrack(req.params.id);
-      if (!doc.loadId) {
-        doc.loadId = load._id;
-        await shipmentTrackService.saveTrack(doc);
-      }
-      return sendSuccess(res, 200, toTrackResponse(req, doc));
+      const shipment = await getOrCreateShipment(load.id);
+      const history = await getShipmentHistory(shipment.id);
+      const tracking = {
+        status: normalizeShipmentStatus(shipment.status) || "posted",
+        currentLocation:
+          shipment.location_unavailable || shipment.current_lat == null || shipment.current_lng == null
+            ? null
+            : [Number(shipment.current_lat), Number(shipment.current_lng)],
+        locationUnavailable: Boolean(shipment.location_unavailable)
+      };
+      const payload = toTrackResponse(req, {
+        refKey: load.code || load.id,
+        tracking,
+        history,
+        liveTrackingMap: { coordinates: [] }
+      });
+      return sendSuccess(res, 200, payload);
     } catch (err) {
       const status = err.statusCode || 500;
       return sendError(res, status, err.message || "Server error");
@@ -118,45 +163,50 @@ router.put(
       const { status } = req.body || {};
       const nextRaw = String(status || "").trim();
 
-      const doc = await shipmentTrackService.getOrCreateTrack(req.params.id);
-      const current = doc.tracking?.status;
+      const shipment = await getOrCreateShipment(load.id);
+      const current = shipment.status;
       const check = validateShipmentTransition(current, nextRaw);
       if (!check.ok) return sendError(res, 400, check.message);
 
       const canonical = check.canonical;
       if (check.same) {
-        return sendSuccess(res, 200, toTrackResponse(req, doc));
+        const history = await getShipmentHistory(shipment.id);
+        return sendSuccess(
+          res,
+          200,
+          toTrackResponse(req, {
+            refKey: load.code || load.id,
+            tracking: { status: canonical, locationUnavailable: Boolean(shipment.location_unavailable) },
+            history,
+            liveTrackingMap: { coordinates: [] }
+          })
+        );
       }
 
-      doc.tracking = {
-        ...(doc.tracking || {}),
-        status: canonical
-      };
-      doc.history = Array.isArray(doc.history) ? doc.history : [];
-      doc.history.unshift({
-        event: `Status: ${canonical}`,
-        time: new Date().toLocaleString(),
-        location: "System"
-      });
+      await query(
+        `UPDATE shipments
+         SET status = $2, updated_at = now()
+         WHERE load_id = $1`,
+        [load.id, canonical]
+      );
+      await query(
+        `INSERT INTO shipment_events (shipment_id, status, note, location_label)
+         VALUES ($1, $2, $3, $4)`,
+        [shipment.id, canonical, null, "System"]
+      );
 
-      await shipmentTrackService.saveTrack(doc);
-
-      const loadFull = await Load.findById(load._id);
-      if (loadFull) {
-        const nextLoadStatus = loadStatusFromCanonicalTrack(loadFull, canonical);
-        if (nextLoadStatus) {
-          loadFull.status = nextLoadStatus;
-          await loadFull.save();
-        }
+      // Keep loads.status loosely in sync for list screens.
+      const nextLoadStatus = canonical === "booked" ? "booked" : canonical === "closed" ? "closed" : load.status;
+      if (nextLoadStatus && nextLoadStatus !== load.status) {
+        await query(`UPDATE loads SET status = $2, updated_at = now() WHERE id = $1`, [load.id, nextLoadStatus]);
       }
 
-      if (canonical === "delivered") {
-        await escrowService.transitionEscrowByBooking(load.bookingReference, ["held"], "released");
-      }
-      const payload = toTrackResponse(req, doc);
-      await shipmentTrackService.emitTrackingToParties(load._id, {
-        refKey: doc.refKey,
-        ...payload
+      const history = await getShipmentHistory(shipment.id);
+      const payload = toTrackResponse(req, {
+        refKey: load.code || load.id,
+        tracking: { status: canonical, locationUnavailable: Boolean(shipment.location_unavailable) },
+        history,
+        liveTrackingMap: { coordinates: [] }
       });
       return sendSuccess(res, 200, payload);
     } catch (err) {

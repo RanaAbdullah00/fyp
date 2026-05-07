@@ -1,4 +1,4 @@
-import React, { createContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useEffect, useMemo, useState } from 'react';
 import { translations } from '../i18n/translations.js';
 
 const STORAGE_KEY = 'transpak_lang';
@@ -28,7 +28,7 @@ export const LanguageProvider = ({ children }) => {
     localStorage.setItem(STORAGE_KEY, safe);
   };
 
-  const t = (key, vars = {}) => {
+  const t = useCallback((key, vars = {}) => {
     const parts = String(key).split('.').filter(Boolean);
     let cur = translations?.[lang];
     for (const p of parts) {
@@ -40,7 +40,7 @@ export const LanguageProvider = ({ children }) => {
     if (typeof cur !== 'string') return cur;
     // Lightweight {{var}} interpolation
     return cur.replace(/\{\{(\w+)\}\}/g, (_, k) => (vars[k] != null ? String(vars[k]) : `{{${k}}}`));
-  };
+  }, [lang]);
 
   const value = useMemo(
     () => ({
@@ -50,7 +50,7 @@ export const LanguageProvider = ({ children }) => {
       toggleLanguage,
       setLanguage
     }),
-    [lang]
+    [lang, t]
   );
 
   return (

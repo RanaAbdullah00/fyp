@@ -4,7 +4,6 @@ import {
   FaTachometerAlt,
   FaPlusCircle,
   FaTruck,
-  FaWallet,
   FaListUl,
   FaGavel,
   FaCheckCircle,
@@ -40,7 +39,13 @@ const Sidebar = () => {
     <aside className="d-none d-md-block sidebar-fixed sidebar-aside d-flex flex-column">
       <nav className="nav flex-column p-3 small flex-grow-1">
         {user && (
-          <div className="d-flex align-items-center gap-2 mb-3 px-2">
+          <NavLink
+            to="/profile"
+            className={({ isActive }) =>
+              `d-flex align-items-center gap-2 mb-3 px-2 text-decoration-none rounded-3 py-2 ${isActive ? 'bg-light' : ''}`
+            }
+            title="Profile"
+          >
             <div
               className="rounded-circle overflow-hidden border flex-shrink-0"
               style={{ width: 36, height: 36, borderColor: 'var(--pak-border)' }}
@@ -53,9 +58,13 @@ const Sidebar = () => {
             </div>
             <div className="flex-grow-1 min-w-0">
               <div className="fw-semibold text-truncate small">{user.name || 'User'}</div>
-              {user.profileComplete && <span className="badge bg-success" style={{ fontSize: 9 }}>✓</span>}
+              {user.profileComplete ? (
+                <span className="badge bg-success" style={{ fontSize: 9 }}>Profile Completed</span>
+              ) : (
+                <span className="badge bg-danger" style={{ fontSize: 9 }}>Incomplete Profile</span>
+              )}
             </div>
-          </div>
+          </NavLink>
         )}
         <NavLink to={dashboardPath} className={navLinkClass} end>
           <FaTachometerAlt />
@@ -149,10 +158,6 @@ const Sidebar = () => {
             </NavLink>
           </>
         )}
-        <NavLink to="/wallet" className={navLinkClass}>
-          <FaWallet />
-          {t('common.wallet')}
-        </NavLink>
         {!isAdmin && (
           <NavLink to="/support" className={navLinkClass}>
             <FaQuestionCircle />

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
 import Loader from '../../components/ui/Loader.jsx';
@@ -32,14 +32,14 @@ const TruckDetails = () => {
   const [form, setForm] = useState(emptyForm);
   const editing = useMemo(() => Boolean(form.id), [form.id]);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     const data = await request({ method: 'GET', url: '/trucks/mine' });
     setTrucks(Array.isArray(data) ? data : []);
-  };
+  }, [request]);
 
   useEffect(() => {
     refresh().catch(() => {});
-  }, []);
+  }, [refresh]);
 
   const onChange = (e) => setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
 

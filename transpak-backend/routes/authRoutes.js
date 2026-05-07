@@ -3,11 +3,11 @@ const { body } = require("express-validator");
 const rateLimit = require("express-rate-limit");
 const { register, login, profile, updateActiveRole } = require("../controllers/authController");
 const { protect } = require("../middleware/authMiddleware");
-const User = require("../models/User");
+const userRepo = require("../repositories/userRepo");
 
 const router = express.Router();
 
-const allowedRoles = User.ALLOWED_ROLES || ["shipper", "carrier", "admin"];
+const allowedRoles = userRepo.ALLOWED_ROLES;
 const registerableRoles = allowedRoles.filter((r) => r !== "admin");
 
 // Basic brute-force protection for login
@@ -39,7 +39,10 @@ router.post(
         }
         return true;
       }),
-    body("CNIC").trim().isLength({ min: 5 }).withMessage("CNIC is required"),
+    body("CNIC")
+      .trim()
+      .matches(/^[0-9]{5}-[0-9]{7}-[0-9]{1}$/)
+      .withMessage("CNIC must be XXXXX-XXXXXXX-X"),
     body("password")
       .isLength({ min: 8 })
       .withMessage("Password must be at least 8 characters"),

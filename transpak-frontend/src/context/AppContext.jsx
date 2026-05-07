@@ -13,10 +13,6 @@ import { useAuth } from '../hooks/useAuth.js';
 
 export const AppContext = createContext(null);
 
-function isLikelyMongoId(v) {
-  return typeof v === 'string' && /^[a-f\d]{24}$/i.test(v.trim());
-}
-
 export const AppProvider = ({ children }) => {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState([]);
@@ -62,8 +58,7 @@ export const AppProvider = ({ children }) => {
     });
 
     const token = localStorage.getItem('transpak_token');
-    const alreadyPersisted = isLikelyMongoId(nid);
-    if (token && normalized?.message && !alreadyPersisted) {
+    if (token && normalized?.message) {
       api
         .post('/notifications', {
           title: String(normalized.type || 'Update').slice(0, 120),

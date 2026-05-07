@@ -20,8 +20,10 @@ function getJwtExpiresIn() {
  */
 function signToken(user) {
   const secret = getJwtSecret();
+  const userId = user?.id || user?._id;
+  if (!userId) throw new Error("TransPak auth: cannot sign token without user id");
   const payload = {
-    sub: user._id.toString(),
+    sub: String(userId),
     roles: user.roles,
     activeRole: user.activeRole
   };

@@ -56,7 +56,7 @@ const ReviewsSection = ({ userId }) => {
               className="form-control form-control-sm"
               value={form.toUser}
               onChange={(e) => setForm((f) => ({ ...f, toUser: e.target.value }))}
-              placeholder="MongoDB user id"
+              placeholder="User ID (UUID)"
               required
             />
           </div>

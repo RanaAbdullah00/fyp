@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Button from '../../components/ui/Button.jsx';
 import Loader from '../../components/ui/Loader.jsx';
 import Card from '../../components/ui/Card.jsx';
-import { notifySuccess, notifyError } from '../../components/ui/ToastProvider.jsx';
+import { notifyError } from '../../components/ui/ToastProvider.jsx';
 
 // AddTruck form for carriers to register fleet vehicles.
 const AddTruck = () => {
@@ -23,12 +23,8 @@ const AddTruck = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      // TODO: API call to fleetService.addTruck(form)
-      console.log('Add truck payload:', form);
-      notifySuccess('Truck added successfully!');
-      setForm({ type: '', capacity: '', licensePlate: '', driverName: '', phone: '' });
-    } catch (err) {
-      notifyError('Failed to add truck. Please try again.');
+      // Fleet is managed via the Carrier → Truck details screen (uploads + verification).
+      notifyError('Please use Carrier → Truck details to add trucks with documents.');
     } finally {
       setLoading(false);
     }

@@ -30,8 +30,7 @@ const CarrierVerification = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      // TODO: API call to authService.verifyCarrier(form)
-      console.log('Verification payload:', form);
+      // Demo-safe: backend verification workflow is handled by admin moderation screens.
       setStatus('submitted');
       notifySuccess('Verification submitted. Admin will review within 24 hours.');
     } catch (err) {

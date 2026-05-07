@@ -39,7 +39,7 @@ const MyBids = () => {
       notifyError(t('pages.bids.loadBidsFailed'));
       setBids([]);
     }
-  }, [request]);
+  }, [request, t]);
 
   useEffect(() => {
     fetchBidsData();

@@ -664,13 +664,21 @@ body.dark-theme .tp-auth-v2__glass .tp-role-toggle__btn--inactive:hover {
 }
 
 .btn-primary {
-  background-color: var(--pak-primary) !important;
-  border-color: var(--pak-primary) !important;
+  background: linear-gradient(180deg, var(--pak-primary) 0%, var(--pak-primary-dark) 100%) !important;
+  border-color: var(--pak-primary-dark) !important;
+  box-shadow: 0 10px 22px rgba(22, 163, 74, 0.18), 0 0 0 1px rgba(22, 163, 74, 0.08) inset;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, border-color 0.15s ease;
 }
 
 .btn-primary:hover {
-  background-color: var(--pak-primary-hover) !important;
-  border-color: var(--pak-primary-hover) !important;
+  background: linear-gradient(180deg, var(--pak-primary-hover) 0%, #166534 100%) !important;
+  border-color: #166534 !important;
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.22), 0 14px 30px rgba(22, 163, 74, 0.22);
+  transform: translateY(-1px) scale(1.01);
+}
+
+.btn-primary:active {
+  transform: translateY(0) scale(1);
 }
 
 .card {

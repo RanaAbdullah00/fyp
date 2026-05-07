@@ -1,18 +1,15 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth.js';
-import { useLanguage } from '../../hooks/useLanguage.js';
 
 const LogoutConfirmModal = ({ show, onClose }) => {
   const { logout } = useAuth();
   const navigate = useNavigate();
-  const { t } = useLanguage();
 
   if (!show) return null;
 
   const handleYes = () => {
     logout();
-    localStorage.removeItem('transpak_token');
     onClose();
     navigate('/login', { replace: true });
   };

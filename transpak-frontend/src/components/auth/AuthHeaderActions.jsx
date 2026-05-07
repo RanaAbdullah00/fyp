@@ -1,4 +1,3 @@
-import React from 'react';
 import LanguageToggle from '../ui/LanguageToggle.jsx';
 import DemoVideoWatchButton from '../demo/DemoVideoWatchButton.jsx';
 

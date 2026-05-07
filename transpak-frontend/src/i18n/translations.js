@@ -10,7 +10,6 @@ export const translations = {
       home: 'Home',
       loads: 'Loads',
       track: 'Track',
-      wallet: 'Wallet',
       profile: 'Profile',
       support: 'Support',
       faqHelp: 'FAQ & Help',
@@ -189,12 +188,7 @@ export const translations = {
         history: 'Shipment History',
         liveTrackingMap: 'Live tracking map'
       },
-      wallet: {
-        title: 'Wallet',
-        balance: 'Balance',
-        transactions: 'Transactions',
-        simulatePayment: 'Simulate payment'
-      },
+      // wallet removed: payments handled offline
       dashboard: {
         stats: 'Stats',
         activity: 'Activity Feed',
@@ -299,7 +293,6 @@ export const translations = {
       disputes: 'Disputes',
       shipments: 'Shipments',
       roleManagement: 'Role management',
-      wallet: 'Wallet',
       notifications: 'Notifications',
       settings: 'Settings',
       profile: 'Profile',
@@ -342,7 +335,6 @@ export const translations = {
       home: 'ہوم',
       loads: 'لوڈز',
       track: 'ٹریک',
-      wallet: 'والٹ',
       profile: 'پروفائل',
       support: 'سپورٹ',
       faqHelp: 'سوالات (FAQ) اور مدد',
@@ -521,12 +513,7 @@ export const translations = {
         history: 'شپمنٹ ہسٹری',
         liveTrackingMap: 'لائیو ٹریکنگ میپ'
       },
-      wallet: {
-        title: 'والٹ',
-        balance: 'بیلنس',
-        transactions: 'لین دین',
-        simulatePayment: 'ادائیگی سمیلیٹ کریں'
-      },
+      // wallet removed: ادائیگی آف لائن
       dashboard: {
         stats: 'اسٹیٹس',
         activity: 'ایکٹیویٹی فیڈ',
@@ -631,7 +618,6 @@ export const translations = {
       disputes: 'تنازعات',
       shipments: 'شپمنٹس',
       roleManagement: 'کردار کا انتظام',
-      wallet: 'والٹ',
       notifications: 'نوٹیفکیشنز',
       settings: 'سیٹنگز',
       profile: 'پروفائل',

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
 import Loader from '../../components/ui/Loader.jsx';
@@ -7,28 +7,21 @@ import { useApi } from '../../hooks/useApi.js';
 import { notifyError, notifySuccess } from '../../components/ui/ToastProvider.jsx';
 import ReviewsSection from '../../components/reviews/ReviewsSection.jsx';
 
-const fileToDataUrl = (file) =>
-  new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result || ''));
-    r.onerror = reject;
-    r.readAsDataURL(file);
-  });
+const CNIC_REGEX = /^[0-9]{5}-[0-9]{7}-[0-9]{1}$/;
 
 const Profile = () => {
   const { user, login } = useAuth();
   const { request } = useApi();
   const [form, setForm] = useState({
-    name: '',
+    full_name: '',
     email: '',
     phone: '',
-    cnic: '',
-    address: '',
-    bio: '',
-    profileImage: '',
-    cnicFrontImage: '',
-    cnicBackImage: ''
+    cnic_number: '',
+    cnic_image: '',
+    profile_image: ''
   });
+  const [files, setFiles] = useState({ cnic_image: null, profile_image: null });
+  const [cnicLocked, setCnicLocked] = useState(false);
   const [loading, setLoading] = useState(false);
   const [profileComplete, setProfileComplete] = useState(false);
 
@@ -36,29 +29,19 @@ const Profile = () => {
     const run = async () => {
       if (!user) return;
       try {
-        const res = await request({ method: 'GET', url: '/users/me' });
-        const u = res?.user || user;
+        const u = await request({ method: 'GET', url: '/profile' });
         setForm({
-          name: u.name || '',
+          full_name: u.full_name || '',
           email: u.email || '',
           phone: u.phone || '',
-          cnic: u.cnic || '',
-          address: u.address || '',
-          bio: u.bio || '',
-          profileImage: u.profileImage || '',
-          cnicFrontImage: u.cnicFrontImage || '',
-          cnicBackImage: u.cnicBackImage || ''
+          cnic_number: u.cnic_number || '',
+          cnic_image: u.cnic_image || '',
+          profile_image: u.profile_image || ''
         });
-        setProfileComplete(Boolean(u.profileComplete));
+        setCnicLocked(Boolean(u.cnic_number));
+        setProfileComplete(Boolean(u.is_profile_complete));
       } catch (e) {
-        // fall back to local user
-        setForm((prev) => ({
-          ...prev,
-          name: user.name || '',
-          email: user.email || '',
-          phone: user.phone || '',
-          cnic: user.cnic || ''
-        }));
+        setForm((prev) => ({ ...prev, email: user.email || '' }));
       }
     };
     run();
@@ -69,27 +52,44 @@ const Profile = () => {
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
+  const canEditCnic = !cnicLocked;
+  const cnicValid = useMemo(() => {
+    if (!form.cnic_number) return true;
+    return CNIC_REGEX.test(String(form.cnic_number).trim());
+  }, [form.cnic_number]);
+
   const handleSave = async () => {
     setLoading(true);
     try {
-      const res = await request({
+      const fd = new FormData();
+      if (form.full_name) fd.append('full_name', form.full_name);
+      if (form.phone) fd.append('phone', form.phone);
+      if (canEditCnic && form.cnic_number) fd.append('cnic_number', form.cnic_number);
+      if (files.profile_image) fd.append('profile_image', files.profile_image);
+      if (files.cnic_image) fd.append('cnic_image', files.cnic_image);
+
+      const updated = await request({
         method: 'PUT',
-        url: '/users/me',
-        data: {
-          name: form.name,
-          address: form.address,
-          bio: form.bio,
-          profileImage: form.profileImage,
-          cnicFrontImage: form.cnicFrontImage,
-          cnicBackImage: form.cnicBackImage
-        }
+        url: '/profile/update',
+        data: fd
       });
-      const updated = res?.user;
-      if (updated) login({ user: { ...user, ...updated }, currentRole: user.activeRole });
-      setProfileComplete(Boolean(updated?.profileComplete));
+      if (updated) {
+        setForm((p) => ({
+          ...p,
+          full_name: updated.full_name || '',
+          phone: updated.phone || '',
+          cnic_number: updated.cnic_number || '',
+          cnic_image: updated.cnic_image || '',
+          profile_image: updated.profile_image || ''
+        }));
+        setCnicLocked(Boolean(updated.cnic_number));
+        setProfileComplete(Boolean(updated.is_profile_complete));
+        // keep AuthContext user hydrated (best-effort)
+        login({ user: { ...user, name: updated.full_name || user?.name, profileComplete: Boolean(updated.is_profile_complete) }, currentRole: user.activeRole });
+      }
       notifySuccess('Profile saved.');
     } catch (err) {
-      notifyError(err?.response?.data?.message || err?.response?.data?.error || 'Failed to save profile');
+      notifyError(err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to save profile');
     } finally {
       setLoading(false);
     }
@@ -101,7 +101,11 @@ const Profile = () => {
     <div className="container py-3">
       <div className="d-flex justify-content-between align-items-center mb-3">
         <h5 className="mb-0">Profile</h5>
-        {profileComplete ? <span className="badge bg-success">Complete ✓</span> : <span className="badge bg-warning text-dark">Incomplete</span>}
+        {profileComplete ? (
+          <span className="badge bg-success">Profile Completed</span>
+        ) : (
+          <span className="badge bg-danger">Incomplete Profile</span>
+        )}
       </div>
 
       <Card className="p-3">
@@ -113,8 +117,8 @@ const Profile = () => {
                 className="rounded-circle overflow-hidden border"
                 style={{ width: 72, height: 72, borderColor: 'var(--pak-border)' }}
               >
-                {form.profileImage ? (
-                  <img src={form.profileImage} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                {form.profile_image ? (
+                  <img src={form.profile_image} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 ) : (
                   <div className="w-100 h-100 d-flex align-items-center justify-content-center bg-light text-muted small">No photo</div>
                 )}
@@ -127,52 +131,26 @@ const Profile = () => {
                 accept="image/*"
                 capture="environment"
                 className="form-control form-control-sm"
-                onChange={async (e) => {
-                  const f = e.target.files?.[0];
-                  if (!f) return;
-                  const url = await fileToDataUrl(f);
-                  setForm((p) => ({ ...p, profileImage: url }));
-                }}
+                onChange={(e) => setFiles((p) => ({ ...p, profile_image: e.target.files?.[0] || null }))}
               />
             </div>
             <div className="mt-3">
-              <label className="form-label small fw-semibold">CNIC front image *</label>
+              <label className="form-label small fw-semibold">CNIC image *</label>
               <input
                 type="file"
                 accept="image/*"
                 capture="environment"
                 className="form-control form-control-sm"
-                onChange={async (e) => {
-                  const f = e.target.files?.[0];
-                  if (!f) return;
-                  const url = await fileToDataUrl(f);
-                  setForm((p) => ({ ...p, cnicFrontImage: url }));
-                }}
+                onChange={(e) => setFiles((p) => ({ ...p, cnic_image: e.target.files?.[0] || null }))}
               />
-              {form.cnicFrontImage ? <img src={form.cnicFrontImage} alt="CNIC front" className="mt-2" style={{ width: '100%', borderRadius: 12, border: '1px solid var(--pak-border)' }} /> : null}
-            </div>
-            <div className="mt-3">
-              <label className="form-label small fw-semibold">CNIC back image *</label>
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="form-control form-control-sm"
-                onChange={async (e) => {
-                  const f = e.target.files?.[0];
-                  if (!f) return;
-                  const url = await fileToDataUrl(f);
-                  setForm((p) => ({ ...p, cnicBackImage: url }));
-                }}
-              />
-              {form.cnicBackImage ? <img src={form.cnicBackImage} alt="CNIC back" className="mt-2" style={{ width: '100%', borderRadius: 12, border: '1px solid var(--pak-border)' }} /> : null}
+              {form.cnic_image ? <img src={form.cnic_image} alt="CNIC" className="mt-2" style={{ width: '100%', borderRadius: 12, border: '1px solid var(--pak-border)' }} /> : null}
             </div>
           </div>
           <div className="col-md-8">
             <div className="row g-2">
               <div className="col-md-6">
-                <label className="form-label small fw-semibold">Name</label>
-                <input name="name" className="form-control form-control-sm" value={form.name} onChange={handleChange} />
+                <label className="form-label small fw-semibold">Full name</label>
+                <input name="full_name" className="form-control form-control-sm" value={form.full_name} onChange={handleChange} />
               </div>
               <div className="col-md-6">
                 <label className="form-label small fw-semibold">Email</label>
@@ -180,19 +158,19 @@ const Profile = () => {
               </div>
               <div className="col-md-6">
                 <label className="form-label small fw-semibold">Phone</label>
-                <input className="form-control form-control-sm" value={form.phone} disabled />
+                <input name="phone" className="form-control form-control-sm" value={form.phone} onChange={handleChange} />
               </div>
               <div className="col-md-6">
                 <label className="form-label small fw-semibold">CNIC</label>
-                <input className="form-control form-control-sm" value={form.cnic} disabled />
-              </div>
-              <div className="col-12">
-                <label className="form-label small fw-semibold">Address</label>
-                <input name="address" className="form-control form-control-sm" value={form.address} onChange={handleChange} />
-              </div>
-              <div className="col-12">
-                <label className="form-label small fw-semibold">Bio</label>
-                <textarea name="bio" className="form-control form-control-sm" rows={3} value={form.bio} onChange={handleChange} />
+                <input
+                  name="cnic_number"
+                  className={`form-control form-control-sm ${cnicValid ? '' : 'is-invalid'}`}
+                  value={form.cnic_number}
+                  onChange={handleChange}
+                  disabled={!canEditCnic}
+                  placeholder="12345-1234567-1"
+                />
+                {!cnicValid ? <div className="invalid-feedback">CNIC must be XXXXX-XXXXXXX-X</div> : null}
               </div>
             </div>
           </div>

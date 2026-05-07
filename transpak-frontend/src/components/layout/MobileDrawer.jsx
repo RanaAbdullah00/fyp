@@ -96,9 +96,6 @@ const MobileDrawer = ({ open, onClose }) => {
                 </NavLink>
               </>
             )}
-            <NavLink to="/wallet" className={linkClass} onClick={onClose}>
-              {t('nav.wallet')}
-            </NavLink>
             <NavLink to="/notifications" className={linkClass} onClick={onClose}>
               <span className="d-flex align-items-center gap-2">
                 {t('nav.notifications')}

@@ -64,14 +64,20 @@ const ShipmentTracking = () => {
         Number.isFinite(Number(c[1]))
     ).map((c) => [Number(c[0]), Number(c[1])]);
   }, [payload?.liveTrackingMap?.coordinates]);
-  const currentLocation =
-    tracking?.currentLocation ??
-    (Array.isArray(tracking?.location) &&
-    tracking.location.length >= 2 &&
-    Number.isFinite(Number(tracking.location[0])) &&
-    Number.isFinite(Number(tracking.location[1]))
-      ? [Number(tracking.location[0]), Number(tracking.location[1])]
-      : null);
+  const currentLocation = useMemo(() => {
+    const direct = tracking?.currentLocation;
+    if (Array.isArray(direct) && direct.length >= 2) return [Number(direct[0]), Number(direct[1])];
+    const loc = tracking?.location;
+    if (
+      Array.isArray(loc) &&
+      loc.length >= 2 &&
+      Number.isFinite(Number(loc[0])) &&
+      Number.isFinite(Number(loc[1]))
+    ) {
+      return [Number(loc[0]), Number(loc[1])];
+    }
+    return null;
+  }, [tracking?.currentLocation, tracking?.location]);
 
   const shipment = useMemo(
     () => ({

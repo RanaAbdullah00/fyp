@@ -19,7 +19,7 @@ function authData(user, token) {
 /** Login-only payload: minimal user + token (full profile from GET /auth/profile). */
 function loginAuthData(user, token) {
   const roles = Array.isArray(user.roles) ? user.roles : [];
-  const idStr = user._id.toString();
+  const idStr = String(user.id || user._id || "");
   return {
     token,
     user: {

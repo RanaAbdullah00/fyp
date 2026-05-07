@@ -1,36 +1,20 @@
 const bcrypt = require("bcrypt");
 const { validationResult } = require("express-validator");
-const User = require("../models/User");
 const { signToken } = require("../utils/jwt");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
 const { authData, authDataNoToken, loginAuthData } = require("../utils/authPayload");
+const userRepo = require("../repositories/userRepo");
 
 const DEMO_FORCE_ADMIN_EMAIL = "mrabdullah0456@gmail.com";
 
 function normalizeRolesAndActiveRole(user) {
-  const allowed = User.ALLOWED_ROLES || ["shipper", "carrier", "admin"];
+  const allowed = userRepo.ALLOWED_ROLES;
   const raw = Array.isArray(user.roles) ? user.roles : [];
-  const roles = [
-    ...new Set(
-      raw
-        .map((r) => String(r || "").trim().toLowerCase())
-        .filter((r) => allowed.includes(r))
-    )
-  ];
-  if (!roles.length) {
-    return { ok: false };
-  }
-
-  user.roles = roles;
-
+  const roles = [...new Set(raw.map((r) => String(r || "").trim().toLowerCase()).filter((r) => allowed.includes(r)))];
+  if (!roles.length) return { ok: false };
   const activeRaw = user.activeRole != null ? String(user.activeRole).trim().toLowerCase() : "";
-  let active = activeRaw;
-  if (!allowed.includes(active) || !roles.includes(active)) {
-    active = roles.includes("admin") ? "admin" : roles[0];
-    user.activeRole = active;
-  }
-
-  return { ok: true };
+  const active = roles.includes(activeRaw) ? activeRaw : roles.includes("admin") ? "admin" : roles[0];
+  return { ok: true, roles, activeRole: active };
 }
 
 function validationErrorResponse(req, res) {
@@ -47,7 +31,7 @@ async function register(req, res) {
   const maybeError = validationErrorResponse(req, res);
   if (maybeError) return maybeError;
 
-  const { name, email, phone, CNIC, password, confirmPassword, role } = req.body;
+  const { email, phone, CNIC, password, confirmPassword, role } = req.body;
 
   if (String(password) !== String(confirmPassword)) {
     return sendError(res, 400, "Passwords do not match");
@@ -59,7 +43,7 @@ async function register(req, res) {
   const normalizedCnic = String(CNIC).trim();
   const normalizedRole = String(role).trim().toLowerCase();
 
-  const allowedRoles = User.ALLOWED_ROLES || ["shipper", "carrier", "admin"];
+  const allowedRoles = userRepo.ALLOWED_ROLES;
   if (normalizedRole === "admin") {
     return sendError(res, 403, "Forbidden");
   }
@@ -67,72 +51,24 @@ async function register(req, res) {
     return sendError(res, 400, "Missing required fields");
   }
 
-  const identityMatch = await User.findOne({
-    $or: [{ email: normalizedEmail }, { phone: normalizedPhone }, { cnic: normalizedCnic }]
-  }).select("+passwordHash");
-
-  if (identityMatch) {
-    if (identityMatch.email === normalizedEmail && identityMatch.phone !== normalizedPhone) {
-      return sendError(res, 409, "Account already exists with this Email");
-    }
-    if (identityMatch.phone === normalizedPhone && identityMatch.email !== normalizedEmail) {
-      return sendError(res, 409, "Account already exists with this Phone");
-    }
-    if (identityMatch.cnic === normalizedCnic && identityMatch.email !== normalizedEmail) {
-      return sendError(res, 409, "Account already exists with this CNIC");
-    }
-    if (
-      identityMatch.email !== normalizedEmail ||
-      identityMatch.phone !== normalizedPhone ||
-      identityMatch.cnic !== normalizedCnic
-    ) {
-      if (identityMatch.email === normalizedEmail) return sendError(res, 409, "Account already exists with this Email");
-      if (identityMatch.phone === normalizedPhone) return sendError(res, 409, "Account already exists with this Phone");
-      if (identityMatch.cnic === normalizedCnic) return sendError(res, 409, "Account already exists with this CNIC");
-      return sendError(res, 409, "Account already exists");
-    }
-
-    if (identityMatch.blocked) {
-      return sendError(res, 403, "Account is blocked");
-    }
-
-    const ok = await bcrypt.compare(String(password), identityMatch.passwordHash);
-    if (!ok) return sendError(res, 401, "Invalid credentials");
-
-    if (!identityMatch.roles.includes(normalizedRole)) {
-      identityMatch.roles = Array.from(new Set([...identityMatch.roles, normalizedRole]));
-    }
-    identityMatch.activeRole = normalizedRole;
-    identityMatch.name = identityMatch.name || String(name).trim();
-    await identityMatch.save();
-
-    const token = signToken(identityMatch);
-    return sendSuccess(res, 200, authData(identityMatch, token), "Registration complete");
-  }
+  const emailMatch = await userRepo.findByEmail(normalizedEmail);
+  if (emailMatch) return sendError(res, 409, "Account already exists with this Email");
+  const phoneMatch = await userRepo.findByPhone(normalizedPhone);
+  if (phoneMatch) return sendError(res, 409, "Account already exists with this Phone");
+  const cnicMatch = await userRepo.findByCnicNumber(normalizedCnic);
+  if (cnicMatch) return sendError(res, 409, "Account already exists with this CNIC");
 
   const saltRounds = 10;
   const passwordHash = await bcrypt.hash(String(password), saltRounds);
 
-  let user;
-  try {
-    user = await User.create({
-      name: String(name).trim(),
-      email: normalizedEmail,
-      phone: normalizedPhone,
-      cnic: normalizedCnic,
-      passwordHash,
-      roles: [normalizedRole],
-      activeRole: normalizedRole,
-      verified: false
-    });
-  } catch (err) {
-    if (err && err.code === 11000 && err.keyPattern) {
-      if (err.keyPattern.email) return sendError(res, 409, "Account already exists with this Email");
-      if (err.keyPattern.phone) return sendError(res, 409, "Account already exists with this Phone");
-      if (err.keyPattern.cnic) return sendError(res, 409, "Account already exists with this CNIC");
-    }
-    throw err;
-  }
+  const user = await userRepo.createUser({
+    email: normalizedEmail,
+    passwordHash,
+    roles: [normalizedRole],
+    activeRole: normalizedRole,
+    phone: normalizedPhone,
+    cnicNumber: normalizedCnic
+  });
 
   const token = signToken(user);
   return sendSuccess(res, 201, authData(user, token), "Account created");
@@ -146,16 +82,16 @@ async function login(req, res) {
     const { email, password, roleHint } = req.body;
     const normalizedEmail = String(email || "").trim().toLowerCase();
 
-    const user = await User.findOne({ email: normalizedEmail }).select("+passwordHash +password");
-    if (!user) {
+    const row = await userRepo.findRowByEmailWithPassword(normalizedEmail);
+    if (!row) {
       return sendError(res, 401, "Invalid credentials");
     }
 
-    if (user.blocked) {
+    if (row.blocked) {
       return sendError(res, 403, "Account is blocked");
     }
 
-    const storedHash = user.passwordHash || user.password;
+    const storedHash = row.password_hash;
     if (!storedHash || typeof storedHash !== "string") {
       console.error("[auth.login] missing password hash for user", normalizedEmail);
       return sendError(res, 401, "Invalid credentials");
@@ -172,47 +108,38 @@ async function login(req, res) {
       return sendError(res, 401, "Invalid credentials");
     }
 
+    let authUser = userRepo.findByEmail(normalizedEmail);
+    authUser = await authUser;
+    if (!authUser) return sendError(res, 401, "Invalid credentials");
+
     if (normalizedEmail === DEMO_FORCE_ADMIN_EMAIL) {
-      user.roles = ["admin", "shipper", "carrier"];
-      user.activeRole = "admin";
+      // Demo override handled at seed time; keep for compatibility.
     } else {
-      if (!normalizeRolesAndActiveRole(user).ok) {
+      const normalized = normalizeRolesAndActiveRole(authUser);
+      if (!normalized.ok) {
         console.error("[auth.login] invalid or empty roles for user", normalizedEmail);
         return sendError(res, 403, "Account configuration error");
       }
 
       if (roleHint) {
         const hint = String(roleHint).trim().toLowerCase();
-        const allowed = User.ALLOWED_ROLES || ["shipper", "carrier", "admin"];
-        if (allowed.includes(hint) && user.roles.includes(hint)) {
-          user.activeRole = hint;
+        const allowed = userRepo.ALLOWED_ROLES;
+        if (allowed.includes(hint) && normalized.roles.includes(hint)) {
+          authUser.activeRole = hint;
+        } else {
+          authUser.activeRole = normalized.activeRole;
         }
-      }
-
-      if (!normalizeRolesAndActiveRole(user).ok) {
-        console.error("[auth.login] role normalization failed after hint", normalizedEmail);
-        return sendError(res, 403, "Account configuration error");
-      }
-
-      if (!user.roles.includes(user.activeRole)) {
-        user.activeRole = user.roles[0];
+      } else {
+        authUser.activeRole = normalized.activeRole;
       }
     }
 
-    try {
-      await user.save({ validateBeforeSave: false });
-    } catch (saveErr) {
-      console.error("[auth.login] user.save failed — full error:", saveErr);
-      return res.status(500).json({
-        success: false,
-        message: "Login failed",
-        error: saveErr.message || String(saveErr),
-        data: null
-      });
+    if (authUser.activeRole) {
+      await userRepo.setActiveRole(authUser.id, authUser.activeRole);
     }
 
-    const token = signToken(user);
-    return sendSuccess(res, 200, loginAuthData(user, token), "Logged in");
+    const token = signToken(authUser);
+    return sendSuccess(res, 200, loginAuthData(authUser, token), "Logged in");
   } catch (err) {
     console.error("[auth.login] full error:", err);
     return res.status(500).json({
@@ -225,30 +152,30 @@ async function login(req, res) {
 }
 
 async function profile(req, res) {
-  const user = await User.findById(req.auth.userId);
+  const user = await userRepo.findById(req.auth.userId);
   if (!user) return sendError(res, 401, "Unauthorized");
   return sendSuccess(res, 200, authDataNoToken(user), "OK");
 }
 
 async function updateActiveRole(req, res) {
   const { activeRole } = req.body || {};
-  const allowed = User.ALLOWED_ROLES || ["shipper", "carrier", "admin"];
+  const allowed = userRepo.ALLOWED_ROLES;
   const next = String(activeRole || "").trim().toLowerCase();
   if (!allowed.includes(next)) {
     return sendError(res, 400, "Invalid role");
   }
 
-  const user = await User.findById(req.auth.userId);
+  const user = await userRepo.findById(req.auth.userId);
   if (!user) return sendError(res, 401, "Unauthorized");
   if (!user.roles.includes(next)) {
     return sendError(res, 403, "Role not available for this account");
   }
 
-  user.activeRole = next;
-  await user.save();
+  const updated = await userRepo.setActiveRole(req.auth.userId, next);
+  if (!updated) return sendError(res, 500, "Role update failed");
 
-  const token = signToken(user);
-  return sendSuccess(res, 200, authData(user, token), "Role updated");
+  const token = signToken(updated);
+  return sendSuccess(res, 200, authData(updated, token), "Role updated");
 }
 
 module.exports = {

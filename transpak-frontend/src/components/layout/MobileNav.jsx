@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { FaHome, FaListUl, FaWallet, FaTruck, FaTools, FaShippingFast } from 'react-icons/fa';
+import { FaHome, FaListUl, FaTruck, FaTools, FaShippingFast } from 'react-icons/fa';
 import { useAuth } from '../../hooks/useAuth.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
 
@@ -41,10 +41,6 @@ const MobileNav = () => {
         <NavLink to={trackSlot.to} className={mobileNavClass} end>
           {trackSlot.icon}
           <span>{trackSlot.label}</span>
-        </NavLink>
-        <NavLink to="/wallet" className={mobileNavClass}>
-          <FaWallet />
-          <span>{t('common.wallet')}</span>
         </NavLink>
         <NavLink to={roleSlot.to} className={mobileNavClass}>
           {roleSlot.icon}

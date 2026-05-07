@@ -24,7 +24,7 @@ const BidManagement = () => {
       notifyError(t('pages.bids.loadBidsFailed'));
       setBids([]);
     }
-  }, [request]);
+  }, [request, t]);
 
   const handleAccept = async (bid) => {
     try {

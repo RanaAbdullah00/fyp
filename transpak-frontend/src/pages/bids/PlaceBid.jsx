@@ -66,7 +66,7 @@ const PlaceBid = () => {
         expiresAt: new Date(Date.now() + parseInt(load.deadlineHours || 2) * 60 * 60 * 1000).toISOString()
       };
       
-      const response = await request({
+      await request({
         url: '/bids',
         method: 'POST',
         data: bidPayload

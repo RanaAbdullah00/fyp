@@ -2,14 +2,15 @@ const express = require("express");
 const { body, param, validationResult } = require("express-validator");
 const { protect, requireAnyRole, requireActiveRole } = require("../middleware/authMiddleware");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
-const Bid = require("../models/Bid");
-const Load = require("../models/Load");
-const User = require("../models/User");
-const Truck = require("../models/Truck");
-const { shipperAcceptBid, carrierAcceptSuggestion } = require("../controllers/bookingController");
-const { validateBookingBidParam, bookingConfirmValidation } = require("../middleware/validateBookingConfirm");
+const { getPool, query } = require("../db/pool");
 
 const router = express.Router();
+
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    String(value || "")
+  );
+}
 
 function validate(req, res, next) {
   const errors = validationResult(req);
@@ -21,45 +22,85 @@ function validate(req, res, next) {
   return next();
 }
 
-function isExpired(bid) {
-  const exp = bid?.expiresAt ? new Date(bid.expiresAt).getTime() : 0;
-  return exp > 0 && Date.now() > exp;
-}
-
-router.get("/", protect, requireAnyRole(["shipper", "admin"]), requireActiveRole("shipper"), async (req, res) => {
+router.get("/", protect, requireAnyRole(["shipper", "carrier", "admin"]), async (req, res) => {
   const roles = req.auth?.roles || [];
+  const active = req.auth?.activeRole;
   const isAdmin = roles.includes("admin");
 
-  let loadIds = [];
+  const loadId = req.query?.loadId ? String(req.query.loadId).trim() : "";
+  const loadClause = loadId && isUuid(loadId) ? "AND b.load_id = $2" : "";
+
   if (isAdmin) {
-    const loads = await Load.find({}).select("_id").limit(500);
-    loadIds = loads.map((l) => l._id);
-  } else {
-    const loads = await Load.find({ shipperId: req.auth.userId }).select("_id").limit(500);
-    loadIds = loads.map((l) => l._id);
+    const params = loadClause ? [req.auth.userId, loadId] : [req.auth.userId];
+    const { rows } = await query(
+      `SELECT b.id, b.load_id AS "loadId", b.carrier_id AS "carrierId", b.amount,
+              b.status, b.created_at AS "createdAt",
+              COALESCE(u.full_name, u.email, 'Carrier') AS "carrierName",
+              'Truck' AS "vehicleType"
+       FROM bids b
+       JOIN users u ON u.id = b.carrier_id
+       WHERE 1=1 ${loadClause}
+       ORDER BY b.created_at DESC
+       LIMIT 500`,
+      params.slice(loadClause ? 1 : 0)
+    );
+    return sendSuccess(res, 200, rows);
   }
 
-  const bids = await Bid.find({ loadId: { $in: loadIds } }).sort({ createdAt: -1 }).limit(500);
+  if (active === "carrier") {
+    const { rows } = await query(
+      `SELECT b.id, b.load_id AS "loadId", b.carrier_id AS "carrierId", b.amount,
+              b.status, b.suggested_amount AS "suggestedAmount", b.suggested_by AS "suggestedBy",
+              b.created_at AS "createdAt",
+              NULL::text AS "carrierName",
+              'Truck' AS "vehicleType"
+       FROM bids b
+       WHERE b.carrier_id = $1
+       ORDER BY b.created_at DESC
+       LIMIT 500`,
+      [req.auth.userId]
+    );
+    return sendSuccess(res, 200, rows);
+  }
 
-  const carrierIds = Array.from(new Set(bids.map((b) => String(b.carrierId))));
-  const carriers = await User.find({ _id: { $in: carrierIds } }).select("name");
-  const carrierNameById = new Map(carriers.map((c) => [String(c._id), c.name]));
+  if (active === "shipper") {
+    const params = [req.auth.userId];
+    if (loadClause) params.push(loadId);
+    const { rows } = await query(
+      `SELECT b.id, b.load_id AS "loadId", b.carrier_id AS "carrierId", b.amount,
+              b.status, b.suggested_amount AS "suggestedAmount", b.suggested_by AS "suggestedBy",
+              b.created_at AS "createdAt",
+              COALESCE(u.full_name, u.email, 'Carrier') AS "carrierName",
+              'Truck' AS "vehicleType"
+       FROM bids b
+       JOIN loads l ON l.id = b.load_id
+       JOIN users u ON u.id = b.carrier_id
+       WHERE l.shipper_id = $1 ${loadClause}
+       ORDER BY b.created_at DESC
+       LIMIT 500`,
+      params
+    );
+    return sendSuccess(res, 200, rows);
+  }
 
-  return sendSuccess(
-    res,
-    200,
-    bids.map((b) =>
-      b.toJSONSafe({
-        carrierName: carrierNameById.get(String(b.carrierId)) || "Carrier",
-        vehicleType: "Truck"
-      })
-    )
-  );
+  return sendError(res, 403, "Switch role to continue");
 });
 
+// Frontend convenience: /bids/mine for carriers
 router.get("/mine", protect, requireAnyRole(["carrier", "admin"]), requireActiveRole("carrier"), async (req, res) => {
-  const bids = await Bid.find({ carrierId: req.auth.userId }).sort({ createdAt: -1 }).limit(500);
-  return sendSuccess(res, 200, bids.map((b) => b.toJSONSafe()));
+  const { rows } = await query(
+    `SELECT b.id, b.load_id AS "loadId", b.carrier_id AS "carrierId", b.amount,
+            b.status, b.suggested_amount AS "suggestedAmount", b.suggested_by AS "suggestedBy",
+            b.created_at AS "createdAt",
+            NULL::text AS "carrierName",
+            'Truck' AS "vehicleType"
+     FROM bids b
+     WHERE b.carrier_id = $1
+     ORDER BY b.created_at DESC
+     LIMIT 500`,
+    [req.auth.userId]
+  );
+  return sendSuccess(res, 200, rows);
 });
 
 router.post(
@@ -68,46 +109,35 @@ router.post(
   requireAnyRole(["carrier", "admin"]),
   requireActiveRole("carrier"),
   [
-    body("loadId").isMongoId().withMessage("loadId is required"),
-    body("amount").toFloat().isFloat({ gt: 0 }).withMessage("amount must be greater than 0"),
-    body("currency").optional().trim().isLength({ min: 1, max: 8 }).withMessage("Invalid currency"),
-    body("transitTime").toInt().isInt({ min: 1, max: 30 }).withMessage("transitTime must be 1-30"),
-    body("note").optional().trim().isLength({ max: 500 }).withMessage("note too long")
+    body("loadId").custom((v) => (isUuid(v) ? true : (() => { throw new Error("loadId is required"); })())),
+    body("amount").toFloat().isFloat({ gt: 0 }).withMessage("amount must be greater than 0")
   ],
   validate,
   async (req, res) => {
-  const { loadId, amount, currency, transitTime, note } = req.body || {};
-  if (!loadId) return sendError(res, 400, "loadId is required");
+    const { loadId, amount } = req.body || {};
+    const { rows: loadRows } = await query(
+      `SELECT id, status, deadline_hours
+       FROM loads
+       WHERE id = $1`,
+      [loadId]
+    );
+    const load = loadRows[0];
+    if (!load) return sendError(res, 404, "Not found");
+    if (load.status !== "open") return sendError(res, 409, "Load is not open for bidding");
 
-  const load = await Load.findById(loadId);
-  if (!load) return sendError(res, 404, "Not found");
-  if (load.status !== "open") return sendError(res, 409, "Load is not open for bidding");
+    const { rows } = await query(
+      `INSERT INTO bids (load_id, carrier_id, amount, status)
+       VALUES ($1, $2, $3, 'pending')
+       ON CONFLICT (load_id, carrier_id)
+         DO UPDATE SET amount = EXCLUDED.amount, status = 'pending', suggested_amount = NULL, suggested_by = NULL, updated_at = now()
+         RETURNING id, load_id AS "loadId", carrier_id AS "carrierId", amount, status,
+                   suggested_amount AS "suggestedAmount", suggested_by AS "suggestedBy",
+                   created_at AS "createdAt"`,
+      [loadId, req.auth.userId, Number(amount)]
+    );
 
-  const hours = Number(load.deadlineHours || 2);
-  const expiresAt = new Date(Date.now() + Math.max(1, hours) * 60 * 60 * 1000);
-
-  const bid = await Bid.create({
-    loadId: load._id,
-    carrierId: req.auth.userId,
-    amount: Number(amount || 0),
-    currency: String(currency || "PKR").trim() || "PKR",
-    transitTime: Number(transitTime || 2),
-    note: String(note || "").trim(),
-    status: "pending",
-    expiresAt
-  });
-
-  return sendSuccess(res, 201, bid.toJSONSafe(), "Created");
-});
-
-router.put(
-  "/:id/accept",
-  protect,
-  requireAnyRole(["shipper", "admin"]),
-  requireActiveRole("shipper"),
-  ...validateBookingBidParam,
-  bookingConfirmValidation,
-  shipperAcceptBid
+    return sendSuccess(res, 201, rows[0], "Created");
+  }
 );
 
 router.put(
@@ -115,26 +145,25 @@ router.put(
   protect,
   requireAnyRole(["shipper", "admin"]),
   requireActiveRole("shipper"),
-  [param("id").isMongoId().withMessage("Invalid bid id")],
+  [param("id").custom((v) => (isUuid(v) ? true : (() => { throw new Error("Invalid bid id"); })()))],
   validate,
   async (req, res) => {
-  const bid = await Bid.findById(req.params.id);
-  if (!bid) return sendError(res, 404, "Not found");
-
-  const load = await Load.findById(bid.loadId);
-  if (!load) return sendError(res, 404, "Not found");
-
-  const roles = req.auth?.roles || [];
-  const isAdmin = roles.includes("admin");
-  const isOwner = String(load.shipperId) === String(req.auth.userId);
-  if (!isAdmin && !isOwner) return sendError(res, 403, "Forbidden");
-
-  if (bid.status !== "pending") return sendError(res, 409, "Bid is not pending");
-
-  bid.status = "rejected";
-  await bid.save();
-  return sendSuccess(res, 200, { ok: true });
-});
+    const bidId = req.params.id;
+    const { rows: bidRows } = await query(
+      `SELECT b.id, b.load_id, b.status, l.shipper_id
+       FROM bids b JOIN loads l ON l.id = b.load_id
+       WHERE b.id = $1`,
+      [bidId]
+    );
+    const bid = bidRows[0];
+    if (!bid) return sendError(res, 404, "Not found");
+    if (String(bid.shipper_id) !== String(req.auth.userId) && !(req.auth.roles || []).includes("admin")) {
+      return sendError(res, 403, "Forbidden");
+    }
+    await query(`UPDATE bids SET status = 'rejected', updated_at = now() WHERE id = $1`, [bidId]);
+    return sendSuccess(res, 200, { ok: true }, "Rejected");
+  }
+);
 
 router.put(
   "/:id/suggest",
@@ -142,93 +171,33 @@ router.put(
   requireAnyRole(["shipper", "admin"]),
   requireActiveRole("shipper"),
   [
-    param("id").isMongoId().withMessage("Invalid bid id"),
-    body("amount").toFloat().isFloat({ gt: 0 }).withMessage("Valid amount is required")
+    param("id").custom((v) => (isUuid(v) ? true : (() => { throw new Error("Invalid bid id"); })())),
+    body("amount").toFloat().isFloat({ gt: 0 }).withMessage("amount must be greater than 0")
   ],
   validate,
   async (req, res) => {
-  const { amount } = req.body || {};
-  const amt = Number(amount);
-  if (!amount || amt < 0 || Number.isNaN(amt)) {
-    return sendError(res, 400, "Valid amount is required");
+    const bidId = req.params.id;
+    const amount = Number(req.body.amount);
+    const { rows: bidRows } = await query(
+      `SELECT b.id, b.load_id, l.shipper_id
+       FROM bids b JOIN loads l ON l.id = b.load_id
+       WHERE b.id = $1`,
+      [bidId]
+    );
+    const bid = bidRows[0];
+    if (!bid) return sendError(res, 404, "Not found");
+    if (String(bid.shipper_id) !== String(req.auth.userId) && !(req.auth.roles || []).includes("admin")) {
+      return sendError(res, 403, "Forbidden");
+    }
+    await query(
+      `UPDATE bids
+       SET status = 'suggested', suggested_amount = $2, suggested_by = 'shipper', updated_at = now()
+       WHERE id = $1`,
+      [bidId, amount]
+    );
+    return sendSuccess(res, 200, { ok: true }, "Suggested");
   }
-
-  const bid = await Bid.findById(req.params.id);
-  if (!bid) return sendError(res, 404, "Not found");
-
-  const load = await Load.findById(bid.loadId);
-  if (!load) return sendError(res, 404, "Not found");
-
-  const roles = req.auth?.roles || [];
-  const isAdmin = roles.includes("admin");
-  const isOwner = String(load.shipperId) === String(req.auth.userId);
-  if (!isAdmin && !isOwner) return sendError(res, 403, "Forbidden");
-
-  if (bid.status !== "pending" && bid.status !== "suggested") {
-    return sendError(res, 409, "Bid is not available for suggestion");
-  }
-
-  if (isExpired(bid)) {
-    bid.status = "expired";
-    await bid.save();
-    return sendError(res, 409, "Bid expired");
-  }
-
-  bid.suggestedAmount = amt;
-  bid.suggestedAt = new Date();
-  bid.suggestedBy = "shipper";
-  bid.status = "suggested";
-  await bid.save();
-
-  return sendSuccess(res, 200, { ok: true, bid: bid.toJSONSafe() });
-});
-
-async function carrierHasCompleteTrucks(userId) {
-  const trucks = await Truck.find({ userId }).limit(10);
-  return trucks.some(
-    (t) =>
-      (t.engineNumber || t.truckNumber) &&
-      (t.truckCardFrontImage || t.truckFrontImage) &&
-      (t.truckCardBackImage || t.truckBackImage)
-  );
-}
-
-router.put(
-  "/:id/accept-suggestion",
-  protect,
-  requireAnyRole(["carrier", "admin"]),
-  requireActiveRole("carrier"),
-  ...validateBookingBidParam,
-  bookingConfirmValidation,
-  carrierAcceptSuggestion
 );
-
-router.put(
-  "/:id/reject-suggestion",
-  protect,
-  requireAnyRole(["carrier", "admin"]),
-  requireActiveRole("carrier"),
-  [param("id").isMongoId().withMessage("Invalid bid id")],
-  validate,
-  async (req, res) => {
-  const bid = await Bid.findById(req.params.id);
-  if (!bid) return sendError(res, 404, "Not found");
-
-  const isCarrier = String(bid.carrierId) === String(req.auth.userId);
-  const roles = req.auth?.roles || [];
-  const isAdmin = roles.includes("admin");
-  if (!isAdmin && !isCarrier) return sendError(res, 403, "Forbidden");
-
-  if (bid.status !== "suggested") return sendError(res, 409, "No suggestion to reject");
-
-  bid.suggestedAmount = null;
-  bid.suggestedAt = null;
-  bid.suggestedBy = null;
-  bid.status = "pending";
-  await bid.save();
-
-  return sendSuccess(res, 200, { ok: true });
-});
 
 router.put(
   "/:id/suggest-carrier",
@@ -236,49 +205,164 @@ router.put(
   requireAnyRole(["carrier", "admin"]),
   requireActiveRole("carrier"),
   [
-    param("id").isMongoId().withMessage("Invalid bid id"),
-    body("amount").toFloat().isFloat({ gt: 0 }).withMessage("Valid amount is required")
+    param("id").custom((v) => (isUuid(v) ? true : (() => { throw new Error("Invalid bid id"); })())),
+    body("amount").toFloat().isFloat({ gt: 0 }).withMessage("amount must be greater than 0")
   ],
   validate,
   async (req, res) => {
-  const roles = req.auth?.roles || [];
-  if (!roles.includes("admin")) {
-    const hasTrucks = await carrierHasCompleteTrucks(req.auth.userId);
-    if (!hasTrucks) {
-      return sendError(res, 403, "Complete truck details before suggesting rates");
+    const bidId = req.params.id;
+    const amount = Number(req.body.amount);
+    const { rows: bidRows } = await query(`SELECT id, carrier_id FROM bids WHERE id = $1`, [bidId]);
+    const bid = bidRows[0];
+    if (!bid) return sendError(res, 404, "Not found");
+    if (String(bid.carrier_id) !== String(req.auth.userId) && !(req.auth.roles || []).includes("admin")) {
+      return sendError(res, 403, "Forbidden");
+    }
+    await query(
+      `UPDATE bids
+       SET status = 'suggested', suggested_amount = $2, suggested_by = 'carrier', updated_at = now()
+       WHERE id = $1`,
+      [bidId, amount]
+    );
+    return sendSuccess(res, 200, { ok: true }, "Suggested");
+  }
+);
+
+router.put(
+  "/:id/accept-suggestion",
+  protect,
+  requireAnyRole(["carrier", "admin"]),
+  requireActiveRole("carrier"),
+  [param("id").custom((v) => (isUuid(v) ? true : (() => { throw new Error("Invalid bid id"); })()))],
+  validate,
+  async (req, res) => {
+    const bidId = req.params.id;
+    const { rows } = await query(
+      `UPDATE bids
+       SET amount = COALESCE(suggested_amount, amount),
+           suggested_amount = NULL,
+           suggested_by = NULL,
+           status = 'pending',
+           updated_at = now()
+       WHERE id = $1 AND carrier_id = $2
+       RETURNING id`,
+      [bidId, req.auth.userId]
+    );
+    if (!rows[0]) return sendError(res, 404, "Not found");
+    return sendSuccess(res, 200, { ok: true }, "Accepted");
+  }
+);
+
+router.put(
+  "/:id/reject-suggestion",
+  protect,
+  requireAnyRole(["carrier", "admin"]),
+  requireActiveRole("carrier"),
+  [param("id").custom((v) => (isUuid(v) ? true : (() => { throw new Error("Invalid bid id"); })()))],
+  validate,
+  async (req, res) => {
+    const bidId = req.params.id;
+    const { rows } = await query(
+      `UPDATE bids
+       SET suggested_amount = NULL, suggested_by = NULL, status = 'pending', updated_at = now()
+       WHERE id = $1 AND carrier_id = $2
+       RETURNING id`,
+      [bidId, req.auth.userId]
+    );
+    if (!rows[0]) return sendError(res, 404, "Not found");
+    return sendSuccess(res, 200, { ok: true }, "Rejected");
+  }
+);
+
+router.put(
+  "/:id/accept",
+  protect,
+  requireAnyRole(["shipper", "admin"]),
+  requireActiveRole("shipper"),
+  [param("id").custom((v) => (isUuid(v) ? true : (() => { throw new Error("Invalid bid id"); })()))],
+  validate,
+  async (req, res) => {
+    const bidId = req.params.id;
+    const pool = getPool();
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const { rows: bidRows } = await client.query(
+        `SELECT b.id, b.load_id, b.carrier_id, b.amount, b.status,
+                l.shipper_id, l.status AS load_status
+         FROM bids b
+         JOIN loads l ON l.id = b.load_id
+         WHERE b.id = $1
+         FOR UPDATE`,
+        [bidId]
+      );
+      const bid = bidRows[0];
+      if (!bid) {
+        await client.query("ROLLBACK");
+        return sendError(res, 404, "Not found");
+      }
+      if (bid.status !== "pending") {
+        await client.query("ROLLBACK");
+        return sendError(res, 409, "Bid is not pending");
+      }
+      if (String(bid.shipper_id) !== String(req.auth.userId) && !(req.auth.roles || []).includes("admin")) {
+        await client.query("ROLLBACK");
+        return sendError(res, 403, "Forbidden");
+      }
+      if (bid.load_status !== "open") {
+        await client.query("ROLLBACK");
+        return sendError(res, 409, "Load is not open");
+      }
+
+      await client.query(`UPDATE bids SET status = 'accepted', updated_at = now() WHERE id = $1`, [bidId]);
+      await client.query(
+        `UPDATE bids SET status = 'rejected', updated_at = now()
+         WHERE load_id = $1 AND id <> $2 AND status = 'pending'`,
+        [bid.load_id, bidId]
+      );
+
+      const { rows: bookingRows } = await client.query(
+        `INSERT INTO bookings (load_id, shipper_id, carrier_id, status, price)
+         VALUES ($1, $2, $3, 'approved', $4)
+         ON CONFLICT (load_id)
+         DO UPDATE SET carrier_id = EXCLUDED.carrier_id, status = 'approved', price = EXCLUDED.price, updated_at = now()
+         RETURNING id`,
+        [bid.load_id, bid.shipper_id, bid.carrier_id, bid.amount]
+      );
+      const bookingId = bookingRows[0]?.id;
+
+      await client.query(
+        `UPDATE loads
+         SET assigned_carrier_id = $2, accepted_bid_id = $3, status = 'booked', updated_at = now()
+         WHERE id = $1`,
+        [bid.load_id, bid.carrier_id, bidId]
+      );
+      await client.query(
+        `UPDATE shipments
+         SET booking_id = $2, status = 'booked', updated_at = now()
+         WHERE load_id = $1`,
+        [bid.load_id, bookingId]
+      );
+      await client.query(
+        `INSERT INTO shipment_events (shipment_id, status, note, location_label)
+         SELECT s.id, 'booked', NULL, 'System' FROM shipments s WHERE s.load_id = $1`,
+        [bid.load_id]
+      );
+
+      await client.query("COMMIT");
+      return sendSuccess(res, 200, { ok: true, bookingId }, "Accepted");
+    } catch (err) {
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        // ignore
+      }
+      return sendError(res, 500, err.message || "Server error");
+    } finally {
+      client.release();
     }
   }
-
-  const { amount } = req.body || {};
-  const amt = Number(amount);
-  if (!amount || amt < 0 || Number.isNaN(amt)) {
-    return sendError(res, 400, "Valid amount is required");
-  }
-
-  const bid = await Bid.findById(req.params.id);
-  if (!bid) return sendError(res, 404, "Not found");
-
-  const isCarrier = String(bid.carrierId) === String(req.auth.userId);
-  const isAdmin = roles.includes("admin");
-  if (!isAdmin && !isCarrier) return sendError(res, 403, "Forbidden");
-
-  if (bid.status !== "pending" && bid.status !== "suggested") {
-    return sendError(res, 409, "Bid is not available for suggestion");
-  }
-
-  if (isExpired(bid)) {
-    bid.status = "expired";
-    await bid.save();
-    return sendError(res, 409, "Bid expired");
-  }
-
-  bid.suggestedAmount = amt;
-  bid.suggestedAt = new Date();
-  bid.suggestedBy = "carrier";
-  bid.status = "suggested";
-  await bid.save();
-
-  return sendSuccess(res, 200, { ok: true, bid: bid.toJSONSafe() });
-});
+);
 
 module.exports = router;

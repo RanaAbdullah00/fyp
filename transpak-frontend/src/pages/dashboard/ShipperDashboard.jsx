@@ -6,18 +6,14 @@ import StatsCards from '../../components/dashboard/StatsCards.jsx';
 import ActivityFeed from '../../components/dashboard/ActivityFeed.jsx';
 import AnalyticsChart from '../../components/dashboard/AnalyticsChart.jsx';
 import LoadList from '../../components/loadboard/LoadList.jsx';
-import Loader from '../../components/ui/Loader.jsx';
 import ActiveShipmentPanel from '../../components/dashboard/ActiveShipmentPanel.jsx';
-import { normalizeTracking, normalizeLoads } from '../../adapters/normalize.js';
+import { normalizeLoads } from '../../adapters/normalize.js';
 
 // Dashboard view tailored for shippers.
 const ShipperDashboard = () => {
   const { user } = useAuth();
   const profileComplete = user?.profileComplete === true;
-  const activities = [
-    { id: 1, message: 'Carrier ABC Logistics delivered PK-INV-001.', time: '10 min ago' },
-    { id: 2, message: 'New bid on Load L-102 from PakTrans.', time: '45 min ago' }
-  ];
+  const activities = [];
 
   const [month, setMonth] = useState('This month');
   const [mineLoads, setMineLoads] = useState([]);
@@ -46,21 +42,29 @@ const ShipperDashboard = () => {
   );
 
   const chartData = useMemo(() => {
-    const seed = Math.max(1, Math.min(8, Math.round(metrics.total / 2) + 1));
-    const base =
-      month === 'Last month'
-        ? [seed, seed + 1, seed, seed + 2, seed, seed + 1, seed]
-        : [seed + 1, seed + 2, seed, seed + 3, seed + 1, seed + 2, seed];
-    return ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5', 'Week 6', 'Week 7'].map((n, i) => ({
-      name: n,
-      value: base[i]
+    const loads = Array.isArray(mineLoads) ? mineLoads : [];
+    if (!loads.length) return [];
+    const now = new Date();
+    const weekMs = 7 * 24 * 60 * 60 * 1000;
+    const windowWeeks = 4;
+    const from = new Date(now.getTime() - windowWeeks * weekMs);
+    const buckets = Array.from({ length: windowWeeks }, (_, i) => ({
+      name: `Week ${i + 1}`,
+      value: 0
     }));
-  }, [month, metrics.total]);
+    for (const l of loads) {
+      const dt = l?.createdAt ? new Date(l.createdAt) : null;
+      if (!dt || Number.isNaN(dt.getTime()) || dt < from) continue;
+      const idx = Math.min(windowWeeks - 1, Math.max(0, Math.floor((dt.getTime() - from.getTime()) / weekMs)));
+      buckets[idx].value += 1;
+    }
+    return buckets;
+  }, [mineLoads]);
 
   const openLoads = useMemo(() => mineLoads.filter((l) => l.status === 'open'), [mineLoads]);
 
-  const [trackingData, setTrackingData] = useState(null);
-  const [loadingTracking, setLoadingTracking] = useState(false);
+  const [trackingData] = useState(null);
+  const [loadingTracking] = useState(false);
   const { request } = useApi();
 
   useEffect(() => {
@@ -74,20 +78,7 @@ const ShipperDashboard = () => {
     })();
   }, [request]);
 
-  useEffect(() => {
-    const fetchTracking = async () => {
-      setLoadingTracking(true);
-      try {
-        const data = await request({ url: '/shipments/track/1' });
-        setTrackingData(normalizeTracking(data));
-      } catch (err) {
-        console.error('Tracking fetch failed:', err);
-      } finally {
-        setLoadingTracking(false);
-      }
-    };
-    fetchTracking();
-  }, [request]);
+  // Tracking data is shown on the Shipment Tracking screen where a real reference/id is provided.
 
   return (
     <div className="container py-3">
@@ -109,7 +100,12 @@ const ShipperDashboard = () => {
               <option>Last month</option>
             </select>
           </div>
-          <AnalyticsChart data={chartData} label="Weekly load activity (trend)" legend="Loads (index)" />
+          <AnalyticsChart
+            data={chartData}
+            label="Weekly load activity"
+            legend="Loads"
+            emptyHint="Post loads to build your weekly activity trend."
+          />
         </div>
         <div className="col-12 col-lg-6">
           <ActivityFeed activities={activities} />
@@ -131,7 +127,7 @@ const ShipperDashboard = () => {
           emptyState={
             <div className="text-muted text-center py-5 px-3 tp-empty-state rounded-3 border border-dashed">
               <div className="fw-semibold mb-1">No active shipments</div>
-              <div className="small">Post a load or wait for carrier assignment to see tracking here.</div>
+              <div className="small">Accept a carrier bid to start shipment tracking.</div>
             </div>
           }
         />

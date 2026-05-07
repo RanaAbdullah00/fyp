@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useMemo } from 'react';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth.js';
 import Splash from './pages/auth/Splash.jsx';
 import Login from './pages/auth/Login.jsx';
@@ -29,8 +29,6 @@ import FleetMonitoring from './pages/fleet/FleetMonitoring.jsx';
 import TruckDetails from './pages/carrier/TruckDetails.jsx';
 import ShipmentTracking from './pages/shipments/ShipmentTracking.jsx';
 import ShipmentHistory from './pages/shipments/ShipmentHistory.jsx';
-import Wallet from './pages/wallet/Wallet.jsx';
-import Transactions from './pages/wallet/Transactions.jsx';
 import Profile from './pages/profile/Profile.jsx';
 import Settings from './pages/settings/Settings.jsx';
 import Support from './pages/support/Support.jsx';
@@ -43,19 +41,8 @@ import Navbar from './components/layout/Navbar.jsx';
 import Sidebar from './components/layout/Sidebar.jsx';
 import MobileNav from './components/layout/MobileNav.jsx';
 import Footer from './components/layout/Footer.jsx';
-import Loader from './components/ui/Loader.jsx';
 import LoadingScreen from './components/ui/LoadingScreen.jsx';
 import { dashboardPathForRole } from './utils/dashboardPath.js';
-
-const SplashScreen = () => (
-  <div className="d-flex flex-column justify-content-center align-items-center vh-100 text-white" style={{ backgroundColor: 'var(--pak-primary)' }}>
-    <h1 className="fw-bold mb-3">TransPak</h1>
-    <p className="mb-4 text-center px-4">
-      Digital freight exchange connecting shippers and carriers across Pakistan.
-    </p>
-    <Loader light />
-  </div>
-);
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useAuth();
@@ -345,24 +332,6 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={['shipper', 'carrier']}>
                     <ShipmentHistory />
-                  </ProtectedRoute>
-                }
-              />
-
-              {/* Wallet */}
-              <Route
-                path="/wallet"
-                element={
-                  <ProtectedRoute>
-                    <Wallet />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/wallet/transactions"
-                element={
-                  <ProtectedRoute>
-                    <Transactions />
                   </ProtectedRoute>
                 }
               />

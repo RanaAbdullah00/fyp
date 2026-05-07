@@ -1,6 +1,6 @@
-const User = require("../models/User");
 const { verifyToken } = require("../utils/jwt");
 const { sendError } = require("../utils/apiResponse");
+const userRepo = require("../repositories/userRepo");
 
 async function protect(req, res, next) {
   try {
@@ -17,7 +17,7 @@ async function protect(req, res, next) {
       return sendError(res, 401, "Unauthorized");
     }
 
-    const user = await User.findById(userId);
+    const user = await userRepo.findById(userId);
     if (!user) {
       return sendError(res, 401, "Unauthorized");
     }
@@ -25,11 +25,11 @@ async function protect(req, res, next) {
       return sendError(res, 403, "Account is blocked");
     }
 
-    req.user = user.toAuthJSON();
+    req.user = user;
     req.auth = {
-      userId: user._id.toString(),
-      roles: user.roles,
-      activeRole: user.activeRole
+      userId: String(user.id),
+      roles: Array.isArray(user.roles) ? user.roles : [],
+      activeRole: user.activeRole || null
     };
 
     return next();

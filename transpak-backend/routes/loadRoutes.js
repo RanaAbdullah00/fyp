@@ -1,12 +1,10 @@
 const express = require("express");
-const mongoose = require("mongoose");
 const { body, param, validationResult } = require("express-validator");
 const { protect, requireAnyRole, requireActiveRole } = require("../middleware/authMiddleware");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
-const Load = require("../models/Load");
-const User = require("../models/User");
-const Bid = require("../models/Bid");
-const ShipmentTrack = require("../models/ShipmentTrack");
+const { query } = require("../db/pool");
+const userRepo = require("../repositories/userRepo");
+const loadController = require("../src/controllers/loadController");
 
 const router = express.Router();
 
@@ -23,8 +21,10 @@ function generateCode() {
   return `L-${Math.floor(100000 + Math.random() * 900000)}`;
 }
 
-function escapeRegexLiteral(value) {
-  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    String(value || "")
+  );
 }
 
 function validate(req, res, next) {
@@ -37,87 +37,31 @@ function validate(req, res, next) {
   return next();
 }
 
-router.get("/", protect, requireAnyRole(["carrier", "admin"]), requireActiveRole("carrier"), async (req, res) => {
-  try {
-    const { origin, destination, vehicleType, city, minPrice, maxPrice } = req.query || {};
-    const and = [{ status: "open" }];
-
-    if (origin) and.push({ origin: new RegExp(escapeRegexLiteral(String(origin).trim()), "i") });
-    if (destination) and.push({ destination: new RegExp(escapeRegexLiteral(String(destination).trim()), "i") });
-    if (vehicleType) and.push({ vehicleType: new RegExp(escapeRegexLiteral(String(vehicleType).trim()), "i") });
-    if (city) {
-      const c = new RegExp(escapeRegexLiteral(String(city).trim()), "i");
-      and.push({ $or: [{ origin: c }, { destination: c }] });
-    }
-
-    const minRaw = minPrice !== undefined && String(minPrice).trim() !== "" ? String(minPrice).trim() : "";
-    const maxRaw = maxPrice !== undefined && String(maxPrice).trim() !== "" ? String(maxPrice).trim() : "";
-    if (minRaw && !Number.isFinite(Number(minRaw))) return sendError(res, 400, "minPrice must be a valid number");
-    if (maxRaw && !Number.isFinite(Number(maxRaw))) return sendError(res, 400, "maxPrice must be a valid number");
-    const minN = minRaw ? Number(minRaw) : null;
-    const maxN = maxRaw ? Number(maxRaw) : null;
-    if (minN != null && maxN != null && minN > maxN) return sendError(res, 400, "minPrice cannot exceed maxPrice");
-    if (minN != null || maxN != null) {
-      const range = {};
-      if (minN != null) range.$gte = minN;
-      if (maxN != null) range.$lte = maxN;
-      if (Object.keys(range).length) and.push({ expectedPrice: range });
-    }
-
-    const q = and.length === 1 ? and[0] : { $and: and };
-    const loads = await Load.find(q).sort({ createdAt: -1 }).limit(200);
-    return sendSuccess(res, 200, loads.map((l) => l.toJSONSafe()));
-  } catch (err) {
-    return sendError(res, 500, err.message || "Server error");
-  }
-});
+router.get("/", protect, requireAnyRole(["carrier", "admin"]), requireActiveRole("carrier"), loadController.listOpen);
 
 router.get("/mine", protect, requireAnyRole(["shipper", "admin"]), requireActiveRole("shipper"), async (req, res) => {
   try {
-    const uid = new mongoose.Types.ObjectId(String(req.auth.userId));
-    const rows = await Load.aggregate([
-      { $match: { shipperId: uid } },
-      { $sort: { createdAt: -1 } },
-      { $limit: 200 },
-      {
-        $lookup: {
-          from: "bids",
-          localField: "_id",
-          foreignField: "loadId",
-          as: "_bidDocs"
-        }
-      },
-      { $addFields: { bidCount: { $size: "$_bidDocs" } } },
-      { $project: { _bidDocs: 0 } }
-    ]);
-    const data = rows.map((l) => ({
-      id: l._id.toString(),
-      code: l.code,
-      cargo: l.cargo,
-      origin: l.origin,
-      destination: l.destination,
-      weight: l.weight,
-      vehicleType: l.vehicleType,
-      expectedPrice: l.expectedPrice,
-      pickupDate: l.pickupDate,
-      deadlineHours: l.deadlineHours,
-      status: l.status,
-      shipperId: l.shipperId?.toString?.() || String(l.shipperId),
-      assignedCarrierId: l.assignedCarrierId?.toString?.() || (l.assignedCarrierId ? String(l.assignedCarrierId) : null),
-      acceptedBidId: l.acceptedBidId?.toString?.() || (l.acceptedBidId ? String(l.acceptedBidId) : null),
-      bookingReference: l.bookingReference || null,
-      createdAt: l.createdAt,
-      updatedAt: l.updatedAt,
-      bidCount: l.bidCount || 0
-    }));
-    return sendSuccess(res, 200, data);
+    const { rows } = await query(
+      `SELECT l.id, l.code, l.cargo, l.origin, l.destination, l.weight, l.vehicle_type AS "vehicleType",
+              l.expected_price AS "expectedPrice", l.pickup_date AS "pickupDate", l.deadline_hours AS "deadlineHours",
+              l.status, l.shipper_id AS "shipperId", l.assigned_carrier_id AS "assignedCarrierId",
+              l.accepted_bid_id AS "acceptedBidId", l.booking_reference AS "bookingReference",
+              l.created_at AS "createdAt", l.updated_at AS "updatedAt",
+              0::int AS "bidCount"
+       FROM loads l
+       WHERE l.shipper_id = $1
+       ORDER BY l.created_at DESC
+       LIMIT 200`,
+      [req.auth.userId]
+    );
+    return sendSuccess(res, 200, rows);
   } catch (err) {
     return sendError(res, 500, err.message || "Server error");
   }
 });
 
 const updateLoadValidators = [
-  param("id").isMongoId().withMessage("Invalid load id"),
+  param("id").custom((v) => (isUuid(v) ? true : (() => { throw new Error("Invalid load id"); })())),
   body("cargo").optional().trim().isLength({ min: 2, max: 200 }).withMessage("cargo must be 2-200 chars"),
   body("origin").optional().trim().isLength({ min: 2, max: 120 }).withMessage("origin must be 2-120 chars"),
   body("destination").optional().trim().isLength({ min: 2, max: 120 }).withMessage("destination must be 2-120 chars"),
@@ -151,24 +95,21 @@ const updateLoadValidators = [
 
 async function updateLoad(req, res) {
   try {
-    const load = await Load.findById(req.params.id);
-    if (!load) return sendError(res, 404, "Not found");
-    if (String(load.shipperId) !== String(req.auth.userId)) return sendError(res, 403, "Forbidden");
-    if (load.status !== "open") return sendError(res, 409, "Only open loads can be updated");
-
     const { cargo, origin, destination, weight, type, vehicleType, price, expectedPrice, pickupDate, deadlineHours } =
       req.body || {};
 
-    if (cargo !== undefined) load.cargo = String(cargo).trim();
-    if (origin !== undefined) load.origin = String(origin).trim();
-    if (destination !== undefined) load.destination = String(destination).trim();
-    if (weight !== undefined) load.weight = Number(weight);
-    if (vehicleType !== undefined || type !== undefined) {
-      load.vehicleType = String(vehicleType || type || load.vehicleType).trim();
-    }
-    if (expectedPrice !== undefined || price !== undefined) {
-      load.expectedPrice = Number(expectedPrice ?? price ?? load.expectedPrice);
-    }
+    const { rows: found } = await query(
+      `SELECT id, shipper_id, status, vehicle_type, expected_price
+       FROM loads
+       WHERE id = $1`,
+      [req.params.id]
+    );
+    const load = found[0];
+    if (!load) return sendError(res, 404, "Not found");
+    if (String(load.shipper_id) !== String(req.auth.userId)) return sendError(res, 403, "Forbidden");
+    if (load.status !== "open") return sendError(res, 409, "Only open loads can be updated");
+
+    let nextPickupDate = null;
     if (pickupDate !== undefined && pickupDate !== null && String(pickupDate).trim() !== "") {
       const pickup = String(pickupDate).trim();
       if (!isISODateOnly(pickup)) return sendError(res, 400, "pickupDate must be YYYY-MM-DD");
@@ -177,14 +118,41 @@ async function updateLoad(req, res) {
       if (!(pickupDt.getTime() > today.getTime())) {
         return sendError(res, 400, "Pickup date must be in the future");
       }
-      load.pickupDate = pickup;
-    }
-    if (deadlineHours !== undefined && deadlineHours !== null && deadlineHours !== "") {
-      load.deadlineHours = Number(deadlineHours);
+      nextPickupDate = pickup;
     }
 
-    await load.save();
-    return sendSuccess(res, 200, load.toJSONSafe(), "Updated");
+    const nextVehicle = vehicleType !== undefined || type !== undefined ? String(vehicleType || type || load.vehicle_type).trim() : load.vehicle_type;
+    const nextExpected = expectedPrice !== undefined || price !== undefined ? Number(expectedPrice ?? price ?? load.expected_price) : Number(load.expected_price);
+
+    const { rows } = await query(
+      `UPDATE loads
+       SET cargo = COALESCE($2, cargo),
+           origin = COALESCE($3, origin),
+           destination = COALESCE($4, destination),
+           weight = COALESCE($5, weight),
+           vehicle_type = $6,
+           expected_price = $7,
+           pickup_date = COALESCE($8::date, pickup_date),
+           deadline_hours = COALESCE($9, deadline_hours),
+           updated_at = now()
+       WHERE id = $1
+       RETURNING id, code, cargo, origin, destination, weight, vehicle_type AS "vehicleType",
+                 expected_price AS "expectedPrice", pickup_date AS "pickupDate", deadline_hours AS "deadlineHours",
+                 status, shipper_id AS "shipperId", assigned_carrier_id AS "assignedCarrierId",
+                 created_at AS "createdAt", updated_at AS "updatedAt"`,
+      [
+        req.params.id,
+        cargo !== undefined ? String(cargo).trim() : null,
+        origin !== undefined ? String(origin).trim() : null,
+        destination !== undefined ? String(destination).trim() : null,
+        weight !== undefined ? Number(weight) : null,
+        nextVehicle,
+        nextExpected,
+        nextPickupDate,
+        deadlineHours !== undefined && deadlineHours !== null && deadlineHours !== "" ? Number(deadlineHours) : null
+      ]
+    );
+    return sendSuccess(res, 200, rows[0], "Updated");
   } catch (err) {
     return sendError(res, 500, err.message || "Server error");
   }
@@ -192,16 +160,13 @@ async function updateLoad(req, res) {
 
 async function deleteOwnOpenLoad(req, res) {
   try {
-    const load = await Load.findById(req.params.id);
+    const { rows: found } = await query(`SELECT id, shipper_id, status FROM loads WHERE id = $1`, [req.params.id]);
+    const load = found[0];
     if (!load) return sendError(res, 404, "Not found");
-    if (String(load.shipperId) !== String(req.auth.userId)) return sendError(res, 403, "Forbidden");
+    if (String(load.shipper_id) !== String(req.auth.userId)) return sendError(res, 403, "Forbidden");
     if (load.status !== "open") return sendError(res, 409, "Only open loads can be deleted");
 
-    await Bid.deleteMany({ loadId: load._id });
-    await ShipmentTrack.deleteMany({
-      $or: [{ loadId: load._id }, { refKey: load.code }, { refKey: load._id.toString() }]
-    });
-    await load.deleteOne();
+    await query(`DELETE FROM loads WHERE id = $1`, [req.params.id]);
     return sendSuccess(res, 200, { ok: true }, "Deleted");
   } catch (err) {
     return sendError(res, 500, err.message || "Server error");
@@ -223,13 +188,24 @@ router.delete(
   protect,
   requireAnyRole(["shipper", "admin"]),
   requireActiveRole("shipper"),
-  [param("id").isMongoId().withMessage("Invalid load id")],
+  [param("id").custom((v) => (isUuid(v) ? true : (() => { throw new Error("Invalid load id"); })()))],
   validate,
   deleteOwnOpenLoad
 );
 
 router.get("/:id", protect, async (req, res) => {
-  const load = await Load.findById(req.params.id);
+  const id = req.params.id;
+  if (!isUuid(id)) return sendError(res, 400, "Invalid load id");
+  const { rows } = await query(
+    `SELECT id, code, cargo, origin, destination, weight, vehicle_type AS "vehicleType",
+            expected_price AS "expectedPrice", pickup_date AS "pickupDate", deadline_hours AS "deadlineHours",
+            status, shipper_id AS "shipperId", assigned_carrier_id AS "assignedCarrierId",
+            created_at AS "createdAt", updated_at AS "updatedAt"
+     FROM loads
+     WHERE id = $1`,
+    [id]
+  );
+  const load = rows[0];
   if (!load) return sendError(res, 404, "Not found");
 
   const roles = req.auth?.roles || [];
@@ -237,15 +213,14 @@ router.get("/:id", protect, async (req, res) => {
   const isOwner = String(load.shipperId) === String(req.auth.userId);
   const isAssignedCarrier = load.assignedCarrierId && String(load.assignedCarrierId) === String(req.auth.userId);
   if (!isAdmin && !isOwner && !isAssignedCarrier) return sendError(res, 403, "Forbidden");
-  return sendSuccess(res, 200, load.toJSONSafe());
+  return sendSuccess(res, 200, load);
 });
 
 async function createLoad(req, res) {
-  const user = await User.findById(req.auth.userId);
+  const user = await userRepo.findById(req.auth.userId);
   if (!user) return sendError(res, 401, "Unauthorized");
-  const u = user.toAuthJSON();
-  if (!u.profileComplete) {
-    return sendError(res, 403, "Complete your profile (address + CNIC images) to post loads");
+  if (!user.isProfileComplete) {
+    return sendError(res, 403, "Complete your profile to post loads");
   }
   const { cargo, origin, destination, weight, type, vehicleType, price, expectedPrice, pickupDate, deadlineHours } =
     req.body || {};
@@ -259,20 +234,38 @@ async function createLoad(req, res) {
     return sendError(res, 400, "Pickup date must be in the future");
   }
 
-  const load = await Load.create({
-    code: generateCode(),
-    cargo: String(cargo || "Load").trim(),
-    origin: String(origin || "").trim(),
-    destination: String(destination || "").trim(),
-    weight: Number(weight || 0),
-    vehicleType: String(vehicleType || type || "Truck").trim(),
-    expectedPrice: Number(expectedPrice ?? price ?? 0),
-    pickupDate: pickup,
-    deadlineHours: Number(deadlineHours || 2),
-    shipperId: req.auth.userId
-  });
-
-  return sendSuccess(res, 201, load.toJSONSafe(), "Created");
+  const code = generateCode();
+  const { rows } = await query(
+    `INSERT INTO loads
+       (code, shipper_id, cargo, origin, destination, weight, vehicle_type, expected_price, pickup_date, deadline_hours, status)
+     VALUES
+       ($1, $2, $3, $4, $5, $6, $7, $8, $9::date, $10, 'open')
+     RETURNING id, code, cargo, origin, destination, weight, vehicle_type AS "vehicleType",
+               expected_price AS "expectedPrice", pickup_date AS "pickupDate", deadline_hours AS "deadlineHours",
+               status, shipper_id AS "shipperId", assigned_carrier_id AS "assignedCarrierId",
+               created_at AS "createdAt", updated_at AS "updatedAt"`,
+    [
+      code,
+      req.auth.userId,
+      String(cargo || "Load").trim(),
+      String(origin || "").trim(),
+      String(destination || "").trim(),
+      Number(weight || 0),
+      String(vehicleType || type || "Truck").trim(),
+      Number(expectedPrice ?? price ?? 0),
+      pickup,
+      Number(deadlineHours || 2)
+    ]
+  );
+  const load = rows[0];
+  // ensure shipment row exists for tracking lifecycle
+  await query(
+    `INSERT INTO shipments (load_id, status, location_unavailable)
+     VALUES ($1, 'posted', true)
+     ON CONFLICT (load_id) DO NOTHING`,
+    [load.id]
+  );
+  return sendSuccess(res, 201, load, "Created");
 }
 
 const createLoadValidators = [
