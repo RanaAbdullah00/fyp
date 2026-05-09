@@ -7,8 +7,8 @@ const validateBookingBidParam = [
     .trim()
     .notEmpty()
     .withMessage("Bid id is required")
-    .isMongoId()
-    .withMessage("Bid id must be a valid Mongo id")
+    .isUUID()
+    .withMessage("Bid id must be a valid UUID")
 ];
 
 function validationErrorResponse(req, res) {

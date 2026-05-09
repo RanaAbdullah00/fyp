@@ -54,20 +54,8 @@ export const AppProvider = ({ children }) => {
         return pm === msg && pt === title && Math.abs(t0 - t1) < 120000;
       });
       if (dup) return prev;
-      return [{ id: nid ?? Date.now(), read: Boolean(normalized.read), ...normalized }, ...prev];
+      return [{ id: nid ?? `local-${Date.now()}`, read: Boolean(normalized.read), ...normalized }, ...prev];
     });
-
-    const token = localStorage.getItem('transpak_token');
-    if (token && normalized?.message) {
-      api
-        .post('/notifications', {
-          title: String(normalized.type || 'Update').slice(0, 120),
-          message: String(normalized.message).slice(0, 2000),
-          roleType: normalized.roleType || '',
-          meta: { type: normalized.type }
-        })
-        .catch(() => {});
-    }
   }, []);
 
   addNotificationRef.current = addNotification;

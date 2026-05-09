@@ -9,15 +9,16 @@ const DemoVideoModal = ({ open, onClose, videoUrl, mimeType, emptyMessage }) => 
   const src = videoUrl || (open ? STREAM_PATH : null);
 
   return (
-    <Modal open={open} onClose={onClose} title={t('common.watchDemo')} size="lg">
+    <Modal open={open} onClose={onClose} title={t('common.watchDemo')} size="lg" closeLabel={t('common.close')}>
       {src ? (
         <video
-          key={src}
-          className="w-100 rounded-3"
-          style={{ maxHeight: '56vh', background: '#000' }}
+          key={`${src}-${mimeType || 'video/mp4'}`}
+          className="w-100 rounded-3 tp-demo-video"
+          style={{ maxHeight: 'min(56vh, 520px)', background: '#000' }}
           controls
           playsInline
-          preload="metadata"
+          preload="auto"
+          muted
         >
           <source src={src} type={mimeType || 'video/mp4'} />
         </video>

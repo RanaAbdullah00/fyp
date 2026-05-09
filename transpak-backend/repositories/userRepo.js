@@ -7,18 +7,24 @@ function normalizeRole(value) {
   return ALLOWED_ROLES.includes(v) ? v : null;
 }
 
+function hasRole(user, role) {
+  const r = normalizeRole(role);
+  if (!r || !user) return false;
+  const list = Array.isArray(user.roles) ? user.roles : [];
+  return list.includes(r);
+}
+
 function toAuthUser(row) {
   if (!row) return null;
   return {
     id: row.id,
-    _id: row.id, // backward compatibility for frontend usage
+    _id: row.id,
     email: row.email,
     roles: Array.isArray(row.roles) ? row.roles : [],
     activeRole: row.active_role,
     blocked: Boolean(row.blocked),
     verified: Boolean(row.verified),
 
-    // backward-compatible fields used widely in UI
     name: row.full_name || row.email,
     cnic: row.cnic_number || "",
 
@@ -26,6 +32,7 @@ function toAuthUser(row) {
     phone: row.phone || "",
     cnicNumber: row.cnic_number || "",
     cnicImage: row.cnic_image || "",
+    cnicImageBack: row.cnic_image_back || "",
     profileImage: row.profile_image || "",
     isProfileComplete: Boolean(row.is_profile_complete)
   };
@@ -34,7 +41,7 @@ function toAuthUser(row) {
 async function findById(id) {
   const { rows } = await query(
     `SELECT id, email, roles, active_role, blocked, verified,
-            full_name, phone, cnic_number, cnic_image, profile_image, is_profile_complete
+            full_name, phone, cnic_number, cnic_image, cnic_image_back, profile_image, is_profile_complete
      FROM users
      WHERE id = $1`,
     [id]
@@ -45,7 +52,7 @@ async function findById(id) {
 async function findRowByEmailWithPassword(email) {
   const { rows } = await query(
     `SELECT id, email, roles, active_role, blocked, verified,
-            full_name, phone, cnic_number, cnic_image, profile_image, is_profile_complete,
+            full_name, phone, cnic_number, cnic_image, cnic_image_back, profile_image, is_profile_complete,
             password_hash
      FROM users
      WHERE email = $1`,
@@ -57,7 +64,7 @@ async function findRowByEmailWithPassword(email) {
 async function findByEmail(email) {
   const { rows } = await query(
     `SELECT id, email, roles, active_role, blocked, verified,
-            full_name, phone, cnic_number, cnic_image, profile_image, is_profile_complete
+            full_name, phone, cnic_number, cnic_image, cnic_image_back, profile_image, is_profile_complete
      FROM users
      WHERE email = $1`,
     [String(email || "").trim().toLowerCase()]
@@ -65,23 +72,24 @@ async function findByEmail(email) {
   return toAuthUser(rows[0]);
 }
 
-async function findByPhone(phone) {
-  const { rows } = await query(
-    `SELECT id FROM users WHERE phone = $1`,
-    [String(phone || "").trim()]
-  );
+/** Owner of this phone (for duplicate checks). */
+async function findPhoneOwner(phone) {
+  const { rows } = await query(`SELECT id, email FROM users WHERE phone = $1`, [String(phone || "").trim()]);
   return rows[0] || null;
 }
 
 async function findByCnicNumber(cnicNumber) {
   const { rows } = await query(
-    `SELECT id FROM users WHERE cnic_number = $1`,
+    `SELECT id, email, roles, active_role, blocked, verified,
+            full_name, phone, cnic_number, cnic_image, cnic_image_back, profile_image, is_profile_complete
+     FROM users
+     WHERE cnic_number = $1`,
     [String(cnicNumber || "").trim()]
   );
-  return rows[0] || null;
+  return toAuthUser(rows[0]);
 }
 
-async function createUser({ email, passwordHash, roles, activeRole, phone, cnicNumber }) {
+async function createUser({ email, passwordHash, roles, activeRole, phone, cnicNumber, fullName }) {
   const normalizedEmail = String(email || "").trim().toLowerCase();
   const cleanRoles = Array.isArray(roles)
     ? [...new Set(roles.map(normalizeRole).filter(Boolean))]
@@ -89,20 +97,83 @@ async function createUser({ email, passwordHash, roles, activeRole, phone, cnicN
   const active = normalizeRole(activeRole) || cleanRoles[0] || "shipper";
   if (!cleanRoles.includes(active)) cleanRoles.unshift(active);
   if (!cleanRoles.length) cleanRoles.push("shipper");
+  const fn = fullName != null ? String(fullName).trim() : null;
 
   const { rows } = await query(
-    `INSERT INTO users (email, password_hash, roles, active_role, phone, cnic_number)
-     VALUES ($1, $2, $3::text[], $4, $5, $6)
+    `INSERT INTO users (email, password_hash, roles, active_role, phone, cnic_number, full_name)
+     VALUES ($1, $2, $3::text[], $4, $5, $6, $7)
      RETURNING id, email, roles, active_role, blocked, verified,
-               full_name, phone, cnic_number, cnic_image, profile_image, is_profile_complete`,
+               full_name, phone, cnic_number, cnic_image, cnic_image_back, profile_image, is_profile_complete`,
     [
       normalizedEmail,
       passwordHash,
       cleanRoles,
       active,
       phone != null ? String(phone).trim() : null,
-      cnicNumber != null ? String(cnicNumber).trim() : null
+      cnicNumber != null ? String(cnicNumber).trim() : null,
+      fn || null
     ]
+  );
+  return toAuthUser(rows[0]);
+}
+
+async function addRole(userId, role) {
+  const r = normalizeRole(role);
+  if (!r || r === "admin") return null;
+  const { rows } = await query(
+    `UPDATE users
+     SET roles = (
+       SELECT ARRAY(
+         SELECT DISTINCT unnest(COALESCE(roles, ARRAY[]::text[]) || ARRAY[$2::text])
+       )
+     ),
+     updated_at = now()
+     WHERE id = $1
+     RETURNING id, email, roles, active_role, blocked, verified,
+               full_name, phone, cnic_number, cnic_image, cnic_image_back, profile_image, is_profile_complete`,
+    [userId, r]
+  );
+  return toAuthUser(rows[0]);
+}
+
+async function setCnicIfEmpty(userId, cnicNumber) {
+  const c = String(cnicNumber || "").trim();
+  if (!c) return null;
+  const { rows } = await query(
+    `UPDATE users
+     SET cnic_number = $2, updated_at = now()
+     WHERE id = $1 AND cnic_number IS NULL
+     RETURNING id, email, roles, active_role, blocked, verified,
+               full_name, phone, cnic_number, cnic_image, cnic_image_back, profile_image, is_profile_complete`,
+    [userId, c]
+  );
+  return toAuthUser(rows[0]);
+}
+
+async function setPhoneIfEmpty(userId, phone) {
+  const p = String(phone || "").trim();
+  if (!p) return null;
+  const { rows } = await query(
+    `UPDATE users
+     SET phone = $2, updated_at = now()
+     WHERE id = $1 AND (phone IS NULL OR TRIM(phone) = '')
+     RETURNING id, email, roles, active_role, blocked, verified,
+               full_name, phone, cnic_number, cnic_image, cnic_image_back, profile_image, is_profile_complete`,
+    [userId, p]
+  );
+  return toAuthUser(rows[0]);
+}
+
+async function setFullNameIfEmpty(userId, fullName) {
+  const n = String(fullName || "").trim();
+  if (!n) return null;
+  const { rows } = await query(
+    `UPDATE users
+     SET full_name = $2, updated_at = now()
+     WHERE id = $1 AND (full_name IS NULL OR TRIM(full_name) = '')
+     RETURNING id, email, roles, active_role, blocked, verified,
+               full_name, phone, cnic_number, cnic_image, cnic_image_back, profile_image, is_profile_complete`,
+    [userId, n]
   );
   return toAuthUser(rows[0]);
 }
@@ -113,9 +184,9 @@ async function setActiveRole(userId, nextRole) {
   const { rows } = await query(
     `UPDATE users
      SET active_role = $2, updated_at = now()
-     WHERE id = $1 AND $2 = ANY(roles)
+     WHERE id = $1
      RETURNING id, email, roles, active_role, blocked, verified,
-               full_name, phone, cnic_number, cnic_image, profile_image, is_profile_complete`,
+               full_name, phone, cnic_number, cnic_image, cnic_image_back, profile_image, is_profile_complete`,
     [userId, role]
   );
   return toAuthUser(rows[0]);
@@ -140,7 +211,7 @@ async function upsertDemoAdmin({ email, passwordHash, roles, activeRole, phone, 
        full_name = COALESCE(users.full_name, EXCLUDED.full_name),
        updated_at = now()
      RETURNING id, email, roles, active_role, blocked, verified,
-               full_name, phone, cnic_number, cnic_image, profile_image, is_profile_complete`,
+               full_name, phone, cnic_number, cnic_image, cnic_image_back, profile_image, is_profile_complete`,
     [
       normalizedEmail,
       passwordHash,
@@ -157,13 +228,17 @@ async function upsertDemoAdmin({ email, passwordHash, roles, activeRole, phone, 
 module.exports = {
   ALLOWED_ROLES,
   normalizeRole,
+  hasRole,
   findById,
   findByEmail,
   findRowByEmailWithPassword,
-  findByPhone,
+  findPhoneOwner,
   findByCnicNumber,
   createUser,
+  addRole,
+  setCnicIfEmpty,
+  setPhoneIfEmpty,
+  setFullNameIfEmpty,
   setActiveRole,
   upsertDemoAdmin
 };
-

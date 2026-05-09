@@ -14,7 +14,8 @@ function buildPgConfigFromEnv() {
     port: Number(process.env.PGPORT || 5432),
     database: process.env.PGDATABASE || "transpak",
     user: process.env.PGUSER || "postgres",
-    password: process.env.PGPASSWORD || "postgres",
+    // Do not default a password: wrong defaults cause confusing "password authentication failed" when .env is missing/misread.
+    password: process.env.PGPASSWORD,
     ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : undefined
   };
 }

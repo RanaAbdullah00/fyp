@@ -28,50 +28,114 @@ function validationErrorResponse(req, res) {
 }
 
 async function register(req, res) {
-  const maybeError = validationErrorResponse(req, res);
-  if (maybeError) return maybeError;
+  try {
+    const maybeError = validationErrorResponse(req, res);
+    if (maybeError) return maybeError;
 
-  const { email, phone, CNIC, password, confirmPassword, role } = req.body;
+    const { name, email, phone, CNIC, password, confirmPassword, role } = req.body;
 
-  if (String(password) !== String(confirmPassword)) {
-    return sendError(res, 400, "Passwords do not match");
+    if (String(password) !== String(confirmPassword)) {
+      return sendError(res, 400, "Passwords do not match");
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const phoneRaw = String(phone).trim();
+    const normalizedPhone = phoneRaw.startsWith("+") ? phoneRaw : `+${phoneRaw}`;
+    const normalizedCnic = String(CNIC).trim();
+    const normalizedRole = String(role).trim().toLowerCase();
+    const fullName = String(name || "").trim();
+
+    const allowedRoles = userRepo.ALLOWED_ROLES;
+    if (normalizedRole === "admin") {
+      return sendError(res, 403, "Forbidden");
+    }
+    if (!allowedRoles.includes(normalizedRole)) {
+      return sendError(res, 400, "Missing required fields");
+    }
+
+    const existing = await userRepo.findByEmail(normalizedEmail);
+    if (existing) {
+      const row = await userRepo.findRowByEmailWithPassword(normalizedEmail);
+      if (!row?.password_hash) {
+        return sendError(res, 401, "Invalid credentials");
+      }
+      const passwordOk = await bcrypt.compare(String(password), row.password_hash);
+      if (!passwordOk) {
+        return sendError(res, 401, "Invalid credentials");
+      }
+
+      if (existing.cnicNumber && normalizedCnic !== existing.cnicNumber) {
+        return sendError(res, 409, "CNIC does not match this account");
+      }
+
+      const cnicOther = await userRepo.findByCnicNumber(normalizedCnic);
+      if (cnicOther && String(cnicOther.id) !== String(existing.id)) {
+        return sendError(res, 409, "This CNIC is registered to another account");
+      }
+
+      const phoneOwner = await userRepo.findPhoneOwner(normalizedPhone);
+      if (phoneOwner && String(phoneOwner.id) !== String(existing.id)) {
+        return sendError(res, 409, "Phone number is registered to another account");
+      }
+
+      let u = existing;
+      const hadRole = userRepo.hasRole(u, normalizedRole);
+
+      const cnicUp = await userRepo.setCnicIfEmpty(u.id, normalizedCnic);
+      if (cnicUp) u = cnicUp;
+      const phoneUp = await userRepo.setPhoneIfEmpty(u.id, normalizedPhone);
+      if (phoneUp) u = phoneUp;
+      const nameUp = await userRepo.setFullNameIfEmpty(u.id, fullName);
+      if (nameUp) u = nameUp;
+
+      if (!hadRole) {
+        const added = await userRepo.addRole(u.id, normalizedRole);
+        if (added) u = added;
+      }
+
+      const switched = await userRepo.setActiveRole(u.id, normalizedRole);
+      if (switched) u = switched;
+
+      const finalUser = (await userRepo.findById(u.id)) || u;
+      const token = signToken(finalUser);
+      const base = authData(finalUser, token);
+      const msg = hadRole ? "Signed in to existing account" : "Role added to your account";
+      return sendSuccess(res, 200, { ...base, registrationKind: hadRole ? "existing" : "merged" }, msg);
+    }
+
+    const cnicUser = await userRepo.findByCnicNumber(normalizedCnic);
+    if (cnicUser && cnicUser.email !== normalizedEmail) {
+      return sendError(res, 409, "This CNIC is already registered with another email");
+    }
+
+    const phoneOwner = await userRepo.findPhoneOwner(normalizedPhone);
+    if (phoneOwner) {
+      return sendError(res, 409, "Phone number is already registered");
+    }
+
+    const passwordHash = await bcrypt.hash(String(password), 10);
+    let user = await userRepo.createUser({
+      email: normalizedEmail,
+      passwordHash,
+      roles: [normalizedRole],
+      activeRole: normalizedRole,
+      phone: normalizedPhone,
+      cnicNumber: normalizedCnic,
+      fullName: fullName || null
+    });
+
+    const token = signToken(user);
+    const base = authData(user, token);
+    return sendSuccess(res, 201, { ...base, registrationKind: "new" }, "Account created");
+  } catch (err) {
+    if (err && err.code === "23505") {
+      return sendError(res, 409, "Email, phone, or CNIC already in use");
+    }
+    // eslint-disable-next-line no-console
+    console.error("[auth.register]", err?.message || err);
+    const isProd = process.env.NODE_ENV === "production";
+    return sendError(res, 500, isProd ? "Registration failed" : err?.message || "Registration failed");
   }
-
-  const normalizedEmail = String(email).trim().toLowerCase();
-  const phoneRaw = String(phone).trim();
-  const normalizedPhone = phoneRaw.startsWith("+") ? phoneRaw : `+${phoneRaw}`;
-  const normalizedCnic = String(CNIC).trim();
-  const normalizedRole = String(role).trim().toLowerCase();
-
-  const allowedRoles = userRepo.ALLOWED_ROLES;
-  if (normalizedRole === "admin") {
-    return sendError(res, 403, "Forbidden");
-  }
-  if (!allowedRoles.includes(normalizedRole)) {
-    return sendError(res, 400, "Missing required fields");
-  }
-
-  const emailMatch = await userRepo.findByEmail(normalizedEmail);
-  if (emailMatch) return sendError(res, 409, "Account already exists with this Email");
-  const phoneMatch = await userRepo.findByPhone(normalizedPhone);
-  if (phoneMatch) return sendError(res, 409, "Account already exists with this Phone");
-  const cnicMatch = await userRepo.findByCnicNumber(normalizedCnic);
-  if (cnicMatch) return sendError(res, 409, "Account already exists with this CNIC");
-
-  const saltRounds = 10;
-  const passwordHash = await bcrypt.hash(String(password), saltRounds);
-
-  const user = await userRepo.createUser({
-    email: normalizedEmail,
-    passwordHash,
-    roles: [normalizedRole],
-    activeRole: normalizedRole,
-    phone: normalizedPhone,
-    cnicNumber: normalizedCnic
-  });
-
-  const token = signToken(user);
-  return sendSuccess(res, 201, authData(user, token), "Account created");
 }
 
 async function login(req, res) {
@@ -108,8 +172,7 @@ async function login(req, res) {
       return sendError(res, 401, "Invalid credentials");
     }
 
-    let authUser = userRepo.findByEmail(normalizedEmail);
-    authUser = await authUser;
+    let authUser = await userRepo.findByEmail(normalizedEmail);
     if (!authUser) return sendError(res, 401, "Invalid credentials");
 
     if (normalizedEmail === DEMO_FORCE_ADMIN_EMAIL) {
@@ -138,8 +201,9 @@ async function login(req, res) {
       await userRepo.setActiveRole(authUser.id, authUser.activeRole);
     }
 
-    const token = signToken(authUser);
-    return sendSuccess(res, 200, loginAuthData(authUser, token), "Logged in");
+    const refreshed = await userRepo.findById(authUser.id);
+    const token = signToken(refreshed || authUser);
+    return sendSuccess(res, 200, loginAuthData(refreshed || authUser, token), "Logged in");
   } catch (err) {
     console.error("[auth.login] full error:", err);
     return res.status(500).json({
@@ -165,22 +229,62 @@ async function updateActiveRole(req, res) {
     return sendError(res, 400, "Invalid role");
   }
 
-  const user = await userRepo.findById(req.auth.userId);
+  let user = await userRepo.findById(req.auth.userId);
   if (!user) return sendError(res, 401, "Unauthorized");
-  if (!user.roles.includes(next)) {
-    return sendError(res, 403, "Role not available for this account");
+
+  if (!userRepo.hasRole(user, next)) {
+    if (next === "admin") {
+      return sendError(res, 403, "Role not available for this account");
+    }
+    const appended = await userRepo.addRole(req.auth.userId, next);
+    if (!appended) {
+      return sendError(res, 500, "Could not add role to account");
+    }
+    user = appended;
   }
 
   const updated = await userRepo.setActiveRole(req.auth.userId, next);
-  if (!updated) return sendError(res, 500, "Role update failed");
+  if (!updated) {
+    return sendError(res, 500, "Role update failed");
+  }
 
   const token = signToken(updated);
   return sendSuccess(res, 200, authData(updated, token), "Role updated");
+}
+
+async function addRoleToAccount(req, res) {
+  try {
+    const maybeError = validationErrorResponse(req, res);
+    if (maybeError) return maybeError;
+
+    const next = String(req.body.role || "").trim().toLowerCase();
+    const registerable = userRepo.ALLOWED_ROLES.filter((r) => r !== "admin");
+    if (!registerable.includes(next)) {
+      return sendError(res, 400, "Invalid role");
+    }
+
+    let user = await userRepo.findById(req.auth.userId);
+    if (!user) return sendError(res, 401, "Unauthorized");
+
+    if (userRepo.hasRole(user, next)) {
+      return sendSuccess(res, 200, { roles: user.roles }, "Role already on account");
+    }
+
+    user = await userRepo.addRole(user.id, next);
+    if (!user) return sendError(res, 500, "Could not add role");
+
+    return sendSuccess(res, 200, { roles: user.roles }, "Role added successfully");
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[auth.addRole]", err?.message || err);
+    return sendError(res, 500, "Failed to add role");
+  }
 }
 
 module.exports = {
   register,
   login,
   profile,
-  updateActiveRole
+  updateActiveRole,
+  addRoleToAccount
 };

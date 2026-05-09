@@ -9,7 +9,7 @@ import * as chatApi from '../../services/chatApi.js';
 
 const SEEN_DEBOUNCE_MS = 800;
 
-/** Strict dedupe: Mongo _id or API `id`, else clientMessageId. */
+/** Strict dedupe: API `id` (UUID) or clientMessageId. */
 function chatMessageDedupeKey(m) {
   if (!m) return null;
   const mid = m._id ?? m.id;

@@ -1,7 +1,7 @@
 const express = require("express");
 const { body } = require("express-validator");
 const rateLimit = require("express-rate-limit");
-const { register, login, profile, updateActiveRole } = require("../controllers/authController");
+const { register, login, profile, updateActiveRole, addRoleToAccount } = require("../controllers/authController");
 const { protect } = require("../middleware/authMiddleware");
 const userRepo = require("../repositories/userRepo");
 
@@ -78,6 +78,13 @@ router.post(
 router.get("/profile", protect, profile);
 
 router.patch("/active-role", protect, updateActiveRole);
+
+router.post(
+  "/add-role",
+  protect,
+  [body("role").trim().toLowerCase().isIn(registerableRoles).withMessage("Invalid role")],
+  addRoleToAccount
+);
 
 module.exports = router;
 

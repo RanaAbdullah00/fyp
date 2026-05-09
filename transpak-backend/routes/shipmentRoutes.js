@@ -141,7 +141,9 @@ router.get(
       return sendSuccess(res, 200, payload);
     } catch (err) {
       const status = err.statusCode || 500;
-      return sendError(res, status, err.message || "Server error");
+      const safeMsg =
+        status >= 500 ? "Server error" : err.message || "Request failed";
+      return sendError(res, status, safeMsg);
     }
   }
 );
@@ -211,7 +213,9 @@ router.put(
       return sendSuccess(res, 200, payload);
     } catch (err) {
       const status = err.statusCode || 500;
-      return sendError(res, status, err.message || "Server error");
+      const safeMsg =
+        status >= 500 ? "Server error" : err.message || "Request failed";
+      return sendError(res, status, safeMsg);
     }
   }
 );

@@ -69,10 +69,10 @@ const NotificationPanel = () => {
   };
 
   return (
-    <div className="container py-3">
-      <h5 className="mb-3">Notifications</h5>
-      <Card>
-        <div style={{ maxHeight: '65vh', overflowY: 'auto' }}>
+    <div className="container py-3 position-relative tp-notifications-page">
+      <h5 className="mb-3 text-body">Notifications</h5>
+      <Card className="tp-notifications-card overflow-hidden border-0">
+        <div className="tp-notifications-card__inner" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
           <div className="list-group list-group-flush">
             {sorted.map((n) => (
               <NotificationItem
@@ -82,7 +82,7 @@ const NotificationPanel = () => {
               />
             ))}
             {!sorted.length && (
-              <div className="text-center text-muted small py-4 px-3 tp-empty-state">
+              <div className="text-center small py-4 px-3 tp-empty-state tp-notifications-empty">
                 <div className="fw-semibold mb-1">No notifications yet</div>
                 <div>When bids, loads, or shipments update, they will appear here.</div>
               </div>

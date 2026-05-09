@@ -49,28 +49,22 @@ const Navbar = () => {
 
   const hasShipper = roles.includes('shipper');
   const hasCarrier = roles.includes('carrier');
+  const hasBothCommercial = hasShipper && hasCarrier;
+  const hasOneCommercial = (hasShipper || hasCarrier) && !hasBothCommercial;
+  const showCommercialRoleAction = hasShipper || hasCarrier;
 
-  const targetRole = (() => {
-    if (!activeRole) return null;
-    if (activeRole === 'shipper') return hasCarrier ? 'carrier' : 'carrier';
-    if (activeRole === 'carrier') return hasShipper ? 'shipper' : 'shipper';
-    // admin or unknown: pick the role that is missing (if only one exists).
-    if (hasShipper && !hasCarrier) return 'carrier';
-    if (hasCarrier && !hasShipper) return 'shipper';
-    if (hasShipper && hasCarrier) return 'carrier';
-    return null;
-  })();
+  const missingCommercialRole = hasShipper && !hasCarrier ? 'carrier' : !hasShipper && hasCarrier ? 'shipper' : null;
 
-  const canSwitch = Boolean(hasShipper || hasCarrier) && Boolean(targetRole);
+  const navRoleActionLabel = hasBothCommercial ? t('nav.switchAccount') : t('nav.addProfile');
 
-  const handleSwitchAccount = () => {
-    if (!user || !targetRole) return;
+  const handleNavRoleAction = () => {
+    if (!user || !showCommercialRoleAction) return;
 
-    const otherRoleExists = roles.includes(targetRole);
     const originalRole = activeRole;
 
-    if (otherRoleExists) {
-      // Optimistic role update ensures the UI/dashboard feels instant.
+    if (hasBothCommercial) {
+      const targetRole = activeRole === 'shipper' ? 'carrier' : activeRole === 'carrier' ? 'shipper' : null;
+      if (!targetRole || !roles.includes(targetRole)) return;
       setActiveRole(targetRole).catch((err) => {
         notifyError(unwrapErrorMessage(err) || t('errors.generic'));
         if (originalRole) navigate(dashboardPathForRole(originalRole), { replace: true });
@@ -79,19 +73,20 @@ const Navbar = () => {
       return;
     }
 
-    // Missing the other role: route to role creation.
-    navigate('/register', {
-      replace: true,
-      state: {
-        upgradeRole: targetRole,
-        prefill: {
-          name: user?.name || '',
-          email: user?.email || '',
-          phone: user?.phone || '',
-          cnic: user?.cnic || ''
+    if (hasOneCommercial && missingCommercialRole) {
+      navigate('/register', {
+        replace: true,
+        state: {
+          upgradeRole: missingCommercialRole,
+          prefill: {
+            name: user?.fullName || user?.name || '',
+            email: user?.email || '',
+            phone: user?.phone || '',
+            cnic: user?.cnicNumber || user?.cnic || ''
+          }
         }
-      }
-    });
+      });
+    }
   };
 
   return (
@@ -127,14 +122,14 @@ const Navbar = () => {
                     </span>
                   )}
                 </NavLink>
-                {canSwitch && (
+                {showCommercialRoleAction && (
                   <button
                     type="button"
                     className="btn btn-outline-success btn-sm rounded-lg px-2 text-nowrap"
-                    onClick={handleSwitchAccount}
-                    title={t('nav.switchAccount')}
+                    onClick={handleNavRoleAction}
+                    title={navRoleActionLabel}
                   >
-                    {t('nav.switchAccount')}
+                    {navRoleActionLabel}
                   </button>
                 )}
               </>
@@ -164,14 +159,14 @@ const Navbar = () => {
                     <span className="badge rounded-pill bg-danger" style={{ fontSize: 9 }}>{unreadCount}</span>
                   )}
                 </NavLink>
-                {canSwitch && (
+                {showCommercialRoleAction && (
                   <button
                     type="button"
                     className="btn btn-outline-success btn-sm rounded-lg px-3"
-                    onClick={handleSwitchAccount}
-                    title={t('nav.switchAccount')}
+                    onClick={handleNavRoleAction}
+                    title={navRoleActionLabel}
                   >
-                    {t('nav.switchAccount')}
+                    {navRoleActionLabel}
                   </button>
                 )}
               </>

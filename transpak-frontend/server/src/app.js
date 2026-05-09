@@ -1,15 +1,14 @@
 import express from 'express';
 import cors from 'cors';
 import { env } from './config/env.js';
-import { dbState } from './config/db.js';
 import { notFound, errorHandler } from './middleware/error.js';
 
-import authRoutes from './routes/auth.js';
-import loadRoutes from './routes/loads.js';
-import bidRoutes from './routes/bids.js';
-import trackingRoutes from './routes/tracking.js';
-import notificationRoutes from './routes/notifications.js';
-
+/**
+ * Legacy package: transpak-frontend/server
+ * The real API is transpak-backend (PostgreSQL + Express on port 5000 by default).
+ * Vite should proxy /api → transpak-backend. This app only avoids accidentally
+ * running a second REST server on the same port as transpak-backend.
+ */
 export function createApp() {
   const app = express();
 
@@ -21,29 +20,26 @@ export function createApp() {
   );
   app.use(express.json({ limit: '2mb' }));
 
-  app.get('/api/health', (req, res) =>
+  app.get('/api/health', (req, res) => {
     res.json({
-      ok: true,
-      dbReady: dbState.ready,
-      dbMode: dbState.mode,
-      dbError: dbState.lastError ? String(dbState.lastError.message || dbState.lastError) : null
-    })
-  );
-
-  // DB gate: if both external + embedded failed.
-  app.use((req, res, next) => {
-    if (!dbState.ready && req.path !== '/api/health') {
-      res.status(503).json({ message: 'Database unavailable.' });
-      return;
-    }
-    next();
+      success: true,
+      message: 'ok',
+      data: {
+        status: 'ok',
+        role: 'deprecated-stub',
+        mainBackend: env.TRANSPAK_BACKEND_URL
+      }
+    });
   });
 
-  app.use('/api/auth', authRoutes);
-  app.use('/api/loads', loadRoutes);
-  app.use('/api/bids', bidRoutes);
-  app.use('/api/tracking', trackingRoutes);
-  app.use('/api/notifications', notificationRoutes);
+  app.use('/api', (req, res) => {
+    res.status(410).json({
+      success: false,
+      message:
+        'API is served by transpak-backend (PostgreSQL). Point the Vite dev proxy to that server; do not use this package for REST.',
+      data: { mainBackend: env.TRANSPAK_BACKEND_URL }
+    });
+  });
 
   app.use(notFound);
   app.use(errorHandler);

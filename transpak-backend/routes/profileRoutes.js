@@ -3,8 +3,20 @@ const { body } = require("express-validator");
 const { protect } = require("../middleware/authMiddleware");
 const { uploadProfileImages } = require("../middleware/uploadProfileImages");
 const { getProfile, updateProfile, getProfileStatus } = require("../controllers/profileController");
+const { sendError } = require("../utils/apiResponse");
 
 const router = express.Router();
+
+function handleProfileUpload(req, res, next) {
+  uploadProfileImages(req, res, (err) => {
+    if (!err) return next();
+    const msg = err.message || "File upload failed";
+    if (err.code === "LIMIT_FILE_SIZE") {
+      return sendError(res, 413, "File too large (max 5MB per image)");
+    }
+    return sendError(res, 400, msg);
+  });
+}
 
 router.get("/", protect, getProfile);
 router.get("/status", protect, getProfileStatus);
@@ -12,7 +24,7 @@ router.get("/status", protect, getProfileStatus);
 router.put(
   "/update",
   protect,
-  uploadProfileImages,
+  handleProfileUpload,
   [
     body("full_name").optional().trim().isLength({ min: 2, max: 120 }).withMessage("full_name must be 2-120 chars"),
     body("phone")

@@ -14,6 +14,13 @@ export const LanguageProvider = ({ children }) => {
     if (stored === 'ur' || stored === 'en') setLang(stored);
   }, []);
 
+  useEffect(() => {
+    const isUr = lang === 'ur';
+    document.documentElement.lang = isUr ? 'ur-PK' : 'en';
+    document.documentElement.dir = isUr ? 'rtl' : 'ltr';
+    document.body.classList.toggle('tp-lang-ur', isUr);
+  }, [lang]);
+
   const toggleLanguage = () => {
     setLang((prev) => {
       const next = prev === 'en' ? 'ur' : 'en';
@@ -30,15 +37,21 @@ export const LanguageProvider = ({ children }) => {
 
   const t = useCallback((key, vars = {}) => {
     const parts = String(key).split('.').filter(Boolean);
-    let cur = translations?.[lang];
-    for (const p of parts) {
-      cur = cur?.[p];
-      if (cur == null) return key;
+    const walk = (locale) => {
+      let cur = translations?.[locale];
+      for (const p of parts) {
+        cur = cur?.[p];
+        if (cur == null) return null;
+      }
+      return cur;
+    };
+    let cur = walk(lang);
+    if ((cur == null || typeof cur === 'object') && lang !== 'en') {
+      cur = walk('en');
     }
-    // Never return objects/arrays directly into JSX (prevents "Objects are not valid as React child")
-    if (typeof cur === 'object') return key;
+    if (cur == null) return String(key);
+    if (typeof cur === 'object') return String(key);
     if (typeof cur !== 'string') return cur;
-    // Lightweight {{var}} interpolation
     return cur.replace(/\{\{(\w+)\}\}/g, (_, k) => (vars[k] != null ? String(vars[k]) : `{{${k}}}`));
   }, [lang]);
 

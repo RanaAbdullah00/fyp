@@ -17,8 +17,14 @@ function mergeSession(apiData) {
     ...user,
     id,
     roles,
-    activeRole: currentRole
+    activeRole: currentRole,
+    profileImage: user.profileImage || user.profile_image || '',
+    fullName: user.fullName || user.full_name || '',
+    profileComplete: Boolean(
+      user.profileComplete ?? user.isProfileComplete ?? user.is_profile_complete
+    )
   };
+  next.name = next.fullName || user.name || user.email || 'User';
   delete next.role;
   const hasShipper = roles.includes('shipper');
   const hasCarrier = roles.includes('carrier');

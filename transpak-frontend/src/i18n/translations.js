@@ -32,7 +32,46 @@ export const translations = {
       watchDemoCta: 'Watch Demo',
       demoVideoUnavailable: 'No official demo video is uploaded yet. Check Help later or contact support.',
       demoVideoFooter: 'Official TransPak platform overview (admin-managed).',
-      demoAuthHint: 'Optional: open the same demo video as on the Help page.'
+      demoAuthHint: 'Optional: open the same demo video as on the Help page.',
+      close: 'Close',
+      expand: 'Expand',
+      collapse: 'Collapse',
+      userFallback: 'User',
+      emDash: '—'
+    },
+    profile: {
+      basicInfo: 'Basic Info',
+      roleInfo: 'Role info',
+      aboutTitle: 'About',
+      completion: 'Completion',
+      profilePhoto: 'Profile photo',
+      profilePhotoLabel: 'Profile photo',
+      cnicFront: 'CNIC (front)',
+      cnicBack: 'CNIC (back)',
+      cnicFrontLabel: 'CNIC — front',
+      cnicBackLabel: 'CNIC — back',
+      cnicOnFileFront: 'CNIC — front (on file)',
+      cnicOnFileBack: 'CNIC — back (on file)',
+      cnicFrontShort: 'Front',
+      cnicBackShort: 'Back',
+      noCnicScans: 'No CNIC scans on file.',
+      notOnFile: 'Not on file',
+      aboutBrand: 'TransPak',
+      aboutBody:
+        'Logistics platform (FYP). Manage loads, bids, and shipments securely. Signed in as {{email}}.',
+      activeRole: 'Active role',
+      rolesLabel: 'Roles',
+      roleSummary: 'Role',
+      profileCompleteBadge: 'Profile Complete',
+      completionHint: 'Still needed for a complete profile:',
+      completionServerHint:
+        'Review each section and save changes — status will update after the server confirms.',
+      completeProfileCta: 'Complete Profile',
+      fullNamePhoto: 'photo',
+      saveFailed: 'Failed to save profile',
+      expandSheet: 'Expand sheet',
+      collapseSheet: 'Collapse sheet',
+      displayPicture: 'Display picture'
     },
     auth: {
       welcomeTitle: 'Welcome to TransPak',
@@ -89,7 +128,11 @@ export const translations = {
       phoneRequired: 'Phone is required',
       phoneInvalid: 'Enter a valid international phone number',
       accountAlreadyExists: 'Account already exists',
-      generic: 'Something went wrong'
+      generic: 'Something went wrong',
+      fileUploadFailed: 'File upload failed, please try again',
+      fileUploadPartial: 'Profile saved, but one or more files could not be uploaded. Please try again.',
+      invalidFile: 'Invalid or empty file',
+      storageNotConfigured: 'File storage is not configured on the server'
     },
     pages: {
       loads: {
@@ -304,10 +347,15 @@ export const translations = {
       shipperShort: 'Shipper',
       carrierShort: 'Carrier',
       switchAccount: 'Switch Account',
+      addProfile: 'Add Profile',
+      profileCompleteBadge: 'Profile complete',
+      profileIncompleteBadge: 'Incomplete profile',
       switchAccountModalTitle: 'Switch Account',
       createAnotherRoleTitle: 'Create another role',
       switchAccountHint: 'Your role does not exist yet. Create a {{role}} role to switch.',
-      cancel: 'Cancel'
+      cancel: 'Cancel',
+      adminUsers: 'Users',
+      adminLoads: 'Loads'
     },
     bidCard: {
       expired: 'Expired',
@@ -357,7 +405,46 @@ export const translations = {
       watchDemoCta: 'ڈیمو دیکھیں',
       demoVideoUnavailable: 'ابھی کوئی سرکاری ڈیمو ویڈیو اپ لوڈ نہیں۔ بعد میں مدد چیک کریں یا سپورٹ سے رابطہ کریں۔',
       demoVideoFooter: 'ٹرانسپاک کا سرکاری پلیٹ فارم جائزہ (ایڈمن)۔',
-      demoAuthHint: 'اختیاری: مدد صفحے والی ہی ڈیمو ویڈیو۔'
+      demoAuthHint: 'اختیاری: مدد صفحے والی ہی ڈیمو ویڈیو۔',
+      close: 'بند کریں',
+      expand: 'پھیلائیں',
+      collapse: 'سمیٹیں',
+      userFallback: 'صارف',
+      emDash: '—'
+    },
+    profile: {
+      basicInfo: 'بنیادی معلومات',
+      roleInfo: 'کردار کی معلومات',
+      aboutTitle: 'متعلق',
+      completion: 'تکمیل',
+      profilePhoto: 'پروفائل تصویر',
+      profilePhotoLabel: 'پروفائل تصویر',
+      cnicFront: 'شناختی کارڈ (سامنے)',
+      cnicBack: 'شناختی کارڈ (پیچھے)',
+      cnicFrontLabel: 'شناختی کارڈ — سامنے',
+      cnicBackLabel: 'شناختی کارڈ — پیچھے',
+      cnicOnFileFront: 'شناختی کارڈ — سامنے (فائل میں)',
+      cnicOnFileBack: 'شناختی کارڈ — پیچھے (فائل میں)',
+      cnicFrontShort: 'سامنے',
+      cnicBackShort: 'پیچھے',
+      noCnicScans: 'کوئی شناختی اسکین فائل میں نہیں۔',
+      notOnFile: 'فائل میں نہیں',
+      aboutBrand: 'ٹرانسپاک',
+      aboutBody:
+        'لاجسٹکس پلیٹ فارم (FYP)۔ لوڈز، بڈز اور شپمنٹس محفوظ طریقے سے چلائیں۔ {{email}} سے سائن ان۔',
+      activeRole: 'فعال کردار',
+      rolesLabel: 'کردار',
+      roleSummary: 'کردار',
+      profileCompleteBadge: 'پروفائل مکمل',
+      completionHint: 'مکمل پروفائل کے لیے ابھی درکار:',
+      completionServerHint:
+        'ہر سیکشن دیکھیں اور تبدیلیاں محفوظ کریں — سرور کی تصدیق کے بعد حیثیت اپ ڈیٹ ہو گی۔',
+      completeProfileCta: 'پروفائل مکمل کریں',
+      fullNamePhoto: 'تصویر',
+      saveFailed: 'پروفائل محفوظ نہیں ہو سکی',
+      expandSheet: 'شیٹ کھولیں',
+      collapseSheet: 'شیٹ بند کریں',
+      displayPicture: 'ڈسپلے تصویر'
     },
     auth: {
       welcomeTitle: 'ٹرانسپاک میں خوش آمدید',
@@ -414,7 +501,11 @@ export const translations = {
       phoneRequired: 'فون نمبر ضروری ہے',
       phoneInvalid: 'درست بین الاقوامی فون نمبر درج کریں',
       accountAlreadyExists: 'اکاؤنٹ پہلے سے موجود ہے',
-      generic: 'کچھ غلط ہو گیا'
+      generic: 'کچھ غلط ہو گیا',
+      fileUploadFailed: 'فائل اپ لوڈ ناکام، دوبارہ کوشش کریں',
+      fileUploadPartial: 'پروفائل محفوظ ہو گئی، مگر کچھ فائلیں اپ لوڈ نہیں ہو سکتیں۔ دوبارہ کوشش کریں۔',
+      invalidFile: 'غلط یا خالی فائل',
+      storageNotConfigured: 'سرور پر فائل اسٹوریج ترتیب نہیں دیا گیا'
     },
     pages: {
       loads: {
@@ -629,10 +720,15 @@ export const translations = {
       shipperShort: 'شپپر',
       carrierShort: 'کیریئر',
       switchAccount: 'اکاؤنٹ تبدیل کریں',
+      addProfile: 'پروفائل شامل کریں',
+      profileCompleteBadge: 'پروفائل مکمل',
+      profileIncompleteBadge: 'نامکمل پروفائل',
       switchAccountModalTitle: 'اکاؤنٹ تبدیل کریں',
       createAnotherRoleTitle: 'دوسرا کردار بنائیں',
       switchAccountHint: 'آپ کا یہ کردار ابھی نہیں ہے۔ تبدیلی کے لیے {{role}} کردار بنائیں۔',
-      cancel: 'منسوخ کریں'
+      cancel: 'منسوخ کریں',
+      adminUsers: 'صارفین',
+      adminLoads: 'لوڈز'
     },
     bidCard: {
       expired: 'ختم ہو گیا',

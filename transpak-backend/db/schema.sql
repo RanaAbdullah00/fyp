@@ -29,6 +29,33 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX IF NOT EXISTS idx_users_roles ON users USING gin (roles);
 
+-- CNIC back image (front remains cnic_image)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'cnic_image_back'
+  ) THEN
+    ALTER TABLE users ADD COLUMN cnic_image_back text;
+  END IF;
+END $$;
+
+-- Legacy single-column role → roles[] (safe no-op if column never existed)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'role'
+  ) THEN
+    EXECUTE $m$
+      UPDATE users
+      SET roles = ARRAY(SELECT DISTINCT unnest(COALESCE(roles, ARRAY[]::text[]) || ARRAY[LOWER(TRIM(role))]::text[]))
+      WHERE role IS NOT NULL AND TRIM(role) <> ''
+    $m$;
+    ALTER TABLE users DROP COLUMN IF EXISTS role;
+  END IF;
+END $$;
+
 -- Loads
 CREATE TABLE IF NOT EXISTS loads (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -26,12 +26,21 @@ router.get("/", protect, requireAnyRole(["shipper", "carrier", "admin"]), async 
   const roles = req.auth?.roles || [];
   const active = req.auth?.activeRole;
   const isAdmin = roles.includes("admin");
+  const viewAs =
+    active === "shipper" || active === "carrier"
+      ? active
+      : roles.includes("shipper")
+      ? "shipper"
+      : roles.includes("carrier")
+      ? "carrier"
+      : null;
 
   const loadId = req.query?.loadId ? String(req.query.loadId).trim() : "";
-  const loadClause = loadId && isUuid(loadId) ? "AND b.load_id = $2" : "";
+  const adminLoadFilter = loadId && isUuid(loadId) ? "AND b.load_id = $1" : "";
+  const shipperLoadClause = loadId && isUuid(loadId) ? "AND b.load_id = $2" : "";
 
   if (isAdmin) {
-    const params = loadClause ? [req.auth.userId, loadId] : [req.auth.userId];
+    const adminParams = adminLoadFilter ? [loadId] : [];
     const { rows } = await query(
       `SELECT b.id, b.load_id AS "loadId", b.carrier_id AS "carrierId", b.amount,
               b.status, b.created_at AS "createdAt",
@@ -39,10 +48,10 @@ router.get("/", protect, requireAnyRole(["shipper", "carrier", "admin"]), async 
               'Truck' AS "vehicleType"
        FROM bids b
        JOIN users u ON u.id = b.carrier_id
-       WHERE 1=1 ${loadClause}
+       WHERE 1=1 ${adminLoadFilter}
        ORDER BY b.created_at DESC
        LIMIT 500`,
-      params.slice(loadClause ? 1 : 0)
+      adminParams
     );
     return sendSuccess(res, 200, rows);
   }
@@ -63,9 +72,9 @@ router.get("/", protect, requireAnyRole(["shipper", "carrier", "admin"]), async 
     return sendSuccess(res, 200, rows);
   }
 
-  if (active === "shipper") {
+  if (viewAs === "shipper") {
     const params = [req.auth.userId];
-    if (loadClause) params.push(loadId);
+    if (shipperLoadClause) params.push(loadId);
     const { rows } = await query(
       `SELECT b.id, b.load_id AS "loadId", b.carrier_id AS "carrierId", b.amount,
               b.status, b.suggested_amount AS "suggestedAmount", b.suggested_by AS "suggestedBy",
@@ -75,7 +84,7 @@ router.get("/", protect, requireAnyRole(["shipper", "carrier", "admin"]), async 
        FROM bids b
        JOIN loads l ON l.id = b.load_id
        JOIN users u ON u.id = b.carrier_id
-       WHERE l.shipper_id = $1 ${loadClause}
+       WHERE l.shipper_id = $1 ${shipperLoadClause}
        ORDER BY b.created_at DESC
        LIMIT 500`,
       params
@@ -83,11 +92,15 @@ router.get("/", protect, requireAnyRole(["shipper", "carrier", "admin"]), async 
     return sendSuccess(res, 200, rows);
   }
 
-  return sendError(res, 403, "Switch role to continue");
+  return sendError(res, 403, "No bid access for this account");
 });
 
 // Frontend convenience: /bids/mine for carriers
-router.get("/mine", protect, requireAnyRole(["carrier", "admin"]), requireActiveRole("carrier"), async (req, res) => {
+router.get("/mine", protect, requireAnyRole(["carrier", "admin"]), async (req, res) => {
+  const roles = req.auth?.roles || [];
+  if (!roles.includes("carrier") && !roles.includes("admin")) {
+    return sendError(res, 403, "Carrier role required");
+  }
   const { rows } = await query(
     `SELECT b.id, b.load_id AS "loadId", b.carrier_id AS "carrierId", b.amount,
             b.status, b.suggested_amount AS "suggestedAmount", b.suggested_by AS "suggestedBy",

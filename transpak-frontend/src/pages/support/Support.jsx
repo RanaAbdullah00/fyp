@@ -18,38 +18,43 @@ const Support = () => {
   const [open, setOpen] = useState(0);
 
   return (
-    <div className="container py-3">
-      <h5 className="mb-3">Support</h5>
-      <Card className="p-3">
-        <p className="small mb-2">
-          Email: <a href="mailto:support@transpak.pk">support@transpak.pk</a>
+    <div className="container py-3 tp-support-page">
+      <h5 className="mb-3 text-body">Support</h5>
+      <Card className="p-3 tp-support-card">
+        <p className="small mb-2 tp-support-body">
+          Email:{' '}
+          <a className="tp-support-link" href="mailto:support@transpak.pk">
+            support@transpak.pk
+          </a>
         </p>
-        <p className="small mb-0">Hotline: +92-300-0000000</p>
+        <p className="small mb-0 tp-support-body">Hotline: +92-300-0000000</p>
       </Card>
 
       <div id="help-demo" className="mt-3">
-        <h6 className="mb-2">{t('pages.support.demoSectionTitle')}</h6>
-        <Card className="p-3">
-          <p className="small text-muted mb-3">{t('pages.support.demoSectionBody')}</p>
+        <h6 className="mb-2 text-body">{t('pages.support.demoSectionTitle')}</h6>
+        <Card className="p-3 tp-support-card">
+          <p className="small mb-3 tp-support-muted">{t('pages.support.demoSectionBody')}</p>
           <DemoVideoWatchButton variant="block" />
         </Card>
       </div>
 
-      <div id="faq" className="mt-3">
-        <h6 className="mb-2">FAQ</h6>
-        <Card className="p-2">
+      <div id="faq" className="mt-3 tp-support-faq">
+        <h6 className="mb-2 text-body">FAQ</h6>
+        <Card className="p-2 tp-support-card">
           {faqs.map((f, idx) => (
             <button
               key={f.q}
               type="button"
-              className="btn w-100 text-start"
+              className="btn w-100 text-start tp-support-faq__toggle rounded-3"
               onClick={() => setOpen((p) => (p === idx ? -1 : idx))}
             >
-              <div className="d-flex justify-content-between align-items-center">
-                <span className="fw-semibold">{f.q}</span>
-                <span className="text-muted">{open === idx ? '−' : '+'}</span>
+              <div className="d-flex justify-content-between align-items-center gap-2">
+                <span className="fw-semibold tp-support-faq__q">{f.q}</span>
+                <span className="tp-support-faq__icon" aria-hidden>
+                  {open === idx ? '−' : '+'}
+                </span>
               </div>
-              {open === idx && <div className="small text-muted mt-2">{f.a}</div>}
+              {open === idx && <div className="small mt-2 tp-support-faq__a">{f.a}</div>}
             </button>
           ))}
         </Card>

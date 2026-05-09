@@ -58,6 +58,17 @@ router.post(
     const title = String(req.body.title || "").trim();
     const message = String(req.body.message || "").trim();
     const roleType = req.body.roleType != null ? String(req.body.roleType).trim() : null;
+    const { rows: existing } = await query(
+      `SELECT id, title, message, role_type AS "roleType", read, created_at AS "createdAt"
+       FROM notifications
+       WHERE receiver_id = $1 AND title = $2 AND message = $3
+         AND created_at > now() - interval '2 minutes'
+       LIMIT 1`,
+      [req.auth.userId, title, message]
+    );
+    if (existing[0]) {
+      return sendSuccess(res, 200, existing[0], "OK");
+    }
     const { rows } = await query(
       `INSERT INTO notifications (receiver_id, sender_id, role_type, title, message)
        VALUES ($1, $2, $3, $4, $5)

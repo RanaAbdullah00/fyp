@@ -6,3 +6,5 @@ export const loginApi = (credentials) =>
 
 export const registerApi = (payload) =>
   api.post('/auth/register', payload);
+
+export const addRoleApi = (role) => api.post('/auth/add-role', { role });

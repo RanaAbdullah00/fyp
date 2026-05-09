@@ -1,5 +1,7 @@
-import { Notification } from '../models/Notification.js';
-
+/**
+ * Lightweight Socket.io stub (no database).
+ * Real-time messaging/tracking for the FYP is handled by transpak-backend.
+ */
 export function registerSockets(io) {
   io.on('connection', (socket) => {
     socket.on('auth:join', ({ userId }) => {
@@ -8,7 +10,6 @@ export function registerSockets(io) {
     });
 
     socket.on('tracking:update', (payload) => {
-      // payload should include loadId + coords; broadcast to room
       if (payload?.loadId) {
         io.to(`load:${payload.loadId}`).emit('tracking:update', payload);
       }
@@ -19,10 +20,4 @@ export function registerSockets(io) {
       socket.join(`load:${loadId}`);
     });
   });
-}
-
-export async function emitNotification(io, notification) {
-  const created = await Notification.create(notification);
-  io.to(`user:${created.receiverId}`).emit('notification:new', created);
-  return created;
 }

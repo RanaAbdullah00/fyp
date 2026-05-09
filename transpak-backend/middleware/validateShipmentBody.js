@@ -5,7 +5,9 @@ const { sendError } = require("../utils/apiResponse");
 const shipmentIdParam = [
   param("id")
     .trim()
-    .matches(/^[a-zA-Z0-9_-]{1,64}$/)
+    .notEmpty()
+    .withMessage("Invalid shipment id")
+    .matches(/^[a-zA-Z0-9._-]{1,72}$/)
     .withMessage("Invalid shipment id")
 ];
 

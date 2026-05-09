@@ -93,6 +93,11 @@ function createApp({ uploadsDir, dbState = { ready: true, error: null } }) {
   app.use("/api/demo-video", demoVideoRoutes);
   app.use("/api/disputes", disputeRoutes);
 
+  if (process.env.ENABLE_EXAMPLE_UPLOAD === "true") {
+    const exampleUploadRoutes = require("../routes/exampleUploadRoutes");
+    app.use("/api/example-upload", exampleUploadRoutes);
+  }
+
   app.use((req, res) => {
     res.status(404).json({ success: false, message: "Route not found", data: null });
   });

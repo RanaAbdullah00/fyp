@@ -22,9 +22,11 @@ function signToken(user) {
   const secret = getJwtSecret();
   const userId = user?.id || user?._id;
   if (!userId) throw new Error("TransPak auth: cannot sign token without user id");
+  const idStr = String(userId);
   const payload = {
-    sub: String(userId),
-    roles: user.roles,
+    sub: idStr,
+    id: idStr,
+    roles: Array.isArray(user.roles) ? user.roles : [],
     activeRole: user.activeRole
   };
 

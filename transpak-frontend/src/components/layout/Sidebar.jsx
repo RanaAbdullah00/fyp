@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import {
   FaTachometerAlt,
   FaPlusCircle,
@@ -19,6 +19,7 @@ import {
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { useAuth } from '../../hooks/useAuth.js';
 import LogoutConfirmModal from '../ui/LogoutConfirmModal.jsx';
+import { SidebarProfileSheet } from '../profile/ProfileSheet.jsx';
 
 const navLinkClass = ({ isActive }) =>
   `nav-link d-flex align-items-center gap-2 rounded-lg px-3 py-2 mb-1 ${isActive ? 'active' : ''}`;
@@ -26,7 +27,9 @@ const navLinkClass = ({ isActive }) =>
 const Sidebar = () => {
   const { user } = useAuth();
   const { t } = useLanguage();
+  const location = useLocation();
   const [showLogoutModal, setShowLogoutModal] = React.useState(false);
+  const [profileSheetOpen, setProfileSheetOpen] = React.useState(false);
 
   const activeRole = user?.activeRole ?? user?.roles?.[0];
   const isAdmin = activeRole === 'admin';
@@ -37,35 +40,7 @@ const Sidebar = () => {
 
   return (
     <aside className="d-none d-md-block sidebar-fixed sidebar-aside d-flex flex-column">
-      <nav className="nav flex-column p-3 small flex-grow-1">
-        {user && (
-          <NavLink
-            to="/profile"
-            className={({ isActive }) =>
-              `d-flex align-items-center gap-2 mb-3 px-2 text-decoration-none rounded-3 py-2 ${isActive ? 'bg-light' : ''}`
-            }
-            title="Profile"
-          >
-            <div
-              className="rounded-circle overflow-hidden border flex-shrink-0"
-              style={{ width: 36, height: 36, borderColor: 'var(--pak-border)' }}
-            >
-              {user.profileImage ? (
-                <img src={user.profileImage} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              ) : (
-                <div className="w-100 h-100 d-flex align-items-center justify-content-center bg-light text-muted" style={{ fontSize: 14 }}>{user.name?.[0]?.toUpperCase() || '?'}</div>
-              )}
-            </div>
-            <div className="flex-grow-1 min-w-0">
-              <div className="fw-semibold text-truncate small">{user.name || 'User'}</div>
-              {user.profileComplete ? (
-                <span className="badge bg-success" style={{ fontSize: 9 }}>Profile Completed</span>
-              ) : (
-                <span className="badge bg-danger" style={{ fontSize: 9 }}>Incomplete Profile</span>
-              )}
-            </div>
-          </NavLink>
-        )}
+      <nav className="nav flex-column p-3 small flex-grow-1 overflow-auto tp-sidebar-nav">
         <NavLink to={dashboardPath} className={navLinkClass} end>
           <FaTachometerAlt />
           {t('common.dashboard')}
@@ -114,7 +89,7 @@ const Sidebar = () => {
             </NavLink>
             <NavLink to="/carrier/truck-details" className={navLinkClass}>
               <FaTruck />
-              Truck details
+              {t('nav.truckDetails')}
             </NavLink>
             <NavLink to="/shipments/tracking" className={navLinkClass}>
               <FaShippingFast />
@@ -130,11 +105,11 @@ const Sidebar = () => {
           <>
             <NavLink to="/admin/dashboard" className={navLinkClass}>
               <FaTachometerAlt />
-              Admin Dashboard
+              {t('nav.adminDashboard')}
             </NavLink>
             <NavLink to="/admin/users" className={navLinkClass}>
               <FaUserShield />
-              Users
+              {t('nav.adminUsers')}
             </NavLink>
             <NavLink to="/admin/roles" className={navLinkClass}>
               <FaUserTag />
@@ -142,7 +117,7 @@ const Sidebar = () => {
             </NavLink>
             <NavLink to="/admin/loads" className={navLinkClass}>
               <FaListUl />
-              Loads
+              {t('nav.adminLoads')}
             </NavLink>
             <NavLink to="/admin/verification" className={navLinkClass}>
               <FaUserShield />
@@ -150,11 +125,11 @@ const Sidebar = () => {
             </NavLink>
             <NavLink to="/admin/disputes" className={navLinkClass}>
               <FaExclamationTriangle />
-              Disputes
+              {t('nav.disputes')}
             </NavLink>
             <NavLink to="/admin/shipments" className={navLinkClass}>
               <FaShippingFast />
-              Shipments
+              {t('nav.shipments')}
             </NavLink>
           </>
         )}
@@ -166,20 +141,69 @@ const Sidebar = () => {
         )}
         <NavLink to="/settings" className={navLinkClass}>
           <FaCog />
-          Settings
+          {t('nav.settings')}
         </NavLink>
       </nav>
-      <div className="p-3 mt-auto border-top" style={{ borderColor: 'var(--pak-border) !important' }}>
-        <button
-          type="button"
-          className="btn btn-outline-danger w-100 d-flex align-items-center justify-content-center gap-2 rounded-lg py-2"
-          onClick={() => setShowLogoutModal(true)}
-        >
-          <FaSignOutAlt size={14} />
-          Logout
-        </button>
+      <div
+        className="border-top flex-shrink-0 tp-sidebar-footer"
+        style={{ borderColor: 'var(--pak-border)' }}
+      >
+        <div className="p-3 pb-2">
+          {user && (
+            <button
+              type="button"
+              className="d-flex align-items-center gap-2 px-2 text-start text-decoration-none rounded-3 py-2 border-0 bg-transparent w-100 tp-sidebar-profile-trigger"
+              title={t('common.profile')}
+              onClick={() => {
+                if (location.pathname === '/profile') return;
+                setProfileSheetOpen(true);
+              }}
+            >
+              <div
+                className="rounded-circle overflow-hidden border flex-shrink-0"
+                style={{ width: 36, height: 36, borderColor: 'var(--pak-border)' }}
+              >
+                {user.profileImage ? (
+                  <img src={user.profileImage} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  <div
+                    className="w-100 h-100 d-flex align-items-center justify-content-center tp-sidebar-avatar-placeholder fw-semibold"
+                    style={{ fontSize: 12 }}
+                  >
+                    {(user.fullName || user.name || user.email || '?')
+                      .split(/\s+/)
+                      .filter(Boolean)
+                      .slice(0, 2)
+                      .map((s) => s[0])
+                      .join('')
+                      .toUpperCase() || '?'}
+                  </div>
+                )}
+              </div>
+              <div className="flex-grow-1 min-w-0">
+                <div className="fw-semibold text-truncate small">{user.name || t('common.userFallback')}</div>
+                {user.profileComplete ? (
+                  <span className="badge bg-success" style={{ fontSize: 9 }}>{t('nav.profileCompleteBadge')}</span>
+                ) : (
+                  <span className="badge bg-danger" style={{ fontSize: 9 }}>{t('nav.profileIncompleteBadge')}</span>
+                )}
+              </div>
+            </button>
+          )}
+        </div>
+        <div className="px-3 pb-3">
+          <button
+            type="button"
+            className="btn btn-outline-danger w-100 d-flex align-items-center justify-content-center gap-2 rounded-lg py-2"
+            onClick={() => setShowLogoutModal(true)}
+          >
+            <FaSignOutAlt size={14} />
+            {t('nav.logout')}
+          </button>
+        </div>
       </div>
       <LogoutConfirmModal show={showLogoutModal} onClose={() => setShowLogoutModal(false)} />
+      <SidebarProfileSheet open={profileSheetOpen} onClose={() => setProfileSheetOpen(false)} />
     </aside>
   );
 };

@@ -117,19 +117,24 @@ const RegisterForm = ({ prefill: prefillProp = null, upgradeRole: upgradeRolePro
         role: form.role
       });
       const payload = unwrapResponseData(res) || {};
-      const { token, user, currentRole } = payload;
-      notifySuccess(upgradeRole ? t('auth.roleAddedSuccess') : t('auth.accountCreatedSuccess'));
+      const { token, user, currentRole, registrationKind } = payload;
+      const mergedOrExisting = registrationKind === 'merged' || registrationKind === 'existing';
+      notifySuccess(
+        upgradeRole || mergedOrExisting ? t('auth.roleAddedSuccess') : t('auth.accountCreatedSuccess')
+      );
 
-      if (upgradeRole) {
+      const shouldAutoLogin =
+        Boolean(token && user) && (upgradeRole || mergedOrExisting);
+      if (shouldAutoLogin) {
         if (token) localStorage.setItem('transpak_token', token);
-        if (user) login(payload);
+        login(payload);
         onDone?.(user);
         const role = currentRole || user?.activeRole || user?.roles?.[0];
         navigate(dashboardPathForRole(role), { replace: true });
         return;
       }
 
-      // New account registration: do not auto-login.
+      // Brand-new account: confirm via email on login screen.
       onDone?.(user);
       navigate('/login', {
         replace: true,

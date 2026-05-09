@@ -1,7 +1,15 @@
+const fs = require("fs");
 const path = require("path");
 const multer = require("multer");
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+
+const uploadsDir = path.join(__dirname, "..", "uploads");
+try {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+} catch {
+  // ignore
+}
 
 function safeExtFromMime(mime) {
   const m = String(mime || "").toLowerCase();
@@ -13,7 +21,7 @@ function safeExtFromMime(mime) {
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, path.join(__dirname, "..", "uploads"));
+    cb(null, uploadsDir);
   },
   filename: (req, file, cb) => {
     const ext = safeExtFromMime(file.mimetype) || path.extname(file.originalname || "").slice(0, 10);
@@ -58,6 +66,7 @@ function cleanupUploadedFiles(req) {
 module.exports = {
   uploadProfileImages: upload.fields([
     { name: "cnic_image", maxCount: 1 },
+    { name: "cnic_image_back", maxCount: 1 },
     { name: "profile_image", maxCount: 1 }
   ]),
   cleanupUploadedFiles

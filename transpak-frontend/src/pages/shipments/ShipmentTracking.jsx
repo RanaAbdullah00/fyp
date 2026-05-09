@@ -11,7 +11,7 @@ import { AppContext } from '../../context/AppContext.jsx';
 
 const ShipmentTracking = () => {
   const { trackId } = useParams();
-  const id = trackId || '1';
+  const id = trackId?.trim() || '';
   const app = useContext(AppContext);
 
   const [payload, setPayload] = useState(null);
@@ -19,6 +19,12 @@ const ShipmentTracking = () => {
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
+    if (!id) {
+      setLoading(false);
+      setPayload(null);
+      setError('');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
@@ -121,6 +127,17 @@ const ShipmentTracking = () => {
     }),
     [tracking, currentLocation, payload?.liveTrackingMap, coords]
   );
+
+  if (!id) {
+    return (
+      <div className="container py-3">
+        <h5 className="mb-3 text-body">Shipment tracking</h5>
+        <p className="small tp-support-muted mb-0">
+          Open tracking from a load or accepted shipment, or append the load code to the URL (e.g. /shipments/tracking/LOAD-CODE).
+        </p>
+      </div>
+    );
+  }
 
   if (loading && !payload) {
     return (
