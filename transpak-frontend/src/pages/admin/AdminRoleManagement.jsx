@@ -6,7 +6,7 @@ import { useApi } from '../../hooks/useApi.js';
 import { useAuth } from '../../hooks/useAuth.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { notifyError, notifySuccess } from '../../components/ui/ToastProvider.jsx';
-import { unwrapErrorMessage } from '../../utils/unwrapApi.js';
+import { formatUserError } from '../../utils/userErrors.js';
 
 const ROLE_OPTIONS = ['shipper', 'carrier', 'admin'];
 
@@ -37,7 +37,7 @@ const AdminRoleManagement = () => {
       }
       setDrafts(nextDrafts);
     } catch (e) {
-      setListError(unwrapErrorMessage(e) || t('pages.admin.roleMgmt.loadFailed'));
+      setListError(formatUserError(e, t, { fallback: t('pages.admin.roleMgmt.loadFailed') }));
       setRows([]);
       setDrafts({});
     } finally {
@@ -78,7 +78,7 @@ const AdminRoleManagement = () => {
       }
       notifySuccess(t('pages.admin.roleMgmt.updateSuccess'));
     } catch (e) {
-      notifyError(unwrapErrorMessage(e) || t('pages.admin.roleMgmt.updateFailed'));
+      notifyError(formatUserError(e, t, { fallback: t('pages.admin.roleMgmt.updateFailed') }));
     }
   };
 

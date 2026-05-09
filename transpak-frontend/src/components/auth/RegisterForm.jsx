@@ -7,7 +7,8 @@ import { useLanguage } from '../../hooks/useLanguage.js';
 import { registerApi } from '../../services/authService.js';
 import { notifySuccess, notifyError } from '../ui/ToastProvider.jsx';
 import { useAuth } from '../../hooks/useAuth.js';
-import { unwrapResponseData, unwrapErrorMessage } from '../../utils/unwrapApi.js';
+import { unwrapResponseData } from '../../utils/unwrapApi.js';
+import { formatUserError } from '../../utils/userErrors.js';
 import { dashboardPathForRole } from '../../utils/dashboardPath.js';
 import PhoneInput from 'react-phone-input-2';
 import 'react-phone-input-2/lib/style.css';
@@ -141,7 +142,7 @@ const RegisterForm = ({ prefill: prefillProp = null, upgradeRole: upgradeRolePro
         state: { prefill: { email: form.email } }
       });
     } catch (err) {
-      const raw = unwrapErrorMessage(err) || err?.message || t('auth.registrationFailed');
+      const raw = formatUserError(err, t, { fallback: t('auth.registrationFailed') });
       const translated =
         raw === 'Passwords do not match'
           ? t('errors.passwordsDoNotMatch')

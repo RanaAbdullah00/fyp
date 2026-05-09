@@ -7,7 +7,7 @@ import { useAuth } from '../../hooks/useAuth.js';
 import { normalizeBids } from '../../adapters/normalize.js';
 import { notifyError, notifySuccess } from '../../components/ui/ToastProvider.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
-import { unwrapErrorMessage } from '../../utils/unwrapApi.js';
+import { formatUserError } from '../../utils/userErrors.js';
 
 const isTruckComplete = (t) =>
   t && (t.engineNumber || t.truckNumber) && (t.truckCardFrontImage || t.truckFrontImage) && (t.truckCardBackImage || t.truckBackImage);
@@ -19,6 +19,7 @@ const MyBids = () => {
   const { request, loading } = useApi();
   const [bids, setBids] = useState([]);
   const [trucks, setTrucks] = useState([]);
+  const [loadMetaByLoad, setLoadMetaByLoad] = useState({});
 
   const fetchTrucks = useCallback(async () => {
     try {
@@ -54,6 +55,41 @@ const MyBids = () => {
     fetchTrucks();
   }, [fetchTrucks]);
 
+  useEffect(() => {
+    const ids = [...new Set(bids.map((b) => (b.loadId ? String(b.loadId) : null)).filter(Boolean))];
+    if (!ids.length) {
+      setLoadMetaByLoad({});
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const next = {};
+      await Promise.all(
+        ids.map(async (lid) => {
+          try {
+            const load = await request({ url: `/loads/${lid}` });
+            if (load?.shipperId) {
+              next[lid] = { shipperId: String(load.shipperId), code: load.code || '' };
+            }
+          } catch {
+            /* e.g. not yet assigned — hide badge until load is visible */
+          }
+        })
+      );
+      if (!cancelled) setLoadMetaByLoad(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [bids, request]);
+
+  const shipperIdByLoadId = Object.fromEntries(
+    Object.entries(loadMetaByLoad).map(([k, v]) => [k, v.shipperId])
+  );
+  const counterpartyLabelByLoadId = Object.fromEntries(
+    Object.entries(loadMetaByLoad).map(([k, v]) => [k, `${t('auth.shipper')} · ${v.code || k.slice(0, 8)}`])
+  );
+
   const actionsDisabled = !profileComplete || !trucksComplete;
 
   const handleAcceptSuggestion = async (bid) => {
@@ -62,7 +98,7 @@ const MyBids = () => {
       notifySuccess(t('pages.bids.suggestionAccepted'));
       fetchBidsData();
     } catch (err) {
-      notifyError(unwrapErrorMessage(err) || t('pages.bids.acceptSuggestionFailed'));
+      notifyError(formatUserError(err, t, { fallback: t('pages.bids.acceptSuggestionFailed') }));
     }
   };
 
@@ -72,7 +108,7 @@ const MyBids = () => {
       notifySuccess(t('pages.bids.suggestionRejected'));
       fetchBidsData();
     } catch (err) {
-      notifyError(unwrapErrorMessage(err) || t('pages.bids.rejectSuggestionFailed'));
+      notifyError(formatUserError(err, t, { fallback: t('pages.bids.rejectSuggestionFailed') }));
     }
   };
 
@@ -82,7 +118,7 @@ const MyBids = () => {
       notifySuccess(t('pages.bids.suggestSent', { amount: Number(amount).toLocaleString() }));
       fetchBidsData();
     } catch (err) {
-      notifyError(unwrapErrorMessage(err) || t('pages.bids.suggestFailed'));
+      notifyError(formatUserError(err, t, { fallback: t('pages.bids.suggestFailed') }));
     }
   };
 
@@ -115,6 +151,8 @@ const MyBids = () => {
             onRejectSuggestion={handleRejectSuggestion}
             onSuggest={handleSuggest}
             actionsDisabled={actionsDisabled}
+            shipperIdByLoadId={shipperIdByLoadId}
+            counterpartyLabelByLoadId={counterpartyLabelByLoadId}
           />
         </>
       )}

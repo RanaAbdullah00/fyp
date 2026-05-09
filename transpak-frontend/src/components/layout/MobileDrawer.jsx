@@ -1,10 +1,12 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { NavLink } from 'react-router-dom';
 import { FaSignOutAlt } from 'react-icons/fa';
 import { useAuth } from '../../hooks/useAuth.js';
 import { AppContext } from '../../context/AppContext.jsx';
 import LogoutConfirmModal from '../ui/LogoutConfirmModal.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
+import { getPortalContainer } from '../../utils/portalRoot.js';
 
 const linkClass = ({ isActive }) =>
   `list-group-item list-group-item-action border-0 rounded-lg mb-1 ${isActive ? 'active' : ''}`;
@@ -16,8 +18,6 @@ const MobileDrawer = ({ open, onClose }) => {
   const app = React.useContext(AppContext);
   const unreadCount = Array.isArray(app?.notifications) ? app.notifications.filter((n) => !n.read).length : 0;
   const activeRole = user?.activeRole ?? user?.roles?.[0];
-
-  if (!open) return null;
 
   const dashboardPath =
     activeRole === 'carrier'
@@ -31,11 +31,16 @@ const MobileDrawer = ({ open, onClose }) => {
     setShowLogoutModal(true);
   };
 
-  return (
+  if (!open) return null;
+
+  const host = getPortalContainer();
+  if (!host) return null;
+
+  return createPortal(
     <>
-      <div className="tp-drawer-backdrop" onClick={onClose} role="button" tabIndex={0}>
+      <div className="tp-drawer-backdrop tp-drawer-portal-host" onClick={onClose} role="button" tabIndex={0}>
         <aside
-          className={`tp-drawer d-flex flex-column ${isUrdu ? 'tp-rtl' : ''}`}
+          className={`tp-drawer d-flex flex-column min-h-0 ${isUrdu ? 'tp-rtl' : ''}`}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="d-flex justify-content-between align-items-center mb-2 gap-2 flex-wrap">
@@ -44,7 +49,7 @@ const MobileDrawer = ({ open, onClose }) => {
               {t('nav.close')}
             </button>
           </div>
-          <div className="list-group list-group-flush flex-grow-1 overflow-auto">
+          <div className="list-group list-group-flush flex-grow-1 overflow-auto tp-drawer-scroll min-h-0">
             <NavLink to={dashboardPath} className={linkClass} onClick={onClose} end>
               {t('nav.dashboard')}
             </NavLink>
@@ -109,7 +114,7 @@ const MobileDrawer = ({ open, onClose }) => {
               {t('nav.profile')}
             </NavLink>
           </div>
-          <div className="pt-3 mt-auto border-top" style={{ borderColor: 'var(--pak-border)' }}>
+          <div className="pt-3 mt-auto border-top flex-shrink-0" style={{ borderColor: 'var(--pak-border)' }}>
             <button
               type="button"
               className="btn btn-outline-danger w-100 d-flex align-items-center justify-content-center gap-2 rounded-lg py-2"
@@ -122,9 +127,9 @@ const MobileDrawer = ({ open, onClose }) => {
         </aside>
       </div>
       <LogoutConfirmModal show={showLogoutModal} onClose={() => setShowLogoutModal(false)} />
-    </>
+    </>,
+    host
   );
 };
 
 export default MobileDrawer;
-

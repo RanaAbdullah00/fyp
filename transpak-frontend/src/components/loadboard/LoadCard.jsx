@@ -3,41 +3,67 @@ import { FaMapMarkerAlt, FaCube, FaWeightHanging } from 'react-icons/fa';
 import Card from '../ui/Card.jsx';
 import Badge from '../ui/Badge.jsx';
 import Button from '../ui/Button.jsx';
+import UserRatingBadge from '../reviews/UserRatingBadge.jsx';
+import { useLanguage } from '../../hooks/useLanguage.js';
 
 // Card representing a single load in the marketplace.
 const LoadCard = ({ load, onBid }) => {
+  const { t } = useLanguage();
   const expectedPrice = Number(load?.expectedPrice ?? 0);
   const distance = load?.distance ?? '—';
+  const shipperId = load?.shipperId || null;
+  const deadlineMs = load?.deadline ? new Date(load.deadline).getTime() : null;
+  const isDeadlinePast = deadlineMs != null && !Number.isNaN(deadlineMs) && Date.now() > deadlineMs;
+  const statusRaw = String(load?.status || '').toLowerCase();
+  const statusLabel =
+    statusRaw === 'open'
+      ? t('pages.loads.statusOpen')
+      : statusRaw === 'booked'
+      ? t('pages.pipeline.booked')
+      : statusRaw === 'closed'
+      ? t('pages.pipeline.closed')
+      : statusRaw === 'delivered'
+      ? t('pages.pipeline.delivered')
+      : load?.status || '—';
+
   return (
     <Card className="tp-load-card" hover>
-      <div className="d-flex justify-content-between align-items-start mb-2">
-        <div>
-          <h6 className="mb-1">{load.cargo}</h6>
-          <small className="text-muted">Load ID: {load.code}</small>
+      <div className="d-flex justify-content-between align-items-start mb-2 gap-2 flex-wrap">
+        <div className="min-w-0">
+          <div className="d-flex align-items-center gap-2 flex-wrap">
+            <h6 className="mb-1 text-break">{load.cargo}</h6>
+            {shipperId ? <UserRatingBadge userId={shipperId} /> : null}
+          </div>
+          <small className="text-muted d-block text-break">
+            {t('pages.loads.loadCardRef', { code: load.code })}
+          </small>
         </div>
-        <Badge variant={load.status === 'open' ? 'success' : 'secondary'}>
-          {load.status}
-        </Badge>
+        <Badge variant={load.status === 'open' ? 'success' : 'secondary'}>{statusLabel}</Badge>
       </div>
       <div className="d-flex flex-column small mb-2">
-        <span className="d-flex align-items-center mb-1">
-          <FaMapMarkerAlt className="text-primary me-2" />
+        <span className="d-flex align-items-center mb-1 text-break">
+          <FaMapMarkerAlt className="text-primary me-2 flex-shrink-0" />
           {load.origin} → {load.destination}
         </span>
-        <span className="d-flex align-items-center mb-1">
-          <FaWeightHanging className="text-secondary me-2" />
-          {load.weight} tons · {load.vehicleType}
+        <span className="d-flex align-items-center mb-1 text-break">
+          <FaWeightHanging className="text-secondary me-2 flex-shrink-0" />
+          {load.weight} {t('pages.loads.loadCardTons')} · {load.vehicleType}
         </span>
-        <span className="d-flex align-items-center">
-          <FaCube className="text-secondary me-2" />
-          {distance} km · {expectedPrice.toLocaleString()} PKR
+        <span className="d-flex align-items-center text-break">
+          <FaCube className="text-secondary me-2 flex-shrink-0" />
+          {t('pages.loads.loadCardDistancePrice', {
+            distance,
+            price: expectedPrice.toLocaleString()
+          })}
         </span>
       </div>
-      <div className="d-flex justify-content-between align-items-start mb-2">
-        <small className="text-muted">Pickup: {load.pickupDate}</small>
+      <div className="d-flex justify-content-between align-items-start mb-2 gap-2 flex-wrap">
+        <small className="text-muted">
+          {t('pages.loads.loadCardPickup')}: {load.pickupDate}
+        </small>
         {load.deadline && (
-          <Badge variant={Date.now() > new Date(load.deadline).getTime() ? 'secondary' : 'warning'}>
-            {Date.now() > new Date(load.deadline).getTime() ? 'Expired' : 'Bidding open'}
+          <Badge variant={isDeadlinePast ? 'secondary' : 'warning'}>
+            {isDeadlinePast ? t('pages.loads.loadCardExpired') : t('pages.loads.loadCardBiddingOpen')}
           </Badge>
         )}
       </div>
@@ -47,9 +73,11 @@ const LoadCard = ({ load, onBid }) => {
             variant="primary"
             className="w-100 btn-sm rounded-lg"
             onClick={() => onBid(load)}
-            disabled={load.deadline && Date.now() > new Date(load.deadline).getTime()}
+            disabled={Boolean(load.deadline && isDeadlinePast)}
           >
-            {load.deadline && Date.now() > new Date(load.deadline).getTime() ? 'Bidding closed' : 'Place bid'}
+            {load.deadline && isDeadlinePast
+              ? t('pages.loads.loadCardBiddingClosed')
+              : t('pages.loads.loadCardPlaceBid')}
           </Button>
         </div>
       )}
@@ -58,4 +86,3 @@ const LoadCard = ({ load, onBid }) => {
 };
 
 export default LoadCard;
-

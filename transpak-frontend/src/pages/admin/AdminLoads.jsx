@@ -5,7 +5,7 @@ import { SkeletonTable } from '../../components/ui/Skeleton.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { notifyError, notifySuccess } from '../../components/ui/ToastProvider.jsx';
-import { unwrapErrorMessage } from '../../utils/unwrapApi.js';
+import { formatUserError } from '../../utils/userErrors.js';
 
 const AdminLoads = () => {
   const { request } = useApi();
@@ -19,7 +19,7 @@ const AdminLoads = () => {
       const data = await request({ url: '/admin/loads' });
       setLoads(Array.isArray(data) ? data : []);
     } catch (e) {
-      notifyError(unwrapErrorMessage(e) || t('pages.admin.statsError'));
+      notifyError(formatUserError(e, t, { fallback: t('pages.admin.statsError') }));
       setLoads([]);
     } finally {
       setLoading(false);
@@ -36,7 +36,7 @@ const AdminLoads = () => {
       setLoads((prev) => prev.filter((l) => l.id !== id));
       notifySuccess(t('pages.admin.loadDeleted'));
     } catch (e) {
-      notifyError(unwrapErrorMessage(e) || t('pages.admin.deleteLoadFailed'));
+      notifyError(formatUserError(e, t, { fallback: t('pages.admin.deleteLoadFailed') }));
     }
   };
 
@@ -63,12 +63,12 @@ const AdminLoads = () => {
             <table className="table table-hover table-sm mb-0 align-middle">
               <thead className="table-light">
                 <tr>
-                  <th className="ps-3 py-3">Code</th>
-                  <th className="py-3">Cargo</th>
-                  <th className="py-3 d-none d-lg-table-cell">Route</th>
-                  <th className="py-3">Pickup</th>
-                  <th className="py-3">Status</th>
-                  <th className="pe-3 py-3 text-end">Action</th>
+                  <th className="ps-3 py-3">{t('pages.admin.tableCode')}</th>
+                  <th className="py-3">{t('pages.admin.tableCargo')}</th>
+                  <th className="py-3 d-none d-lg-table-cell">{t('pages.admin.tableRoute')}</th>
+                  <th className="py-3">{t('pages.admin.tablePickup')}</th>
+                  <th className="py-3">{t('pages.admin.tableStatus')}</th>
+                  <th className="pe-3 py-3 text-end">{t('pages.admin.tableAction')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -76,15 +76,15 @@ const AdminLoads = () => {
                   <tr key={l.id}>
                     <td className="ps-3 py-3 fw-semibold">{l.code}</td>
                     <td className="py-3">
-                      <small>{l.cargo || '—'}</small>
+                      <small>{l.cargo || t('common.emDash')}</small>
                     </td>
                     <td className="py-3 d-none d-lg-table-cell">
                       <small className="text-muted">
-                        {l.origin || '—'} → {l.destination || '—'}
+                        {l.origin || t('common.emDash')} → {l.destination || t('common.emDash')}
                       </small>
                     </td>
                     <td className="py-3">
-                      <small>{l.pickupDate || '—'}</small>
+                      <small>{l.pickupDate || t('common.emDash')}</small>
                     </td>
                     <td className="py-3">
                       <span className={`badge rounded-pill ${statusBadgeClass(l.status)}`}>

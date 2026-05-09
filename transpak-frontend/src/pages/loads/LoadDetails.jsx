@@ -10,7 +10,7 @@ import { useApi } from '../../hooks/useApi.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { notifyError, notifySuccess } from '../../components/ui/ToastProvider.jsx';
 import { normalizeLoads, normalizeBids } from '../../adapters/normalize.js';
-import { unwrapErrorMessage } from '../../utils/unwrapApi.js';
+import { formatUserError } from '../../utils/userErrors.js';
 
 // Detail view for a specific load with bids.
 const LoadDetails = () => {
@@ -47,7 +47,7 @@ const LoadDetails = () => {
           setBids([]);
         }
       } catch (error) {
-        notifyError(unwrapErrorMessage(error) || t('pages.loads.failedLoadDetail'));
+        notifyError(formatUserError(error, t, { fallback: t('pages.loads.failedLoadDetail') }));
         setLoad(null);
         setBids([]);
       } finally {
@@ -65,7 +65,7 @@ const LoadDetails = () => {
       );
       notifySuccess(t('pages.bids.bidAccepted'));
     } catch (error) {
-      notifyError(unwrapErrorMessage(error) || t('pages.bids.acceptFailed'));
+      notifyError(formatUserError(error, t, { fallback: t('pages.bids.acceptFailed') }));
     }
   };
 
@@ -75,7 +75,7 @@ const LoadDetails = () => {
       setBids((prev) => prev.map((b) => (b.id === bid.id ? { ...b, status: 'rejected' } : b)));
       notifySuccess(t('pages.bids.bidRejected'));
     } catch (error) {
-      notifyError(unwrapErrorMessage(error) || t('pages.bids.rejectFailed'));
+      notifyError(formatUserError(error, t, { fallback: t('pages.bids.rejectFailed') }));
     }
   };
 
@@ -89,7 +89,7 @@ const LoadDetails = () => {
       );
       notifySuccess(t('pages.bids.suggestSent', { amount: Number(amount).toLocaleString() }));
     } catch (error) {
-      notifyError(unwrapErrorMessage(error) || t('pages.bids.suggestFailed'));
+      notifyError(formatUserError(error, t, { fallback: t('pages.bids.suggestFailed') }));
     }
   };
 
@@ -99,7 +99,7 @@ const LoadDetails = () => {
       notifySuccess(t('pages.loads.loadDeleted'));
       navigate('/loads/manage');
     } catch (err) {
-      notifyError(unwrapErrorMessage(err) || t('pages.loads.failedDeleteLoad'));
+      notifyError(formatUserError(err, t, { fallback: t('pages.loads.failedDeleteLoad') }));
     }
   };
 

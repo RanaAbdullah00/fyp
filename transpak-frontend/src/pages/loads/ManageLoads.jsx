@@ -8,7 +8,7 @@ import ConfirmActionModal from '../../components/ui/ConfirmActionModal.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { notifyError, notifySuccess } from '../../components/ui/ToastProvider.jsx';
-import { unwrapErrorMessage } from '../../utils/unwrapApi.js';
+import { formatUserError } from '../../utils/userErrors.js';
 
 // Shipper screen to manage their posted loads (open/assigned/completed).
 const ManageLoads = () => {
@@ -22,7 +22,7 @@ const ManageLoads = () => {
       const rows = await request({ url: '/loads/mine' });
       setLoads(Array.isArray(rows) ? rows : []);
     } catch (err) {
-      notifyError(unwrapErrorMessage(err) || t('pages.loads.failedLoadMine'));
+      notifyError(formatUserError(err, t, { fallback: t('pages.loads.failedLoadMine') }));
       setLoads([]);
     }
   }, [request, t]);
@@ -52,7 +52,7 @@ const ManageLoads = () => {
       notifySuccess(t('pages.loads.loadDeleted'));
       await refresh();
     } catch (err) {
-      notifyError(unwrapErrorMessage(err) || t('pages.loads.failedDeleteLoad'));
+      notifyError(formatUserError(err, t, { fallback: t('pages.loads.failedDeleteLoad') }));
     }
   };
 

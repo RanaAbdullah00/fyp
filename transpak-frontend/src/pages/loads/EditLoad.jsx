@@ -6,7 +6,7 @@ import { useAuth } from '../../hooks/useAuth.js';
 import { useApi } from '../../hooks/useApi.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { notifyError, notifySuccess } from '../../components/ui/ToastProvider.jsx';
-import { unwrapErrorMessage } from '../../utils/unwrapApi.js';
+import { formatUserError } from '../../utils/userErrors.js';
 
 // Shipper: edit an open load (PATCH /loads/:id).
 const EditLoad = () => {
@@ -27,7 +27,7 @@ const EditLoad = () => {
         if (!cancelled) setLoadRaw(row);
       } catch (err) {
         if (!cancelled) {
-          notifyError(unwrapErrorMessage(err) || t('pages.loads.failedLoadDetail'));
+          notifyError(formatUserError(err, t, { fallback: t('pages.loads.failedLoadDetail') }));
           setLoadRaw(null);
         }
       } finally {
@@ -73,7 +73,7 @@ const EditLoad = () => {
       notifySuccess(t('pages.loads.loadUpdated'));
       navigate(`/loads/${id}`);
     } catch (err) {
-      notifyError(unwrapErrorMessage(err) || t('pages.loads.failedUpdateLoad'));
+      notifyError(formatUserError(err, t, { fallback: t('pages.loads.failedUpdateLoad') }));
     }
   };
 

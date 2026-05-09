@@ -6,7 +6,7 @@ import { useAuth } from '../../hooks/useAuth.js';
 import { notifyError, notifySuccess } from '../../components/ui/ToastProvider.jsx';
 import { normalizeBids } from '../../adapters/normalize.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
-import { unwrapErrorMessage } from '../../utils/unwrapApi.js';
+import { formatUserError } from '../../utils/userErrors.js';
 
 // Screen summarising bids across loads.
 const BidManagement = () => {
@@ -32,7 +32,7 @@ const BidManagement = () => {
       notifySuccess(t('pages.bids.bidAccepted'));
       fetchBidsData();
     } catch (err) {
-      notifyError(unwrapErrorMessage(err) || t('pages.bids.acceptFailed'));
+      notifyError(formatUserError(err, t, { fallback: t('pages.bids.acceptFailed') }));
     }
   };
 
@@ -52,7 +52,7 @@ const BidManagement = () => {
       notifySuccess(t('pages.bids.suggestSent', { amount: Number(amount).toLocaleString() }));
       fetchBidsData();
     } catch (err) {
-      notifyError(unwrapErrorMessage(err) || t('pages.bids.suggestFailed'));
+      notifyError(formatUserError(err, t, { fallback: t('pages.bids.suggestFailed') }));
     }
   };
 

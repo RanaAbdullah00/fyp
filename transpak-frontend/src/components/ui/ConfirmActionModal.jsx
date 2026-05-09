@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import Button from './Button.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
+import { getPortalContainer } from '../../utils/portalRoot.js';
 
 const ConfirmActionModal = ({
   show,
@@ -15,7 +17,28 @@ const ConfirmActionModal = ({
   const { t } = useLanguage();
   const [busy, setBusy] = useState(false);
 
+  useEffect(() => {
+    if (!show) return;
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose?.();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [show, onClose]);
+
+  useEffect(() => {
+    if (!show) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [show]);
+
   if (!show) return null;
+
+  const host = getPortalContainer();
+  if (!host) return null;
 
   const handleConfirm = async () => {
     try {
@@ -27,14 +50,18 @@ const ConfirmActionModal = ({
     }
   };
 
-  return (
+  return createPortal(
     <div
-      className="tp-modal-backdrop tp-blur-backdrop"
+      className="tp-modal-backdrop tp-blur-backdrop tp-modal-backdrop--enter tp-modal-portal-layer"
       role="dialog"
       aria-modal="true"
       onClick={onClose}
     >
-      <div className="tp-modal-card p-4" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
+      <div
+        className="tp-modal-card tp-modal-card--enter p-4"
+        style={{ maxWidth: 520 }}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="d-flex align-items-center justify-content-between mb-2">
           <div className="fw-semibold">{title ?? t('ui.confirm.areYouSure')}</div>
           <button
@@ -56,9 +83,9 @@ const ConfirmActionModal = ({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    host
   );
 };
 
 export default ConfirmActionModal;
-

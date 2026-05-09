@@ -8,11 +8,14 @@ import ShipmentProgressBox from '../../components/shipment/ShipmentProgressBox.j
 import api from '../../services/api.js';
 import { normalizeTracking } from '../../adapters/normalize.js';
 import { AppContext } from '../../context/AppContext.jsx';
+import { useLanguage } from '../../hooks/useLanguage.js';
+import { formatUserError } from '../../utils/userErrors.js';
 
 const ShipmentTracking = () => {
   const { trackId } = useParams();
   const id = trackId?.trim() || '';
   const app = useContext(AppContext);
+  const { t } = useLanguage();
 
   const [payload, setPayload] = useState(null);
   const [error, setError] = useState('');
@@ -32,12 +35,12 @@ const ShipmentTracking = () => {
       const raw = res?.data;
       setPayload(normalizeTracking(raw) || null);
     } catch (e) {
-      setError(e?.response?.data?.message || e?.message || 'Failed to load tracking');
+      setError(formatUserError(e, t, { fallback: t('pages.tracking.loadFailed') }));
       setPayload(null);
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, t]);
 
   useEffect(() => {
     load();
@@ -88,32 +91,33 @@ const ShipmentTracking = () => {
   const shipment = useMemo(
     () => ({
       code: `#${id}`,
-      origin: '—',
-      destination: '—',
+      origin: t('common.emDash'),
+      destination: t('common.emDash'),
       status: tracking?.status || 'posted',
-      driverName: '—',
-      vehicleReg: '—',
-      eta: tracking?.eta || '—',
-      lastUpdate: payload?.history?.[0]?.time || '—'
+      driverName: t('common.emDash'),
+      vehicleReg: t('common.emDash'),
+      eta: tracking?.eta || t('common.emDash'),
+      lastUpdate: payload?.history?.[0]?.time || t('common.emDash')
     }),
-    [id, tracking, payload?.history]
+    [id, tracking, payload?.history, t]
   );
 
   const timelineEvents = useMemo(() => {
     const h = payload?.history || [];
     return h.map((ev) => ({
-      label: ev.event || ev.label || 'Update',
+      label: ev.event || ev.label || t('pages.tracking.timelineUpdate'),
       time: ev.time || '',
       done: true,
       note: ev.location
     }));
-  }, [payload?.history]);
+  }, [payload?.history, t]);
 
   const checkpoints = useMemo(() => {
-    if (coords.length >= 2) return coords.map((_, i) => `Point ${i + 1}`);
-    if (coords.length === 1) return ['Last reported position'];
+    if (coords.length >= 2)
+      return coords.map((_, i) => t('pages.tracking.mapPoint', { n: String(i + 1) }));
+    if (coords.length === 1) return [t('pages.tracking.lastReportedPosition')];
     return [];
-  }, [coords]);
+  }, [coords, t]);
 
   const trackingDataForMap = useMemo(
     () => ({
@@ -131,10 +135,8 @@ const ShipmentTracking = () => {
   if (!id) {
     return (
       <div className="container py-3">
-        <h5 className="mb-3 text-body">Shipment tracking</h5>
-        <p className="small tp-support-muted mb-0">
-          Open tracking from a load or accepted shipment, or append the load code to the URL (e.g. /shipments/tracking/LOAD-CODE).
-        </p>
+        <h5 className="mb-3 text-body">{t('pages.tracking.title')}</h5>
+        <p className="small tp-support-muted mb-0">{t('pages.tracking.noIdHint')}</p>
       </div>
     );
   }
@@ -142,8 +144,8 @@ const ShipmentTracking = () => {
   if (loading && !payload) {
     return (
       <div className="container py-3">
-        <h5 className="mb-3">Shipment tracking</h5>
-        <p className="small text-muted">Loading…</p>
+        <h5 className="mb-3">{t('pages.tracking.title')}</h5>
+        <p className="small text-muted">{t('pages.tracking.loading')}</p>
       </div>
     );
   }
@@ -151,7 +153,7 @@ const ShipmentTracking = () => {
   if (error && !payload) {
     return (
       <div className="container py-3">
-        <h5 className="mb-3">Shipment tracking</h5>
+        <h5 className="mb-3">{t('pages.tracking.title')}</h5>
         <p className="text-danger small">{error}</p>
       </div>
     );
@@ -159,7 +161,7 @@ const ShipmentTracking = () => {
 
   return (
     <div className="container py-3">
-      <h5 className="mb-3">Shipment tracking</h5>
+      <h5 className="mb-3">{t('pages.tracking.title')}</h5>
       {error ? <p className="text-warning small mb-2">{error}</p> : null}
       <ShipmentCard shipment={shipment} />
       <div className="tp-tracking-progress mb-3">

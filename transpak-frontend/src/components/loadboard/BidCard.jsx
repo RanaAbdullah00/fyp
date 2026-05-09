@@ -3,6 +3,7 @@ import Card from '../ui/Card.jsx';
 import Badge from '../ui/Badge.jsx';
 import Button from '../ui/Button.jsx';
 import ConfirmActionModal from '../ui/ConfirmActionModal.jsx';
+import UserRatingBadge from '../reviews/UserRatingBadge.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
 
 function formatHHMMSS(totalSeconds) {
@@ -14,7 +15,21 @@ function formatHHMMSS(totalSeconds) {
 }
 
 // Card representing a bid placed by a carrier.
-const BidCard = ({ bid, onAccept, onReject, onSuggest, onAcceptSuggestion, onRejectSuggestion, isShipper, isCarrier, actionsDisabled }) => {
+const BidCard = ({
+  bid,
+  onAccept,
+  onReject,
+  onSuggest,
+  onAcceptSuggestion,
+  onRejectSuggestion,
+  isShipper,
+  isCarrier,
+  actionsDisabled,
+  /** UUID of counterpart for trust badge (carrier when shipper; shipper when carrier) */
+  ratingTargetUserId = null,
+  /** Optional label when carrierName is empty (carrier view) */
+  counterpartyLabel = null
+}) => {
   const { t } = useLanguage();
 
   const createdAtMs = useMemo(() => {
@@ -59,6 +74,9 @@ const BidCard = ({ bid, onAccept, onReject, onSuggest, onAcceptSuggestion, onRej
   const suggestedByShipper = isSuggested && bid?.suggestedBy === 'shipper';
   const suggestedByCarrier = isSuggested && bid?.suggestedBy === 'carrier';
   const displayAmount = suggestedAmount != null ? suggestedAmount : amount;
+
+  const primaryName =
+    (isShipper ? bid.carrierName : counterpartyLabel || bid.carrierName) || (isShipper ? t('auth.carrier') : t('auth.shipper'));
 
   const [suggestInput, setSuggestInput] = useState('');
   const [showSuggestInput, setShowSuggestInput] = useState(false);
@@ -109,10 +127,13 @@ const BidCard = ({ bid, onAccept, onReject, onSuggest, onAcceptSuggestion, onRej
 
   return (
     <Card className={`tp-bid-card ${isExpired ? 'opacity-50' : ''}`}>
-      <div className="d-flex justify-content-between align-items-center mb-2">
-        <div>
-          <h6 className="mb-0">{bid.carrierName}</h6>
-          <small className="text-muted">
+      <div className="d-flex justify-content-between align-items-center mb-2 gap-2 flex-wrap">
+        <div className="min-w-0 flex-grow-1" style={{ minWidth: 'min(100%, 12rem)' }}>
+          <div className="d-flex align-items-center gap-2 flex-wrap">
+            <h6 className="mb-0 text-break">{primaryName}</h6>
+            {ratingTargetUserId ? <UserRatingBadge userId={ratingTargetUserId} /> : null}
+          </div>
+          <small className="text-muted d-block text-break">
             {bid.vehicleType} · {bid.transitTime} {t('bidCard.daysSuffix')}
           </small>
         </div>

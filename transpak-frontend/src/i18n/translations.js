@@ -21,6 +21,7 @@ export const translations = {
       fleet: 'Fleet',
       admin: 'Admin',
       logout: 'Logout',
+      logoutConfirm: 'Are you sure you want to log out?',
       login: 'Login',
       register: 'Register',
       loading: 'Loading...',
@@ -37,7 +38,8 @@ export const translations = {
       expand: 'Expand',
       collapse: 'Collapse',
       userFallback: 'User',
-      emDash: '—'
+      emDash: '—',
+      preparingWorkspace: 'Preparing your workspace…'
     },
     profile: {
       basicInfo: 'Basic Info',
@@ -71,7 +73,61 @@ export const translations = {
       saveFailed: 'Failed to save profile',
       expandSheet: 'Expand sheet',
       collapseSheet: 'Collapse sheet',
-      displayPicture: 'Display picture'
+      displayPicture: 'Display picture',
+      rateUsers: 'Rate users',
+      reviewsTab: 'Reviews',
+      emailReadOnly: 'Email (read-only)',
+      profileStatus: 'Profile status',
+      completionProgress: 'Profile completeness',
+      jumpToFix: 'Fix in Basic Info →',
+      fullyVerifiedBadge: 'Verified',
+      fullyVerifiedTitle: 'Fully verified profile',
+      fullyVerifiedBody: 'Your identity and documents are on file. Keep ratings high by completing shipments reliably.',
+      activeWorkspace: 'Active workspace',
+      activeRoleHint: 'Tools and navigation follow this role.',
+      rolesOnAccount: 'Roles on this account',
+      switchRoleVisualCta: 'Switch role workspace',
+      switchRoleVisualHint: 'Uses the same switch as the main menu — no extra setup.',
+      activitySnapshot: 'Activity snapshot',
+      statLoadsPosted: 'Loads posted',
+      statLoadsCompleted: 'Loads completed',
+      statBidsPlaced: 'Bids placed',
+      statBidsAccepted: 'Bids accepted',
+      trustLayer: 'Trust on TransPak',
+      trustScoreLine: '{{avg}}★ average from {{count}} reviews',
+      trustScoreNone: 'No public reviews yet — complete deliveries to build trust.'
+    },
+    reviews: {
+      rateUsersHint:
+        'After a bid is accepted, you can leave a 1–5 star rating for your counterpart. Each load can be rated once.',
+      rateUsersHintStrict:
+        'You can only rate people you have an accepted assignment with. Stars unlock after the load is delivered or closed.',
+      rateOnlyWorkedWith: 'You can only rate users you have worked with',
+      noWorkedWithYet: 'No completed jobs to rate yet',
+      noWorkedWithBody:
+        'Once a bid is accepted and the load reaches delivered/closed, your counterpart will appear here.',
+      counterpartyRole: 'You are rating',
+      loadContext: 'Shipment / load',
+      rateUnlockAfterDelivery:
+        'Rating unlocks when the load is delivered or closed — same as ride/order apps after the service is done.',
+      ratingBreakdown: 'Rating breakdown',
+      recentTimeline: 'Recent feedback',
+      loadLabel: 'Load',
+      submitted: 'Thanks — your rating was saved.',
+      submitFailed: 'Could not submit rating. Check the load is accepted and try again.',
+      submitRate: 'Submit rating',
+      optionalComment: 'Comment (optional)',
+      yourRating: 'Your rating',
+      starLabel: 'Star rating',
+      noPendingRates: 'Nothing to rate yet',
+      noPendingRatesBody: 'Accepted bids you can rate will appear here once the shipment is linked to your account.',
+      noReviewsYet: 'No reviews yet',
+      noReviewsYetShort: 'No rating yet',
+      noReviewsBody: 'When others rate you after completed shipments, their feedback will show here.',
+      signInToSeeReviews: 'Sign in to see your reviews.',
+      signInToRate: 'Sign in to rate users.',
+      rateAsShipperOrCarrier: 'Switch to shipper or carrier workspace to rate counterparts.',
+      avgShort: '{{avg}} average · {{count}} reviews'
     },
     auth: {
       welcomeTitle: 'Welcome to TransPak',
@@ -132,7 +188,9 @@ export const translations = {
       fileUploadFailed: 'File upload failed, please try again',
       fileUploadPartial: 'Profile saved, but one or more files could not be uploaded. Please try again.',
       invalidFile: 'Invalid or empty file',
-      storageNotConfigured: 'File storage is not configured on the server'
+      storageNotConfigured: 'File storage is not configured on the server',
+      networkUnreachable: 'We could not reach the server. Check your connection and try again.',
+      serverUnavailable: 'The service is temporarily unavailable. Please try again shortly.'
     },
     pages: {
       loads: {
@@ -168,7 +226,99 @@ export const translations = {
         failedUpdateLoad: 'Failed to update load',
         failedDeleteLoad: 'Failed to delete load',
         onlyOpenEdit: 'Only open loads can be edited',
-        onlyOpenDelete: 'Only open loads can be deleted'
+        onlyOpenDelete: 'Only open loads can be deleted',
+        statusOpen: 'Open',
+        statusAssigned: 'Assigned',
+        loadCardRef: 'Load ID: {{code}}',
+        loadCardTons: 'tons',
+        loadCardDistancePrice: '{{distance}} km · {{price}} PKR',
+        loadCardPickup: 'Pickup',
+        loadCardExpired: 'Expired',
+        loadCardBiddingOpen: 'Bidding open',
+        loadCardPlaceBid: 'Place bid',
+        loadCardBiddingClosed: 'Bidding closed'
+      },
+      dashboard: {
+        carrierTitle: 'Carrier dashboard',
+        shipperTitle: 'Shipper dashboard',
+        monthlyView: 'Monthly view',
+        monthThis: 'This month',
+        monthLast: 'Last month',
+        recommendedLoads: 'Recommended loads',
+        openLoads: 'Open loads',
+        stats: 'Stats',
+        activity: 'Activity Feed',
+        analytics: 'Analytics',
+        incompleteProfileCta: 'Incomplete profile',
+        chartWeeklyLoads: 'Weekly load activity',
+        chartWeeklyBidding: 'Weekly bidding activity',
+        chartLegendLoads: 'Loads',
+        chartLegendAcceptedBids: 'Accepted bids',
+        chartEmptyShipper: 'Post loads to build your weekly activity trend.',
+        chartEmptyCarrier: 'Place bids to build your activity trend.',
+        statTotalLoads: 'Total loads',
+        statActiveShipments: 'Active shipments',
+        statCompletedDeliveries: 'Completed deliveries',
+        statDeliveredValue: 'Delivered value (PKR)',
+        statDeliveredValueSub: 'Sum of delivered loads',
+        statOpenMarketplace: 'Open marketplace loads',
+        statAcceptedBids: 'Accepted bids',
+        statPendingBids: 'Pending bids',
+        statFleetVehicles: 'Fleet vehicles',
+        statFleetSub: 'Registered',
+        myActiveShipments: 'My active shipments',
+        myAssignedShipments: 'My assigned shipments',
+        emptyNoActiveShipments: 'No active shipments',
+        emptyNoActiveShipmentsBody: 'Accept a carrier bid to start shipment tracking.',
+        emptyNoAssignedShipments: 'No assigned shipments',
+        emptyNoAssignedShipmentsBody: 'When a shipper accepts your bid, the shipment will appear here.',
+        chartWeekLabel: 'Week {{n}}'
+      },
+      tracking: {
+        title: 'Shipment tracking',
+        noIdHint:
+          'Open tracking from a load or accepted shipment, or add the load code to the URL (for example /shipments/tracking/LOAD-CODE).',
+        loading: 'Loading…',
+        loadFailed: 'Could not load tracking.',
+        timelineUpdate: 'Update',
+        mapPoint: 'Point {{n}}',
+        lastReportedPosition: 'Last reported position'
+      },
+      shipments: {
+        tracking: 'Shipment Tracking',
+        history: 'Shipment History',
+        liveTrackingMap: 'Live tracking map',
+        historyTitle: 'Shipment history',
+        historyEmpty:
+          'Completed shipments will appear here after deliveries are marked as {{status}}.',
+        historyClosedLabel: 'Closed'
+      },
+      supportPage: {
+        title: 'Support'
+      },
+      notificationsPage: {
+        title: 'Notifications'
+      },
+      truckForm: {
+        truckType: 'Truck type',
+        selectType: 'Select type',
+        typeTruck: 'Truck',
+        typeTrailer: 'Trailer',
+        typeContainer: 'Container',
+        typeFlatbed: 'Flatbed',
+        licensePlate: 'License plate',
+        driverName: 'Driver name',
+        driverPhone: 'Driver phone'
+      },
+      postLoadForm: {
+        cargoDescription: 'Cargo description',
+        pickupCity: 'Pickup city',
+        dropoffCity: 'Dropoff city',
+        vehicleType: 'Vehicle type'
+      },
+      verification: {
+        submitted: 'Verification submitted. Admin will review within 24 hours.',
+        submitFailed: 'Submission failed. Please try again.'
       },
       pipeline: {
         posted: 'Posted',
@@ -219,6 +369,8 @@ export const translations = {
       },
       fleet: {
         monitoring: 'Fleet monitoring',
+        monitoringTitle: 'Fleet monitoring',
+        noVehicles: 'No vehicles registered yet.',
         addTruck: 'Add Truck',
         truckType: 'Truck type',
         capacity: 'Capacity (tons)',
@@ -226,23 +378,19 @@ export const translations = {
         driverName: 'Driver name',
         driverPhone: 'Driver phone'
       },
-      shipments: {
-        tracking: 'Shipment Tracking',
-        history: 'Shipment History',
-        liveTrackingMap: 'Live tracking map'
-      },
       // wallet removed: payments handled offline
-      dashboard: {
-        stats: 'Stats',
-        activity: 'Activity Feed',
-        analytics: 'Analytics'
-      },
       support: {
         demoSectionTitle: 'Platform demo',
         demoSectionBody:
           'Open the official TransPak overview video — the same as from sign-in and sign-up.'
       },
       admin: {
+        tableCode: 'Code',
+        tableCargo: 'Cargo',
+        tableRoute: 'Route',
+        tablePickup: 'Pickup',
+        tableStatus: 'Status',
+        tableAction: 'Action',
         dashboardTitle: 'Admin dashboard',
         statsError: 'Unable to load admin statistics.',
         usersTitle: 'Users',
@@ -300,7 +448,9 @@ export const translations = {
         submit: 'Submit',
         cancel: 'Cancel',
         confirm: 'Confirm',
-        close: 'Close'
+        close: 'Close',
+        yes: 'Yes',
+        no: 'No'
       },
       confirm: {
         areYouSure: 'Are you sure?',
@@ -394,6 +544,7 @@ export const translations = {
       fleet: 'فلیٹ',
       admin: 'ایڈمن',
       logout: 'لاگ آؤٹ',
+      logoutConfirm: 'کیا آپ واقعی لاگ آؤٹ کرنا چاہتے ہیں؟',
       login: 'لاگ ان',
       register: 'رجسٹر',
       loading: 'لوڈ ہو رہا ہے...',
@@ -410,7 +561,8 @@ export const translations = {
       expand: 'پھیلائیں',
       collapse: 'سمیٹیں',
       userFallback: 'صارف',
-      emDash: '—'
+      emDash: '—',
+      preparingWorkspace: 'آپ کا ورک اسپیس تیار ہو رہا ہے…'
     },
     profile: {
       basicInfo: 'بنیادی معلومات',
@@ -444,7 +596,63 @@ export const translations = {
       saveFailed: 'پروفائل محفوظ نہیں ہو سکی',
       expandSheet: 'شیٹ کھولیں',
       collapseSheet: 'شیٹ بند کریں',
-      displayPicture: 'ڈسپلے تصویر'
+      displayPicture: 'ڈسپلے تصویر',
+      rateUsers: 'صارفین کو درجہ دیں',
+      reviewsTab: 'جائزے',
+      emailReadOnly: 'ای میل (صرف پڑھیں)',
+      profileStatus: 'پروفائل کی حیثیت',
+      completionProgress: 'پروفائل مکمل ہونے کی شرح',
+      jumpToFix: 'بنیادی معلومات میں درست کریں ←',
+      fullyVerifiedBadge: 'تصدیق شدہ',
+      fullyVerifiedTitle: 'مکمل تصدیق شدہ پروفائل',
+      fullyVerifiedBody:
+        'آپ کی شناخت اور دستاویزات محفوظ ہیں۔ شپمنٹس مکمل کر کے اعتماد بڑھائیں۔',
+      activeWorkspace: 'فعال ورک اسپیس',
+      activeRoleHint: 'ٹولز اور نیویگیشن اسی کردار کے مطابق ہیں۔',
+      rolesOnAccount: 'اکاؤنٹ پر کردار',
+      switchRoleVisualCta: 'کردار ورک اسپیس بدلیں',
+      switchRoleVisualHint: 'یہی عمل مین مینو والا ہے — کوئی اضافی سیٹ اپ نہیں۔',
+      activitySnapshot: 'سرگرمی کا خلاصہ',
+      statLoadsPosted: 'پوسٹ شدہ لوڈز',
+      statLoadsCompleted: 'مکمل لوڈز',
+      statBidsPlaced: 'لگائے گئے بڈز',
+      statBidsAccepted: 'قبول شدہ بڈز',
+      trustLayer: 'ٹرانسپاک پر اعتماد',
+      trustScoreLine: '{{avg}}★ اوسط · {{count}} جائزے',
+      trustScoreNone: 'ابھی کوئی عوامی جائزہ نہیں — ترسیل مکمل کر کے اعتماد بنائیں۔'
+    },
+    reviews: {
+      rateUsersHint:
+        'بڈ قبول ہونے کے بعد آپ اپنے ساتھی کو 1–5 ستارے دے سکتے ہیں۔ ہر لوڈ پر ایک بار درجہ دیا جا سکتا ہے۔',
+      rateUsersHintStrict:
+        'صرف اسی کو درجہ دیں جس کے ساتھ قبول شدہ تفویض ہو۔ ستارے تب کھلتے ہیں جب لوڈ ڈیلیور یا بند ہو۔',
+      rateOnlyWorkedWith: 'صرف ان کو درجہ دیں جن کے ساتھ آپ نے کام کیا ہے',
+      noWorkedWithYet: 'ابھی درجہ دینے کو کوئی مکمل جاب نہیں',
+      noWorkedWithBody:
+        'جب بڈ قبول ہو اور لوڈ ڈیلیور/بند ہو جائے تو ساتھی یہاں نظر آئے گا۔',
+      counterpartyRole: 'آپ درجہ دے رہے ہیں',
+      loadContext: 'شپمنٹ / لوڈ',
+      rateUnlockAfterDelivery:
+        'جب لوڈ ڈیلیور یا بند ہو تب درجہ کھلے گا — جیسے رائیڈ/آرڈر ایپس میں۔',
+      ratingBreakdown: 'درجہ بندی کی تقسیم',
+      recentTimeline: 'تازہ تبصرے',
+      loadLabel: 'لوڈ',
+      submitted: 'شکریہ — آپ کا درجہ محفوظ ہو گیا۔',
+      submitFailed: 'درجہ بھیجا نہیں جا سکا۔ چیک کریں کہ لوڈ قبول ہے اور دوبارہ کوشش کریں۔',
+      submitRate: 'درجہ بھیجیں',
+      optionalComment: 'تبصرہ (اختیاری)',
+      yourRating: 'آپ کا درجہ',
+      starLabel: 'ستارے',
+      noPendingRates: 'ابھی کچھ درجہ دینے کو نہیں',
+      noPendingRatesBody:
+        'قبول شدہ بڈز یہاں دکھائی دیں گے جب شپمنٹ آپ کے اکاؤنٹ سے منسلک ہو۔',
+      noReviewsYet: 'ابھی کوئی جائزہ نہیں',
+      noReviewsYetShort: 'ابھی کوئی درجہ نہیں',
+      noReviewsBody: 'دوسرے مکمل شپمنٹس کے بعد آپ کو درجہ دیں گے تو یہاں نظر آئے گا۔',
+      signInToSeeReviews: 'جائزے دیکھنے کے لیے سائن ان کریں۔',
+      signInToRate: 'درجہ دینے کے لیے سائن ان کریں۔',
+      rateAsShipperOrCarrier: 'ساتھی کو درجہ دینے کے لیے شپپر یا کیریئر ورک اسپیس پر جائیں۔',
+      avgShort: '{{avg}} اوسط · {{count}} جائزے'
     },
     auth: {
       welcomeTitle: 'ٹرانسپاک میں خوش آمدید',
@@ -505,7 +713,9 @@ export const translations = {
       fileUploadFailed: 'فائل اپ لوڈ ناکام، دوبارہ کوشش کریں',
       fileUploadPartial: 'پروفائل محفوظ ہو گئی، مگر کچھ فائلیں اپ لوڈ نہیں ہو سکتیں۔ دوبارہ کوشش کریں۔',
       invalidFile: 'غلط یا خالی فائل',
-      storageNotConfigured: 'سرور پر فائل اسٹوریج ترتیب نہیں دیا گیا'
+      storageNotConfigured: 'سرور پر فائل اسٹوریج ترتیب نہیں دیا گیا',
+      networkUnreachable: 'سرور تک رسائی نہیں ہو سکی۔ کنکشن چیک کریں اور دوبارہ کوشش کریں۔',
+      serverUnavailable: 'سروس عارضی طور پر دستیاب نہیں۔ کچھ دیر بعد کوشش کریں۔'
     },
     pages: {
       loads: {
@@ -541,7 +751,54 @@ export const translations = {
         failedUpdateLoad: 'لوڈ اپ ڈیٹ ناکام',
         failedDeleteLoad: 'لوڈ حذف ناکام',
         onlyOpenEdit: 'صرف کھلے لوڈ میں ترمیم ہو سکتی ہے',
-        onlyOpenDelete: 'صرف کھلا لوڈ حذف ہو سکتا ہے'
+        onlyOpenDelete: 'صرف کھلا لوڈ حذف ہو سکتا ہے',
+        statusOpen: 'کھلا',
+        statusAssigned: 'تفویض شدہ',
+        loadCardRef: 'لوڈ ID: {{code}}',
+        loadCardTons: 'ٹن',
+        loadCardDistancePrice: '{{distance}} کلومیٹر · {{price}} PKR',
+        loadCardPickup: 'اٹھانے کی تاریخ',
+        loadCardExpired: 'ختم',
+        loadCardBiddingOpen: 'بڈنگ کھلی',
+        loadCardPlaceBid: 'بڈ لگائیں',
+        loadCardBiddingClosed: 'بڈنگ بند'
+      },
+      tracking: {
+        title: 'شپمنٹ ٹریکنگ',
+        noIdHint:
+          'لوڈ یا قبول شدہ شپمنٹ سے ٹریکنگ کھولیں، یا URL میں لوڈ کوڈ لگائیں (مثلاً /shipments/tracking/LOAD-CODE)۔',
+        loading: 'لوڈ ہو رہا ہے…',
+        loadFailed: 'ٹریکنگ لوڈ نہیں ہو سکی۔',
+        timelineUpdate: 'اپ ڈیٹ',
+        mapPoint: 'نقطہ {{n}}',
+        lastReportedPosition: 'آخری رپورٹ شدہ مقام'
+      },
+      supportPage: {
+        title: 'سپورٹ'
+      },
+      notificationsPage: {
+        title: 'نوٹیفکیشنز'
+      },
+      truckForm: {
+        truckType: 'ٹرک کی قسم',
+        selectType: 'قسم منتخب کریں',
+        typeTruck: 'ٹرک',
+        typeTrailer: 'ٹریلر',
+        typeContainer: 'کنٹینر',
+        typeFlatbed: 'فلیٹ بیڈ',
+        licensePlate: 'نمبر پلیٹ',
+        driverName: 'ڈرائیور کا نام',
+        driverPhone: 'ڈرائیور کا فون'
+      },
+      postLoadForm: {
+        cargoDescription: 'کارگو کی تفصیل',
+        pickupCity: 'اٹھانے کا شہر',
+        dropoffCity: 'اتارنے کا شہر',
+        vehicleType: 'گاڑی کی قسم'
+      },
+      verification: {
+        submitted: 'تصدیق جمع ہو گئی۔ ایڈمن 24 گھنٹوں میں دیکھے گا۔',
+        submitFailed: 'جمع نہیں ہو سکی۔ دوبارہ کوشش کریں۔'
       },
       pipeline: {
         posted: 'پوسٹ',
@@ -592,6 +849,8 @@ export const translations = {
       },
       fleet: {
         monitoring: 'فلیٹ مانیٹرنگ',
+        monitoringTitle: 'فلیٹ مانیٹرنگ',
+        noVehicles: 'ابھی کوئی گاڑی رجسٹر نہیں۔',
         addTruck: 'ٹرک شامل کریں',
         truckType: 'ٹرک کی قسم',
         capacity: 'کپاسٹی (ٹن)',
@@ -602,13 +861,47 @@ export const translations = {
       shipments: {
         tracking: 'شپمنٹ ٹریکنگ',
         history: 'شپمنٹ ہسٹری',
-        liveTrackingMap: 'لائیو ٹریکنگ میپ'
+        liveTrackingMap: 'لائیو ٹریکنگ میپ',
+        historyTitle: 'شپمنٹ کی تاریخ',
+        historyEmpty: 'جب ترسیل {{status}} نشان زد ہو گی تو مکمل شپمنٹس یہاں نظر آئیں گے۔',
+        historyClosedLabel: 'بند'
       },
       // wallet removed: ادائیگی آف لائن
       dashboard: {
+        carrierTitle: 'کیریئر ڈیش بورڈ',
+        shipperTitle: 'شپپر ڈیش بورڈ',
+        monthlyView: 'ماہانہ منظر',
+        monthThis: 'یہ ماہ',
+        monthLast: 'گزشتہ ماہ',
+        recommendedLoads: 'تجویز کردہ لوڈز',
+        openLoads: 'کھلے لوڈز',
         stats: 'اسٹیٹس',
         activity: 'ایکٹیویٹی فیڈ',
-        analytics: 'اینالیٹکس'
+        analytics: 'اینالیٹکس',
+        incompleteProfileCta: 'نامکمل پروفائل',
+        chartWeeklyLoads: 'ہفتہ وار لوڈ سرگرمی',
+        chartWeeklyBidding: 'ہفتہ وار بڈنگ',
+        chartLegendLoads: 'لوڈز',
+        chartLegendAcceptedBids: 'قبول شدہ بڈز',
+        chartEmptyShipper: 'رجحان کے لیے لوڈ پوسٹ کریں۔',
+        chartEmptyCarrier: 'رجحان کے لیے بڈ لگائیں۔',
+        statTotalLoads: 'کل لوڈز',
+        statActiveShipments: 'فعال شپمنٹس',
+        statCompletedDeliveries: 'مکمل ترسیلات',
+        statDeliveredValue: 'ترسیل شدہ قیمت (PKR)',
+        statDeliveredValueSub: 'ڈیلیور شدہ لوڈز کا مجموعہ',
+        statOpenMarketplace: 'مارکیٹ کے کھلے لوڈز',
+        statAcceptedBids: 'قبول شدہ بڈز',
+        statPendingBids: 'زیر التواء بڈز',
+        statFleetVehicles: 'فلیٹ گاڑیاں',
+        statFleetSub: 'رجسٹرڈ',
+        myActiveShipments: 'میری فعال شپمنٹس',
+        myAssignedShipments: 'میری تفویض شدہ شپمنٹس',
+        emptyNoActiveShipments: 'کوئی فعال شپمنٹ نہیں',
+        emptyNoActiveShipmentsBody: 'ٹریکنگ کے لیے کیریئر بڈ قبول کریں۔',
+        emptyNoAssignedShipments: 'کوئی تفویض نہیں',
+        emptyNoAssignedShipmentsBody: 'جب شپپر بڈ قبول کرے گا تو یہاں نظر آئے گی۔',
+        chartWeekLabel: 'ہفتہ {{n}}'
       },
       support: {
         demoSectionTitle: 'پلیٹ فارم ڈیمو',
@@ -616,6 +909,12 @@ export const translations = {
           'ٹرانسپاک کا سرکاری جائزہ ویڈیو — وہی جو سائن ان اور سائن اپ پر ہے۔'
       },
       admin: {
+        tableCode: 'کوڈ',
+        tableCargo: 'کارگو',
+        tableRoute: 'روٹ',
+        tablePickup: 'اٹھانا',
+        tableStatus: 'حیثیت',
+        tableAction: 'عمل',
         dashboardTitle: 'ایڈمن ڈیش بورڈ',
         statsError: 'اعداد و شمار لوڈ نہیں ہو سکے۔',
         usersTitle: 'صارفین',
@@ -673,7 +972,9 @@ export const translations = {
         submit: 'جمع کریں',
         cancel: 'منسوخ کریں',
         confirm: 'تصدیق کریں',
-        close: 'بند کریں'
+        close: 'بند کریں',
+        yes: 'ہاں',
+        no: 'نہیں'
       },
       confirm: {
         areYouSure: 'کیا آپ کو یقین ہے؟',

@@ -8,7 +8,7 @@ import BrandLogo from './BrandLogo.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { dashboardPathForRole } from '../../utils/dashboardPath.js';
 import { notifyError } from '../ui/ToastProvider.jsx';
-import { unwrapErrorMessage } from '../../utils/unwrapApi.js';
+import { formatUserError } from '../../utils/userErrors.js';
 import api from '../../services/api.js';
 import LanguageToggle from '../ui/LanguageToggle.jsx';
 
@@ -66,7 +66,7 @@ const Navbar = () => {
       const targetRole = activeRole === 'shipper' ? 'carrier' : activeRole === 'carrier' ? 'shipper' : null;
       if (!targetRole || !roles.includes(targetRole)) return;
       setActiveRole(targetRole).catch((err) => {
-        notifyError(unwrapErrorMessage(err) || t('errors.generic'));
+        notifyError(formatUserError(err, t, { fallback: t('errors.generic') }));
         if (originalRole) navigate(dashboardPathForRole(originalRole), { replace: true });
       });
       navigate(dashboardPathForRole(targetRole), { replace: true });

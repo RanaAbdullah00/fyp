@@ -10,7 +10,7 @@ import ProfileEditor from './ProfileEditor.jsx';
  */
 const ProfileSheet = ({ open, onClose }) => {
   const { t } = useLanguage();
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const [closing, setClosing] = useState(false);
   const touchStartY = useRef(null);
   const panelRef = useRef(null);
@@ -29,7 +29,7 @@ const ProfileSheet = ({ open, onClose }) => {
       return;
     }
     setClosing(false);
-    setExpanded(false);
+    setExpanded(true);
     const onKey = (e) => {
       if (e.key === 'Escape') runClose();
     };

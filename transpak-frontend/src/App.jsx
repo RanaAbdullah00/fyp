@@ -48,7 +48,7 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return <LoadingScreen message="Preparing your workspace…" />;
+    return <LoadingScreen />;
   }
 
   if (!user) {
@@ -94,12 +94,12 @@ function App() {
   return (
     <>
 
-      <div className="app-root d-flex flex-column min-vh-100 tp-app-surface">
+      <div className="app-root d-flex flex-column min-vh-100 tp-app-surface tp-app-root-vh">
         {!isAuthPage && <Navbar />}
-        <div className="d-flex flex-grow-1">
+        <div className="d-flex flex-grow-1 tp-app-main-row min-w-0">
           {!isAuthPage && <Sidebar />}
           <main
-            className={`flex-grow-1 container-fluid px-0 pb-5 pb-md-0 tp-main-shell${isBareAuthMain ? ' tp-main-shell--bare-auth' : ''}`}
+            className={`flex-grow-1 container-fluid px-0 pb-5 pb-md-0 tp-main-shell min-h-0 min-w-0${isBareAuthMain ? ' tp-main-shell--bare-auth' : ''}`}
             data-tp-page-bg={pageBg}
           >
               <Routes>

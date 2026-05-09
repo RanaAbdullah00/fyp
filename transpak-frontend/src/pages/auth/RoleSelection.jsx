@@ -5,7 +5,7 @@ import { useAuth } from '../../hooks/useAuth.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { dashboardPathForRole } from '../../utils/dashboardPath.js';
 import { notifyError } from '../../components/ui/ToastProvider.jsx';
-import { unwrapErrorMessage } from '../../utils/unwrapApi.js';
+import { formatUserError } from '../../utils/userErrors.js';
 
 const RoleSelection = () => {
   const navigate = useNavigate();
@@ -81,7 +81,7 @@ const RoleSelection = () => {
         });
       }
     } catch (err) {
-      notifyError(unwrapErrorMessage(err) || t('errors.generic'));
+      notifyError(formatUserError(err, t, { fallback: t('errors.generic') }));
     } finally {
       setSwitching(false);
     }

@@ -6,7 +6,7 @@ import { SkeletonTable } from '../../components/ui/Skeleton.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { notifyError, notifySuccess } from '../../components/ui/ToastProvider.jsx';
-import { unwrapErrorMessage } from '../../utils/unwrapApi.js';
+import { formatUserError } from '../../utils/userErrors.js';
 
 const AdminUsers = () => {
   const { request } = useApi();
@@ -21,7 +21,7 @@ const AdminUsers = () => {
       const data = await request({ url: '/admin/users' });
       setUsers(Array.isArray(data) ? data : []);
     } catch (e) {
-      notifyError(unwrapErrorMessage(e) || t('pages.admin.statsError'));
+      notifyError(formatUserError(e, t, { fallback: t('pages.admin.statsError') }));
       setUsers([]);
     } finally {
       setLoading(false);
@@ -39,7 +39,7 @@ const AdminUsers = () => {
       setUsers((prev) => prev.map((x) => (x.id === id ? { ...x, blocked: u?.blocked ?? blocked } : x)));
       notifySuccess(blocked ? t('pages.admin.userBlocked') : t('pages.admin.userUnblocked'));
     } catch (e) {
-      notifyError(unwrapErrorMessage(e) || t('pages.admin.updateFailed'));
+      notifyError(formatUserError(e, t, { fallback: t('pages.admin.updateFailed') }));
     }
   };
 
@@ -50,7 +50,7 @@ const AdminUsers = () => {
       setUsers((prev) => prev.filter((x) => x.id !== userPendingDelete.id));
       notifySuccess(t('pages.admin.userDeleted'));
     } catch (e) {
-      notifyError(unwrapErrorMessage(e) || t('pages.admin.deleteUserFailed'));
+      notifyError(formatUserError(e, t, { fallback: t('pages.admin.deleteUserFailed') }));
     }
   };
 

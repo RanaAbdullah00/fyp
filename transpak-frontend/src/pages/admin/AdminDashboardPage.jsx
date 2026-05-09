@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { SkeletonStatCards } from '../../components/ui/Skeleton.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
-import { unwrapErrorMessage } from '../../utils/unwrapApi.js';
+import { formatUserError } from '../../utils/userErrors.js';
 
 const AdminDashboardPage = () => {
   const { request } = useApi();
@@ -21,7 +21,7 @@ const AdminDashboardPage = () => {
         if (!cancelled) setStats(data);
       } catch (e) {
         if (!cancelled) {
-          setFetchError(unwrapErrorMessage(e) || t('pages.admin.statsError'));
+          setFetchError(formatUserError(e, t, { fallback: t('pages.admin.statsError') }));
           setStats(null);
         }
       } finally {
@@ -68,8 +68,8 @@ const AdminDashboardPage = () => {
 
       {!loading && !fetchError && stats && (
         <div className="row g-3">
-          {cards.map((c, i) => (
-            <div key={i} className="col-12 col-md-6 col-xl-4">
+          {cards.map((c) => (
+            <div key={`${c.title}::${c.hint}`} className="col-12 col-md-6 col-xl-4">
               <div className="card border-0 shadow-sm h-100 rounded-3 overflow-hidden">
                 <div className="card-body py-4">
                   <div className="text-muted small mb-1">{c.title}</div>

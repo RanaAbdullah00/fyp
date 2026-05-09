@@ -7,7 +7,8 @@ import { useAuth } from '../../hooks/useAuth.js';
 import { loginApi } from '../../services/authService.js';
 import { notifySuccess, notifyError } from '../ui/ToastProvider.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
-import { unwrapResponseData, unwrapErrorMessage } from '../../utils/unwrapApi.js';
+import { unwrapResponseData } from '../../utils/unwrapApi.js';
+import { formatUserError } from '../../utils/userErrors.js';
 import { FaEnvelope, FaLock } from 'react-icons/fa';
 
 const DEMO_ADMIN_EMAIL = 'mrabdullah0456@gmail.com';
@@ -57,10 +58,7 @@ const LoginForm = () => {
       else if (activeRole === 'carrier') path = '/dashboard/carrier';
       navigate(path, { replace: true });
     } catch (err) {
-      const raw =
-        unwrapErrorMessage(err) ||
-        err?.message ||
-        'Invalid credentials';
+      const raw = formatUserError(err, t, { fallback: t('errors.invalidCredentials') });
       const translated =
         raw === 'Invalid credentials'
           ? t('errors.invalidCredentials')

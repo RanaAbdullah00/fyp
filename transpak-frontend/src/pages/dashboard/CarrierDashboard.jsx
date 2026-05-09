@@ -6,17 +6,19 @@ import LoadList from '../../components/loadboard/LoadList.jsx';
 import { useState, useEffect } from 'react';
 import { useApi } from '../../hooks/useApi.js';
 import { useAuth } from '../../hooks/useAuth.js';
+import { useLanguage } from '../../hooks/useLanguage.js';
 import ActiveShipmentPanel from '../../components/dashboard/ActiveShipmentPanel.jsx';
 import { FaTruck } from 'react-icons/fa';
 import { normalizeLoads } from '../../adapters/normalize.js';
 import { Link } from 'react-router-dom';
+
 // Dashboard view tailored for carriers.
 const CarrierDashboard = () => {
+  const { t } = useLanguage();
   const { user } = useAuth();
   const profileComplete = user?.profileComplete === true;
   const activities = [];
 
-  const [month, setMonth] = useState('This month');
   const [openLoads, setOpenLoads] = useState([]);
   const [bidSummary, setBidSummary] = useState({ accepted: 0, pending: 0 });
   const [fleetCount, setFleetCount] = useState(0);
@@ -30,20 +32,22 @@ const CarrierDashboard = () => {
 
   const stats = useMemo(
     () => [
-      { label: 'Open marketplace loads', value: metrics.open },
-      { label: 'Accepted bids', value: metrics.accepted },
-      { label: 'Pending bids', value: metrics.pending },
-      { label: 'Fleet vehicles', value: fleetCount, subLabel: 'Registered' }
+      { label: t('pages.dashboard.statOpenMarketplace'), value: metrics.open },
+      { label: t('pages.dashboard.statAcceptedBids'), value: metrics.accepted },
+      { label: t('pages.dashboard.statPendingBids'), value: metrics.pending },
+      { label: t('pages.dashboard.statFleetVehicles'), value: fleetCount, subLabel: t('pages.dashboard.statFleetSub') }
     ],
-    [metrics, fleetCount]
+    [metrics, fleetCount, t]
   );
 
   const chartData = useMemo(() => {
-    // We avoid synthetic charts; show data only when bids exist.
     const windowWeeks = 4;
     if (!metrics.accepted && !metrics.pending) return [];
-    return Array.from({ length: windowWeeks }, (_, i) => ({ name: `Week ${i + 1}`, value: 0 }));
-  }, [metrics.accepted, metrics.pending]);
+    return Array.from({ length: windowWeeks }, (_, i) => ({
+      name: t('pages.dashboard.chartWeekLabel', { n: i + 1 }),
+      value: 0
+    }));
+  }, [metrics.accepted, metrics.pending, t]);
 
   const [trackingData] = useState(null);
   const [loadingTracking] = useState(false);
@@ -71,15 +75,16 @@ const CarrierDashboard = () => {
       }
     })();
   }, [request]);
-  // Tracking and status updates happen on the Shipment Tracking screen with a real reference/id.
 
   return (
     <div className="container py-3">
       <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-        <h5 className="mb-0">Carrier dashboard</h5>
+        <h5 className="mb-0">{t('pages.dashboard.carrierTitle')}</h5>
         <div className="d-flex gap-2 flex-wrap">
           {!profileComplete && (
-            <Link to="/profile" className="btn btn-warning btn-sm rounded-lg">Incomplete Profile</Link>
+            <Link to="/profile" className="btn btn-warning btn-sm rounded-lg">
+              {t('pages.dashboard.incompleteProfileCta')}
+            </Link>
           )}
         </div>
       </div>
@@ -87,17 +92,17 @@ const CarrierDashboard = () => {
       <div className="mt-3 row g-2">
         <div className="col-12 col-lg-6">
           <div className="d-flex justify-content-between align-items-center mb-1">
-            <div className="small text-muted">Monthly view</div>
-            <select className="form-select form-select-sm w-auto" value={month} onChange={(e) => setMonth(e.target.value)}>
-              <option>This month</option>
-              <option>Last month</option>
+            <div className="small text-muted">{t('pages.dashboard.monthlyView')}</div>
+            <select className="form-select form-select-sm w-auto" defaultValue="this" aria-label={t('pages.dashboard.monthlyView')}>
+              <option value="this">{t('pages.dashboard.monthThis')}</option>
+              <option value="last">{t('pages.dashboard.monthLast')}</option>
             </select>
           </div>
           <AnalyticsChart
             data={chartData}
-            label="Weekly bidding activity"
-            legend="Accepted bids"
-            emptyHint="Place bids to build your activity trend."
+            label={t('pages.dashboard.chartWeeklyBidding')}
+            legend={t('pages.dashboard.chartLegendAcceptedBids')}
+            emptyHint={t('pages.dashboard.chartEmptyCarrier')}
           />
         </div>
         <div className="col-12 col-lg-6">
@@ -106,13 +111,13 @@ const CarrierDashboard = () => {
       </div>
       <div className="mt-3">
         <div className="d-flex justify-content-between align-items-center mb-1">
-          <h6 className="mb-0">Recommended loads</h6>
+          <h6 className="mb-0">{t('pages.dashboard.recommendedLoads')}</h6>
         </div>
         <LoadList loads={openLoads} />
       </div>
       <div className="mt-4">
         <div className="d-flex justify-content-between align-items-center mb-3">
-          <h6 className="mb-0">My Assigned Shipments</h6>
+          <h6 className="mb-0">{t('pages.dashboard.myAssignedShipments')}</h6>
         </div>
         <ActiveShipmentPanel
           trackingData={trackingData}
@@ -120,8 +125,8 @@ const CarrierDashboard = () => {
           emptyState={
             <div className="text-center py-5 px-3 tp-empty-state rounded-3 border border-dashed text-muted">
               <FaTruck className="fs-1 text-muted mb-3" />
-              <h6 className="mb-2">No assigned shipments</h6>
-              <p className="small mb-0">When a shipper accepts your bid, the shipment will appear here.</p>
+              <h6 className="mb-2">{t('pages.dashboard.emptyNoAssignedShipments')}</h6>
+              <p className="small mb-0">{t('pages.dashboard.emptyNoAssignedShipmentsBody')}</p>
             </div>
           }
         />
@@ -131,4 +136,3 @@ const CarrierDashboard = () => {
 };
 
 export default CarrierDashboard;
-
