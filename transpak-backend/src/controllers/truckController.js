@@ -1,6 +1,7 @@
 const { body, param, validationResult } = require("express-validator");
 const { sendSuccess, sendError } = require("../../utils/apiResponse");
 const { query } = require("../../db/pool");
+const { safeDestroyReplacedUrl } = require("../../utils/cloudinaryUrl");
 
 function isUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ""));
@@ -81,7 +82,10 @@ const updateValidators = [
 async function update(req, res) {
   try {
     const id = String(req.params.id);
-    const { rows: found } = await query(`SELECT id, user_id FROM trucks WHERE id = $1`, [id]);
+    const { rows: found } = await query(
+      `SELECT id, user_id, truck_card_front_image, truck_card_back_image FROM trucks WHERE id = $1`,
+      [id]
+    );
     const truck = found[0];
     if (!truck) return sendError(res, 404, "Not found");
     const roles = req.auth?.roles || [];
@@ -89,6 +93,7 @@ async function update(req, res) {
     if (!isAdmin && String(truck.user_id) !== String(req.auth.userId)) return sendError(res, 403, "Forbidden");
 
     const { engineNumber, truckType, capacity, licensePlate, truckCardFrontImage, truckCardBackImage } = req.body || {};
+    const uidStr = String(req.auth.userId);
     const { rows } = await query(
       `UPDATE trucks
        SET engine_number = COALESCE($2, engine_number),
@@ -114,7 +119,16 @@ async function update(req, res) {
         truckCardBackImage != null ? String(truckCardBackImage).trim() : null
       ]
     );
-    return sendSuccess(res, 200, rows[0]);
+    const updated = rows[0];
+    if (updated) {
+      if (truckCardFrontImage != null && truck.truck_card_front_image && truck.truck_card_front_image !== updated.truckCardFrontImage) {
+        void safeDestroyReplacedUrl(uidStr, truck.truck_card_front_image, updated.truckCardFrontImage, "image");
+      }
+      if (truckCardBackImage != null && truck.truck_card_back_image && truck.truck_card_back_image !== updated.truckCardBackImage) {
+        void safeDestroyReplacedUrl(uidStr, truck.truck_card_back_image, updated.truckCardBackImage, "image");
+      }
+    }
+    return sendSuccess(res, 200, updated);
   } catch (err) {
     if (String(err.code) === "23505") return sendError(res, 409, "Truck already exists");
     return sendError(res, 500, err.message || "Server error");

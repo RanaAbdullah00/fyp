@@ -303,6 +303,7 @@ router.put(
 
       const { rows: bidRows } = await client.query(
         `SELECT b.id, b.load_id, b.carrier_id, b.amount, b.status,
+                b.suggested_amount AS suggested_amount, b.suggested_by AS suggested_by,
                 l.shipper_id, l.status AS load_status
          FROM bids b
          JOIN loads l ON l.id = b.load_id
@@ -315,7 +316,15 @@ router.put(
         await client.query("ROLLBACK");
         return sendError(res, 404, "Not found");
       }
-      if (bid.status !== "pending") {
+      if (bid.status === "rejected" || bid.status === "accepted") {
+        await client.query("ROLLBACK");
+        return sendError(res, 409, "Bid is not actionable");
+      }
+      if (bid.status === "suggested" && bid.suggested_by === "shipper") {
+        await client.query("ROLLBACK");
+        return sendError(res, 409, "Awaiting carrier response to your offer");
+      }
+      if (bid.status !== "pending" && bid.status !== "suggested") {
         await client.query("ROLLBACK");
         return sendError(res, 409, "Bid is not pending");
       }
@@ -328,10 +337,31 @@ router.put(
         return sendError(res, 409, "Load is not open");
       }
 
-      await client.query(`UPDATE bids SET status = 'accepted', updated_at = now() WHERE id = $1`, [bidId]);
+      await client.query(
+        `INSERT INTO shipments (load_id, status, location_unavailable)
+         VALUES ($1, 'posted', true)
+         ON CONFLICT (load_id) DO NOTHING`,
+        [bid.load_id]
+      );
+
+      let effectiveAmount = Number(bid.amount);
+      if (bid.status === "suggested" && bid.suggested_by === "carrier" && bid.suggested_amount != null) {
+        effectiveAmount = Number(bid.suggested_amount);
+      }
+
+      await client.query(
+        `UPDATE bids
+         SET status = 'accepted',
+             amount = $2,
+             suggested_amount = NULL,
+             suggested_by = NULL,
+             updated_at = now()
+         WHERE id = $1`,
+        [bidId, effectiveAmount]
+      );
       await client.query(
         `UPDATE bids SET status = 'rejected', updated_at = now()
-         WHERE load_id = $1 AND id <> $2 AND status = 'pending'`,
+         WHERE load_id = $1 AND id <> $2 AND status IN ('pending', 'suggested')`,
         [bid.load_id, bidId]
       );
 
@@ -341,7 +371,7 @@ router.put(
          ON CONFLICT (load_id)
          DO UPDATE SET carrier_id = EXCLUDED.carrier_id, status = 'approved', price = EXCLUDED.price, updated_at = now()
          RETURNING id`,
-        [bid.load_id, bid.shipper_id, bid.carrier_id, bid.amount]
+        [bid.load_id, bid.shipper_id, bid.carrier_id, effectiveAmount]
       );
       const bookingId = bookingRows[0]?.id;
 

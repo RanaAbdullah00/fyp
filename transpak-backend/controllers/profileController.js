@@ -5,10 +5,18 @@ const userRepo = require("../repositories/userRepo");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
 const { uploadImageFile } = require("../src/services/cloudinaryService");
 const { cleanupUploadedFiles } = require("../middleware/uploadProfileImages");
+const { safeDestroyReplacedUrl } = require("../utils/cloudinaryUrl");
 
 const CNIC_REGEX = /^[0-9]{5}-[0-9]{7}-[0-9]{1}$/;
 const UPLOAD_FAIL_USER_MSG = "File upload failed, please try again";
 const INVALID_FILE_MSG = "Invalid or empty file";
+
+/** pg bind: never pass undefined; empty string → null for text columns */
+function pgText(v) {
+  if (v == null) return null;
+  const s = String(v).trim();
+  return s === "" ? null : s;
+}
 
 function validationErrorResponse(req, res) {
   const result = validationResult(req);
@@ -144,7 +152,7 @@ async function updateProfile(req, res) {
       if (!file) return;
       const up = await tryUploadImage(file, { folder, publicIdPrefix });
       if (up.ok && up.url) {
-        next[fieldKey] = up.url;
+        next[fieldKey] = String(up.url).trim();
         return;
       }
       uploadFailures.push({
@@ -169,9 +177,15 @@ async function updateProfile(req, res) {
 
     if (allSubmittedFilesFailed && !hasTextOrCnicChange) {
       cleanupUploadedFiles(req);
-      return sendError(res, 503, UPLOAD_FAIL_USER_MSG, {
-        upload_failures: uploadFailures.map((f) => ({ field: f.field, message: f.message }))
-      });
+      return sendError(
+        res,
+        503,
+        UPLOAD_FAIL_USER_MSG,
+        {
+          upload_failures: uploadFailures.map((f) => ({ field: f.field, message: f.message }))
+        },
+        "UPLOAD_FAILED"
+      );
     }
 
     const isComplete = computeProfileComplete({
@@ -185,6 +199,10 @@ async function updateProfile(req, res) {
 
     let rows;
     try {
+      const pCnicImg = pgText(next.cnic_image);
+      const pCnicBack = pgText(next.cnic_image_back);
+      const pProfileImg = pgText(next.profile_image);
+
       const result = await query(
         `UPDATE users
          SET full_name = $2,
@@ -199,24 +217,35 @@ async function updateProfile(req, res) {
          RETURNING id`,
         [
           req.auth.userId,
-          next.full_name,
-          next.phone,
-          next.cnic_number,
-          next.cnic_image,
-          next.cnic_image_back,
-          next.profile_image,
+          next.full_name ?? null,
+          next.phone ?? null,
+          next.cnic_number ?? null,
+          pCnicImg,
+          pCnicBack,
+          pProfileImg,
           isComplete
         ]
       );
       rows = result.rows;
     } catch (dbErr) {
       // eslint-disable-next-line no-console
-      console.error("[profile.update]", dbErr?.code || "", dbErr?.message || dbErr);
-      return sendError(res, 500, "Profile update failed");
+      console.error("[profile.update] DB error", dbErr?.code || "", dbErr?.message || dbErr);
+      return sendError(res, 500, "Profile update failed", null, "SERVER_ERROR");
     }
 
     if (!rows?.[0]?.id) {
       return sendError(res, 500, "Profile update did not apply");
+    }
+
+    const uidStr = String(req.auth.userId);
+    if (cnicImageFile && user.cnicImage && user.cnicImage !== next.cnic_image) {
+      void safeDestroyReplacedUrl(uidStr, user.cnicImage, next.cnic_image, "image");
+    }
+    if (cnicImageBackFile && user.cnicImageBack && user.cnicImageBack !== next.cnic_image_back) {
+      void safeDestroyReplacedUrl(uidStr, user.cnicImageBack, next.cnic_image_back, "image");
+    }
+    if (profileImageFile && user.profileImage && user.profileImage !== next.profile_image) {
+      void safeDestroyReplacedUrl(uidStr, user.profileImage, next.profile_image, "image");
     }
 
     const finalUser = await userRepo.findById(rows[0].id);
@@ -246,16 +275,89 @@ async function updateProfile(req, res) {
 
     return sendSuccess(res, 200, payload, summaryMsg);
   } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[profile.updateProfile]", err?.statusCode, err?.message || err);
     const rawMsg = err?.message || "Update failed";
     if (/Cloudinary config missing/i.test(rawMsg) || /not configured/i.test(rawMsg)) {
-      return sendError(res, 503, "File storage is not configured on the server");
+      return sendError(res, 503, "File storage is not configured on the server", null, "UPLOAD_FAILED");
     }
     const code = Number(err?.statusCode);
-    if (code === 400) return sendError(res, 400, "Validation error");
-    if (code === 502 || code === 503) return sendError(res, 503, UPLOAD_FAIL_USER_MSG);
-    return sendError(res, 500, "Profile update failed");
+    if (code === 400) return sendError(res, 400, "Validation error", null, "VALIDATION_ERROR");
+    if (code === 502 || code === 503) return sendError(res, 503, UPLOAD_FAIL_USER_MSG, null, "UPLOAD_FAILED");
+    return sendError(res, 500, "Profile update failed", null, "SERVER_ERROR");
   } finally {
     cleanupUploadedFiles(req);
+  }
+}
+
+async function getActivitySnapshot(req, res) {
+  try {
+    const uid = req.auth.userId;
+    const roles = Array.isArray(req.auth.roles) ? req.auth.roles : [];
+    const hasShipper = roles.includes("shipper");
+    const hasCarrier = roles.includes("carrier");
+    const isAdminPlatformOnly = roles.includes("admin") && !hasShipper && !hasCarrier;
+
+    const out = {
+      shipper: null,
+      carrier: null,
+      admin: null
+    };
+
+    if (isAdminPlatformOnly) {
+      const [totalUsers, totalLoads, totalBids, activeShipments, totalReviews] = await Promise.all([
+        query(`SELECT COUNT(*)::int AS c FROM users`),
+        query(`SELECT COUNT(*)::int AS c FROM loads`),
+        query(`SELECT COUNT(*)::int AS c FROM bids`),
+        query(
+          `SELECT COUNT(*)::int AS c FROM shipments WHERE status IN ('booked','pickedup','intransit','delivered')`
+        ),
+        query(`SELECT COUNT(*)::int AS c FROM ratings`)
+      ]);
+      out.admin = {
+        totalUsers: totalUsers.rows[0]?.c ?? 0,
+        totalLoads: totalLoads.rows[0]?.c ?? 0,
+        totalBids: totalBids.rows[0]?.c ?? 0,
+        activeShipments: activeShipments.rows[0]?.c ?? 0,
+        totalReviews: totalReviews.rows[0]?.c ?? 0
+      };
+    }
+
+    if (hasShipper) {
+      const { rows } = await query(
+        `SELECT
+           COUNT(*)::int AS total,
+           COUNT(*) FILTER (WHERE lower(status) IN ('closed', 'delivered'))::int AS done
+         FROM loads
+         WHERE shipper_id = $1`,
+        [uid]
+      );
+      const s = rows[0] || {};
+      out.shipper = { loadsTotal: s.total ?? 0, loadsDone: s.done ?? 0 };
+    }
+
+    if (hasCarrier) {
+      const { rows: bRows } = await query(
+        `SELECT
+           COUNT(*)::int AS total,
+           COUNT(*) FILTER (WHERE status = 'accepted')::int AS accepted
+         FROM bids
+         WHERE carrier_id = $1`,
+        [uid]
+      );
+      const { rows: tRows } = await query(`SELECT COUNT(*)::int AS c FROM trucks WHERE user_id = $1`, [uid]);
+      const b = bRows[0] || {};
+      const t = tRows[0] || {};
+      out.carrier = {
+        bidsTotal: b.total ?? 0,
+        bidsAccepted: b.accepted ?? 0,
+        fleetCount: t.c ?? 0
+      };
+    }
+
+    return sendSuccess(res, 200, out, "OK");
+  } catch {
+    return sendError(res, 500, "Could not load activity snapshot");
   }
 }
 
@@ -263,5 +365,6 @@ module.exports = {
   getProfile,
   updateProfile,
   getProfileStatus,
+  getActivitySnapshot,
   CNIC_REGEX
 };

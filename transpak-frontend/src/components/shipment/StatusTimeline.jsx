@@ -1,14 +1,15 @@
 import React from 'react';
 import Card from '../ui/Card.jsx';
 import StatusBadge from './StatusBadge.jsx';
+import { useLanguage } from '../../hooks/useLanguage.js';
 
-// Mobile-friendly shipment status timeline.
-// In production this can be driven by /tracking events.
 const StatusTimeline = ({ currentStatus, events }) => {
+  const { t } = useLanguage();
+
   return (
     <Card>
-      <div className="d-flex justify-content-between align-items-center mb-2">
-        <h6 className="mb-0">Status timeline</h6>
+      <div className="d-flex justify-content-between align-items-center mb-2 gap-2">
+        <h6 className="mb-0 text-body fw-semibold">{t('pages.tracking.statusTimelineTitle')}</h6>
         <StatusBadge status={currentStatus} />
       </div>
       <ul className="list-unstyled small mb-0 tp-timeline">
@@ -16,9 +17,9 @@ const StatusTimeline = ({ currentStatus, events }) => {
           <li key={`${e.label}-${idx}`} className="tp-timeline-item">
             <div className={`tp-timeline-dot ${e.done ? 'done' : ''}`} />
             <div className="tp-timeline-content">
-              <div className="fw-semibold">{e.label}</div>
-              <div className="text-muted">{e.time}</div>
-              {e.note && <div className="text-muted">{e.note}</div>}
+              <div className="fw-semibold text-body">{e.label}</div>
+              <div className="tp-timeline-meta">{e.time}</div>
+              {e.note ? <div className="tp-timeline-meta">{e.note}</div> : null}
             </div>
           </li>
         ))}
@@ -28,4 +29,3 @@ const StatusTimeline = ({ currentStatus, events }) => {
 };
 
 export default StatusTimeline;
-

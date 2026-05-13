@@ -3,20 +3,24 @@ import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
 import api from '../../services/api.js';
 import { notifyError, notifySuccess } from '../../components/ui/ToastProvider.jsx';
+import { useLanguage } from '../../hooks/useLanguage.js';
+import { unwrapErrorMessage } from '../../utils/unwrapApi.js';
 
-// Simple feedback form.
 const Feedback = () => {
+  const { t, isUrdu } = useLanguage();
   const [form, setForm] = useState({ subject: '', message: '' });
+  const [submitting, setSubmitting] = useState(false);
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  const [submitting, setSubmitting] = useState(false);
-
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.subject.trim() || !form.message.trim()) return;
+    if (!form.subject.trim() || !form.message.trim()) {
+      notifyError(t('pages.feedbackPage.required'));
+      return;
+    }
     setSubmitting(true);
     try {
       await api.post('/notifications', {
@@ -25,36 +29,43 @@ const Feedback = () => {
         roleType: 'support',
         meta: { type: 'FEEDBACK' }
       });
-      notifySuccess('Feedback submitted');
+      notifySuccess(t('pages.feedbackPage.success'));
       setForm({ subject: '', message: '' });
     } catch (err) {
-      notifyError(err?.response?.data?.message || 'Failed to submit feedback');
+      notifyError(unwrapErrorMessage(err) || t('pages.feedbackPage.failed'));
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="container py-3">
-      <h5 className="mb-3">Feedback</h5>
-      <Card>
+    <div className={`container py-3 ${isUrdu ? 'tp-rtl' : ''}`}>
+      <h5 className="mb-3">{t('pages.feedbackPage.title')}</h5>
+      <Card className="p-3">
         <form onSubmit={handleSubmit}>
           <div className="mb-2">
-            <label className="form-label small">Subject</label>
+            <label className="form-label small" htmlFor="feedback-subject">
+              {t('pages.feedbackPage.subject')}
+            </label>
             <input
+              id="feedback-subject"
               name="subject"
               className="form-control form-control-sm rounded-3"
-              placeholder="Feedback subject"
+              placeholder={t('pages.feedbackPage.subjectPh')}
               value={form.subject}
               onChange={handleChange}
+              autoComplete="off"
             />
           </div>
           <div className="mb-3">
-            <label className="form-label small">Message</label>
+            <label className="form-label small" htmlFor="feedback-message">
+              {t('pages.feedbackPage.message')}
+            </label>
             <textarea
+              id="feedback-message"
               name="message"
               className="form-control form-control-sm rounded-3"
-              placeholder="Your comments about the platform"
+              placeholder={t('pages.feedbackPage.messagePh')}
               rows={4}
               value={form.message}
               onChange={handleChange}
@@ -66,7 +77,7 @@ const Feedback = () => {
             type="submit"
             disabled={submitting || !form.subject.trim() || !form.message.trim()}
           >
-            {submitting ? 'Submitting…' : 'Submit feedback'}
+            {submitting ? t('pages.feedbackPage.submitting') : t('pages.feedbackPage.submit')}
           </Button>
         </form>
       </Card>
@@ -75,4 +86,3 @@ const Feedback = () => {
 };
 
 export default Feedback;
-

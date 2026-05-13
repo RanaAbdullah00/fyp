@@ -14,14 +14,17 @@ export async function fetchMessages(conversationId, { before, limit } = {}) {
 
 export async function openConversation({ peerUserId, loadId }) {
   const res = await api.post('/chat/conversations/open', { peerUserId, loadId });
-  return res.data;
+  const d = res.data || {};
+  if (d.id && !d.conversationId) return { ...d, conversationId: d.id };
+  return d;
 }
 
-export async function sendMessageHttp(conversationId, body, clientMessageId) {
-  const res = await api.post(`/chat/conversations/${conversationId}/messages`, {
-    body,
-    clientMessageId
-  });
+/**
+ * @param {string} conversationId
+ * @param {{ body?: string, clientMessageId?: string, attachment?: { url: string, publicId: string, kind: 'image'|'pdf', fileName?: string } }} payload
+ */
+export async function sendMessageHttp(conversationId, payload) {
+  const res = await api.post(`/chat/conversations/${conversationId}/messages`, payload);
   return res.data;
 }
 

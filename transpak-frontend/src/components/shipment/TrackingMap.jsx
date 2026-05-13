@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Polyline } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import Card from '../ui/Card.jsx';
+import { useLanguage } from '../../hooks/useLanguage.js';
 
 function isLatLngPair(v) {
   return (
@@ -25,6 +26,7 @@ function samePair(a, b) {
 }
 
 const TrackingMap = ({ route = [], currentLocation, trackingData }) => {
+  const { t, isUrdu } = useLanguage();
   const coords = useMemo(() => {
     const fromData = normalizeCoordList(trackingData?.liveTrackingMap?.coordinates);
     if (fromData.length > 0) return fromData;
@@ -52,25 +54,25 @@ const TrackingMap = ({ route = [], currentLocation, trackingData }) => {
 
   if (!hasAnyPoint) {
     return (
-      <Card className="tp-map-card h-100">
-        <h6 className="mb-2">Live tracking map</h6>
+      <Card className={`tp-map-card h-100 ${isUrdu ? 'tp-rtl' : ''}`}>
+        <h6 className="mb-2">{t('pages.trackingMap.title')}</h6>
         {locationUnavailable ? (
           <div className="alert alert-warning py-2 px-3 small mb-0" role="status">
-            Location temporarily unavailable. The map will update when coordinates are available.
+            {t('pages.trackingMap.unavailable')}
           </div>
         ) : (
-          <p className="small text-muted mb-0">No coordinates yet. Updates from tracking will appear here.</p>
+          <p className="small text-muted mb-0">{t('pages.trackingMap.noCoords')}</p>
         )}
       </Card>
     );
   }
 
   return (
-    <Card className="tp-map-card h-100">
-      <h6 className="mb-2">Live tracking map</h6>
+    <Card className={`tp-map-card h-100 ${isUrdu ? 'tp-rtl' : ''}`}>
+      <h6 className="mb-2">{t('pages.trackingMap.title')}</h6>
       {locationUnavailable && coords.length > 0 && (
         <div className="alert alert-warning py-2 px-3 small mb-2 mb-md-3" role="status">
-          Location temporarily unavailable. Showing last known route; status may be unchanged.
+          {t('pages.trackingMap.partialWarning')}
         </div>
       )}
       <MapContainer

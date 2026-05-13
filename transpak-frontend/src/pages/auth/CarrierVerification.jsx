@@ -1,126 +1,41 @@
-import React, { useState } from 'react';
-import Button from '../../components/ui/Button.jsx';
-import Loader from '../../components/ui/Loader.jsx';
+import React from 'react';
+import { Link } from 'react-router-dom';
 import Card from '../../components/ui/Card.jsx';
-import { notifySuccess, notifyError } from '../../components/ui/ToastProvider.jsx';
-import Badge from '../../components/ui/Badge.jsx';
+import { useLanguage } from '../../hooks/useLanguage.js';
 
-// Carrier verification form for compliance.
+/**
+ * Carrier verification: explains real steps (profile CNIC + truck card uploads).
+ * Admins review via the verification queue; there is no separate form submission here.
+ */
 const CarrierVerification = () => {
-  const [form, setForm] = useState({
-    companyName: '',
-    cnic: '',
-    phone: '',
-    vehicleCount: '',
-    documents: null
-  });
-  const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState('pending');
-
-  const handleChange = (e) => {
-    const { name, value, files } = e.target;
-    if (files) {
-      setForm((prev) => ({ ...prev, documents: files[0] }));
-    } else {
-      setForm((prev) => ({ ...prev, [name]: value }));
-    }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      // Demo-safe: backend verification workflow is handled by admin moderation screens.
-      setStatus('submitted');
-      notifySuccess('Verification submitted. Admin will review within 24 hours.');
-    } catch (err) {
-      notifyError('Submission failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  const { t, isUrdu } = useLanguage();
   return (
-    <div className="container py-3">
+    <div className={`container py-3 ${isUrdu ? 'tp-rtl' : ''}`}>
       <div className="row justify-content-center">
-        <div className="col-md-8 col-lg-6">
-          <Card>
-            <div className="text-center mb-4">
-              <h5>Carrier Verification</h5>
-              <Badge variant="warning">{status.toUpperCase()}</Badge>
+        <div className="col-lg-8">
+          <h5 className="mb-3">{t('pages.carrierVerificationPage.title')}</h5>
+          <p className="text-muted small mb-4">{t('pages.carrierVerificationPage.intro')}</p>
+          <Card className="p-3 p-md-4 mb-3">
+            <h6 className="small fw-semibold text-uppercase text-muted mb-2">
+              {t('pages.carrierVerificationPage.stepProfileTitle')}
+            </h6>
+            <p className="small mb-4">{t('pages.carrierVerificationPage.stepProfileBody')}</p>
+            <h6 className="small fw-semibold text-uppercase text-muted mb-2">
+              {t('pages.carrierVerificationPage.stepFleetTitle')}
+            </h6>
+            <p className="small mb-4">{t('pages.carrierVerificationPage.stepFleetBody')}</p>
+            <div className="d-flex flex-column flex-sm-row gap-2">
+              <Link to="/profile" className="btn btn-primary rounded-pill fw-semibold">
+                {t('pages.carrierVerificationPage.openProfile')}
+              </Link>
+              <Link to="/carrier/truck-details" className="btn btn-outline-primary rounded-pill fw-semibold">
+                {t('pages.carrierVerificationPage.openTrucks')}
+              </Link>
             </div>
-            <form onSubmit={handleSubmit}>
-              <div className="mb-3">
-                <label className="form-label">Company name</label>
-                <input
-                  name="companyName"
-                  className="form-control"
-                  value={form.companyName}
-                  onChange={handleChange}
-                  placeholder="Your logistics company"
-                  required
-                />
-              </div>
-              <div className="row">
-                <div className="col-md-6 mb-3">
-                  <label className="form-label">CNIC</label>
-                  <input
-                    name="cnic"
-                    className="form-control"
-                    value={form.cnic}
-                    onChange={handleChange}
-                    placeholder="35202-XXXXXXX-X"
-                    required
-                  />
-                </div>
-                <div className="col-md-6 mb-3">
-                  <label className="form-label">Phone</label>
-                  <input
-                    name="phone"
-                    type="tel"
-                    className="form-control"
-                    value={form.phone}
-                    onChange={handleChange}
-                    placeholder="03XX-XXXXXXX"
-                    required
-                  />
-                </div>
-              </div>
-              <div className="mb-3">
-                <label className="form-label">Number of vehicles</label>
-                <input
-                  name="vehicleCount"
-                  type="number"
-                  className="form-control"
-                  value={form.vehicleCount}
-                  onChange={handleChange}
-                  placeholder="5"
-                  min="1"
-                  required
-                />
-              </div>
-              <div className="mb-4">
-                <label className="form-label">NTN / Company documents (PDF)</label>
-                <input
-                  name="documents"
-                  type="file"
-                  accept=".pdf"
-                  className="form-control"
-                  onChange={handleChange}
-                />
-              </div>
-              <Button
-                variant="primary"
-                type="submit"
-                className="w-100"
-                disabled={loading || status === 'submitted'}
-              >
-                {loading ? <Loader light /> : status === 'submitted' ? 'Submitted!' : 'Submit for Verification'}
-              </Button>
-            </form>
-            <div className="text-center mt-3 small text-muted">
-              Admin approval required before accessing carrier features
-            </div>
+          </Card>
+          <Card className="p-3 border-0 bg-body-secondary">
+            <div className="small fw-semibold mb-1">{t('pages.carrierVerificationPage.noteTitle')}</div>
+            <p className="small text-muted mb-0">{t('pages.carrierVerificationPage.noteBody')}</p>
           </Card>
         </div>
       </div>
@@ -129,4 +44,3 @@ const CarrierVerification = () => {
 };
 
 export default CarrierVerification;
-

@@ -4,6 +4,7 @@ const fs = require("fs");
 const http = require("http");
 const { Server } = require("socket.io");
 
+const { verifySmtpConnection } = require("../services/emailService");
 const connectDB = require("../config/db");
 const realtimeHub = require("../services/realtimeHub");
 const registerSocketHandlers = require("../sockets");
@@ -153,6 +154,12 @@ async function start() {
     httpServer.listen(port, () => {
       // eslint-disable-next-line no-console
       console.log(`TransPak backend (HTTP + Socket.io) on port ${port}`);
+      if (String(process.env.SMTP_VERIFY_ON_START || "").toLowerCase() === "true") {
+        verifySmtpConnection().catch((e) => {
+          // eslint-disable-next-line no-console
+          console.error("[server] SMTP_VERIFY_ON_START:", e?.message || e);
+        });
+      }
     });
 
     httpServer.on("error", (err) => {

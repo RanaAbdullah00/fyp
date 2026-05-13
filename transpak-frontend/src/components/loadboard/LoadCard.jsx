@@ -5,6 +5,7 @@ import Badge from '../ui/Badge.jsx';
 import Button from '../ui/Button.jsx';
 import UserRatingBadge from '../reviews/UserRatingBadge.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
+import TranslatedText from '../ui/TranslatedText.jsx';
 
 // Card representing a single load in the marketplace.
 const LoadCard = ({ load, onBid }) => {
@@ -15,9 +16,12 @@ const LoadCard = ({ load, onBid }) => {
   const deadlineMs = load?.deadline ? new Date(load.deadline).getTime() : null;
   const isDeadlinePast = deadlineMs != null && !Number.isNaN(deadlineMs) && Date.now() > deadlineMs;
   const statusRaw = String(load?.status || '').toLowerCase();
+  const bidCount = Number(load?.bidCount ?? load?.bid_count ?? 0);
   const statusLabel =
     statusRaw === 'open'
-      ? t('pages.loads.statusOpen')
+      ? bidCount > 0
+        ? t('pages.loads.statusBidding')
+        : t('pages.loads.statusPosted')
       : statusRaw === 'booked'
       ? t('pages.pipeline.booked')
       : statusRaw === 'closed'
@@ -31,7 +35,9 @@ const LoadCard = ({ load, onBid }) => {
       <div className="d-flex justify-content-between align-items-start mb-2 gap-2 flex-wrap">
         <div className="min-w-0">
           <div className="d-flex align-items-center gap-2 flex-wrap">
-            <h6 className="mb-1 text-break">{load.cargo}</h6>
+            <h6 className="mb-1 text-break">
+              <TranslatedText text={load.cargo} />
+            </h6>
             {shipperId ? <UserRatingBadge userId={shipperId} /> : null}
           </div>
           <small className="text-muted d-block text-break">
@@ -43,11 +49,11 @@ const LoadCard = ({ load, onBid }) => {
       <div className="d-flex flex-column small mb-2">
         <span className="d-flex align-items-center mb-1 text-break">
           <FaMapMarkerAlt className="text-primary me-2 flex-shrink-0" />
-          {load.origin} → {load.destination}
+          <TranslatedText text={load.origin} /> → <TranslatedText text={load.destination} />
         </span>
         <span className="d-flex align-items-center mb-1 text-break">
           <FaWeightHanging className="text-secondary me-2 flex-shrink-0" />
-          {load.weight} {t('pages.loads.loadCardTons')} · {load.vehicleType}
+          {load.weight} {t('pages.loads.loadCardTons')} · <TranslatedText text={load.vehicleType} />
         </span>
         <span className="d-flex align-items-center text-break">
           <FaCube className="text-secondary me-2 flex-shrink-0" />

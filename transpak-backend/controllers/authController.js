@@ -4,6 +4,7 @@ const { signToken } = require("../utils/jwt");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
 const { authData, authDataNoToken, loginAuthData } = require("../utils/authPayload");
 const userRepo = require("../repositories/userRepo");
+const { issueRegisterOtpForNewUser } = require("./emailOtpController");
 
 const DEMO_FORCE_ADMIN_EMAIL = "mrabdullah0456@gmail.com";
 
@@ -22,9 +23,54 @@ function validationErrorResponse(req, res) {
   if (result.isEmpty()) return null;
 
   const errors = result.array();
-  return sendError(res, 400, errors[0]?.msg || "Validation error", {
-    fields: errors.map((e) => e.path)
-  });
+  const details = errors.map((e) => ({ path: e.path, message: e.msg }));
+  return sendError(
+    res,
+    400,
+    errors[0]?.msg || "Validation error",
+    { fields: errors.map((e) => e.path) },
+    "VALIDATION_ERROR",
+    { errors: details }
+  );
+}
+
+/** Maps OTP delivery outcome to API fields (backward compatible: optional deliveryReason). */
+function buildRegisterEmailVerification(otpPack) {
+  const delivered = Boolean(otpPack?.delivery?.delivered);
+  const reason = otpPack?.delivery?.reason || null;
+  const isDev = process.env.NODE_ENV !== "production";
+  let deliveryHint = null;
+  if (!delivered) {
+    if (isDev) {
+      deliveryHint =
+        "Development: OTP is printed in the server console if email could not be sent.";
+    } else if (reason === "smtp_not_configured") {
+      deliveryHint =
+        "Email is not configured on the server (SMTP). Your account was created; contact support or try again after the server is configured.";
+    } else if (reason === "mail_from_missing") {
+      deliveryHint =
+        "Email sender (SMTP_FROM or MAIL_FROM) is not configured on the server. Your account was created; contact support.";
+    } else if (reason === "authentication_failed") {
+      deliveryHint =
+        "SMTP login failed (wrong SMTP user/key). For Brevo use the SMTP password from SMTP & API, not the REST API key.";
+    } else if (reason === "sender_not_verified") {
+      deliveryHint =
+        "The From address is not verified with your email provider. In Brevo: Senders & IP → verify sender/domain; SMTP_FROM must match.";
+    } else if (reason === "rate_limited") {
+      deliveryHint =
+        "Email was temporarily blocked by rate limits. Retry in a few minutes or check Brevo quotas.";
+    } else {
+      deliveryHint =
+        "We could not deliver the verification email (SMTP error). Try resend in a moment or contact support if it continues.";
+    }
+  }
+  return {
+    pending: true,
+    emailSent: delivered,
+    devOtp: otpPack?.devOtp || undefined,
+    deliveryHint,
+    deliveryReason: reason || undefined
+  };
 }
 
 async function register(req, res) {
@@ -32,10 +78,27 @@ async function register(req, res) {
     const maybeError = validationErrorResponse(req, res);
     if (maybeError) return maybeError;
 
+    const dbg =
+      process.env.NODE_ENV === "development" ||
+      String(process.env.AUTH_DEBUG_REGISTER || "").toLowerCase() === "true";
+    if (dbg) {
+      const { name, email, phone, CNIC, role } = req.body || {};
+      // eslint-disable-next-line no-console
+      console.log("[auth.register] body (redacted)", {
+        name,
+        email,
+        phone,
+        CNIC,
+        role,
+        hasPassword: Boolean(req.body?.password),
+        fileFields: req.file ? [req.file.fieldname] : req.files ? Object.keys(req.files) : []
+      });
+    }
+
     const { name, email, phone, CNIC, password, confirmPassword, role } = req.body;
 
     if (String(password) !== String(confirmPassword)) {
-      return sendError(res, 400, "Passwords do not match");
+      return sendError(res, 400, "Passwords do not match", null, "VALIDATION_ERROR");
     }
 
     const normalizedEmail = String(email).trim().toLowerCase();
@@ -47,35 +110,65 @@ async function register(req, res) {
 
     const allowedRoles = userRepo.ALLOWED_ROLES;
     if (normalizedRole === "admin") {
-      return sendError(res, 403, "Forbidden");
+      return sendError(res, 403, "Admin registration is not allowed", null, "INVALID_ROLE");
     }
     if (!allowedRoles.includes(normalizedRole)) {
-      return sendError(res, 400, "Missing required fields");
+      return sendError(res, 400, "Invalid or missing role", null, "INVALID_ROLE");
     }
 
     const existing = await userRepo.findByEmail(normalizedEmail);
     if (existing) {
       const row = await userRepo.findRowByEmailWithPassword(normalizedEmail);
       if (!row?.password_hash) {
-        return sendError(res, 401, "Invalid credentials");
+        return sendError(
+          res,
+          409,
+          "This email is already registered, but the account has no password. Use your original sign-in method or contact support.",
+          null,
+          "EMAIL_ALREADY_EXISTS"
+        );
       }
       const passwordOk = await bcrypt.compare(String(password), row.password_hash);
       if (!passwordOk) {
-        return sendError(res, 401, "Invalid credentials");
+        return sendError(
+          res,
+          401,
+          "That email is already registered. The password you entered is incorrect. Sign in with the correct password, or use a different email to create a new account.",
+          null,
+          "WRONG_PASSWORD"
+        );
       }
 
       if (existing.cnicNumber && normalizedCnic !== existing.cnicNumber) {
-        return sendError(res, 409, "CNIC does not match this account");
+        return sendError(
+          res,
+          409,
+          "CNIC does not match this account",
+          { field: "CNIC" },
+          "VALIDATION_ERROR"
+        );
       }
 
       const cnicOther = await userRepo.findByCnicNumber(normalizedCnic);
       if (cnicOther && String(cnicOther.id) !== String(existing.id)) {
-        return sendError(res, 409, "This CNIC is registered to another account");
+        return sendError(
+          res,
+          409,
+          "This CNIC is registered to another account",
+          { field: "CNIC" },
+          "VALIDATION_ERROR"
+        );
       }
 
       const phoneOwner = await userRepo.findPhoneOwner(normalizedPhone);
       if (phoneOwner && String(phoneOwner.id) !== String(existing.id)) {
-        return sendError(res, 409, "Phone number is registered to another account");
+        return sendError(
+          res,
+          409,
+          "Phone number is registered to another account",
+          { field: "phone" },
+          "VALIDATION_ERROR"
+        );
       }
 
       let u = existing;
@@ -97,6 +190,36 @@ async function register(req, res) {
       if (switched) u = switched;
 
       const finalUser = (await userRepo.findById(u.id)) || u;
+      if (!finalUser.verified) {
+        let emailVerification = { pending: true, emailSent: false };
+        try {
+          const otpPack = await issueRegisterOtpForNewUser(normalizedEmail);
+          emailVerification = buildRegisterEmailVerification(otpPack);
+        } catch (otpErr) {
+          const isProd = process.env.NODE_ENV === "production";
+          // eslint-disable-next-line no-console
+          console.error(
+            "[auth.register] email OTP issue (existing user):",
+            otpErr?.message || otpErr,
+            isProd ? "" : otpErr?.stack || ""
+          );
+          emailVerification = {
+            pending: true,
+            emailSent: false,
+            deliveryHint: isProd
+              ? "Verification could not be started. Try resend after signing in, or contact support."
+              : `Verification email could not be queued: ${otpErr?.message || "unknown error"}`,
+            deliveryReason: "exception"
+          };
+        }
+        const base = authDataNoToken(finalUser);
+        return sendSuccess(
+          res,
+          200,
+          { ...base, registrationKind: hadRole ? "existing" : "merged", emailVerification },
+          "Verify your email to continue"
+        );
+      }
       const token = signToken(finalUser);
       const base = authData(finalUser, token);
       const msg = hadRole ? "Signed in to existing account" : "Role added to your account";
@@ -105,12 +228,24 @@ async function register(req, res) {
 
     const cnicUser = await userRepo.findByCnicNumber(normalizedCnic);
     if (cnicUser && cnicUser.email !== normalizedEmail) {
-      return sendError(res, 409, "This CNIC is already registered with another email");
+      return sendError(
+        res,
+        409,
+        "This CNIC is already registered with another email",
+        { field: "CNIC" },
+        "EMAIL_ALREADY_EXISTS"
+      );
     }
 
     const phoneOwner = await userRepo.findPhoneOwner(normalizedPhone);
     if (phoneOwner) {
-      return sendError(res, 409, "Phone number is already registered");
+      return sendError(
+        res,
+        409,
+        "Phone number is already registered",
+        { field: "phone" },
+        "EMAIL_ALREADY_EXISTS"
+      );
     }
 
     const passwordHash = await bcrypt.hash(String(password), 10);
@@ -124,17 +259,45 @@ async function register(req, res) {
       fullName: fullName || null
     });
 
-    const token = signToken(user);
-    const base = authData(user, token);
-    return sendSuccess(res, 201, { ...base, registrationKind: "new" }, "Account created");
+    const base = authDataNoToken(user);
+    let emailVerification = { pending: true, emailSent: false };
+    try {
+      const otpPack = await issueRegisterOtpForNewUser(normalizedEmail);
+      emailVerification = buildRegisterEmailVerification(otpPack);
+    } catch (otpErr) {
+      const isProd = process.env.NODE_ENV === "production";
+      // eslint-disable-next-line no-console
+      console.error("[auth.register] email OTP issue:", otpErr?.message || otpErr, isProd ? "" : otpErr?.stack || "");
+      emailVerification = {
+        pending: true,
+        emailSent: false,
+        deliveryHint: isProd
+          ? "Verification could not be started. Try resend after signing in, or contact support."
+          : `Verification email could not be queued: ${otpErr?.message || "unknown error"}`,
+        deliveryReason: "exception"
+      };
+    }
+    return sendSuccess(res, 201, { ...base, registrationKind: "new", emailVerification }, "Account created");
   } catch (err) {
     if (err && err.code === "23505") {
-      return sendError(res, 409, "Email, phone, or CNIC already in use");
+      return sendError(
+        res,
+        409,
+        "Email, phone, or CNIC already in use",
+        null,
+        "EMAIL_ALREADY_EXISTS"
+      );
     }
     // eslint-disable-next-line no-console
-    console.error("[auth.register]", err?.message || err);
+    console.error("[auth.register] DB or server error:", err?.code, err?.message || err, err?.stack);
     const isProd = process.env.NODE_ENV === "production";
-    return sendError(res, 500, isProd ? "Registration failed" : err?.message || "Registration failed");
+    return sendError(
+      res,
+      500,
+      isProd ? "Registration failed" : err?.message || "Registration failed",
+      null,
+      "SERVER_ERROR"
+    );
   }
 }
 
@@ -148,32 +311,44 @@ async function login(req, res) {
 
     const row = await userRepo.findRowByEmailWithPassword(normalizedEmail);
     if (!row) {
-      return sendError(res, 401, "Invalid credentials");
+      return sendError(res, 401, "Invalid credentials", null, "INVALID_CREDENTIALS");
     }
 
     if (row.blocked) {
-      return sendError(res, 403, "Account is blocked");
+      return sendError(res, 403, "Account is blocked", null, "ACCOUNT_BLOCKED");
     }
 
     const storedHash = row.password_hash;
     if (!storedHash || typeof storedHash !== "string") {
+      // eslint-disable-next-line no-console
       console.error("[auth.login] missing password hash for user", normalizedEmail);
-      return sendError(res, 401, "Invalid credentials");
+      return sendError(res, 401, "Invalid credentials", null, "INVALID_CREDENTIALS");
     }
 
     let passwordOk = false;
     try {
       passwordOk = await bcrypt.compare(String(password || ""), storedHash);
     } catch (bcryptErr) {
+      // eslint-disable-next-line no-console
       console.error("[auth.login] bcrypt.compare failed — full error:", bcryptErr);
-      return sendError(res, 401, "Invalid credentials");
+      return sendError(res, 401, "Invalid credentials", null, "INVALID_CREDENTIALS");
     }
     if (!passwordOk) {
-      return sendError(res, 401, "Invalid credentials");
+      return sendError(res, 401, "Invalid credentials", null, "INVALID_CREDENTIALS");
+    }
+
+    if (!row.verified && normalizedEmail !== DEMO_FORCE_ADMIN_EMAIL) {
+      return sendError(
+        res,
+        403,
+        "Please verify your email before signing in.",
+        null,
+        "EMAIL_NOT_VERIFIED"
+      );
     }
 
     let authUser = await userRepo.findByEmail(normalizedEmail);
-    if (!authUser) return sendError(res, 401, "Invalid credentials");
+    if (!authUser) return sendError(res, 401, "Invalid credentials", null, "INVALID_CREDENTIALS");
 
     if (normalizedEmail === DEMO_FORCE_ADMIN_EMAIL) {
       // Demo override handled at seed time; keep for compatibility.
@@ -205,13 +380,16 @@ async function login(req, res) {
     const token = signToken(refreshed || authUser);
     return sendSuccess(res, 200, loginAuthData(refreshed || authUser, token), "Logged in");
   } catch (err) {
+    // eslint-disable-next-line no-console
     console.error("[auth.login] full error:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Login failed",
-      error: err.message || String(err),
-      data: null
-    });
+    const isProd = process.env.NODE_ENV === "production";
+    return sendError(
+      res,
+      500,
+      isProd ? "Login failed" : err?.message || "Login failed",
+      null,
+      "LOGIN_SERVER_ERROR"
+    );
   }
 }
 
@@ -226,7 +404,7 @@ async function updateActiveRole(req, res) {
   const allowed = userRepo.ALLOWED_ROLES;
   const next = String(activeRole || "").trim().toLowerCase();
   if (!allowed.includes(next)) {
-    return sendError(res, 400, "Invalid role");
+    return sendError(res, 400, "Invalid role", null, "INVALID_ROLE");
   }
 
   let user = await userRepo.findById(req.auth.userId);
@@ -260,7 +438,7 @@ async function addRoleToAccount(req, res) {
     const next = String(req.body.role || "").trim().toLowerCase();
     const registerable = userRepo.ALLOWED_ROLES.filter((r) => r !== "admin");
     if (!registerable.includes(next)) {
-      return sendError(res, 400, "Invalid role");
+      return sendError(res, 400, "Invalid role", null, "INVALID_ROLE");
     }
 
     let user = await userRepo.findById(req.auth.userId);

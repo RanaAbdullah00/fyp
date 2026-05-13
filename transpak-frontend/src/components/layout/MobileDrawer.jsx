@@ -1,7 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { NavLink } from 'react-router-dom';
-import { FaSignOutAlt } from 'react-icons/fa';
+import { FaSignOutAlt, FaClipboardCheck } from 'react-icons/fa';
 import { useAuth } from '../../hooks/useAuth.js';
 import { AppContext } from '../../context/AppContext.jsx';
 import LogoutConfirmModal from '../ui/LogoutConfirmModal.jsx';
@@ -79,6 +79,12 @@ const MobileDrawer = ({ open, onClose }) => {
                 </NavLink>
                 <NavLink to="/carrier/truck-details" className={linkClass} onClick={onClose}>
                   {t('nav.truckDetails')}
+                </NavLink>
+                <NavLink to="/carrier/verification" className={linkClass} onClick={onClose}>
+                  <span className="d-flex align-items-center gap-2">
+                    <FaClipboardCheck size={14} aria-hidden />
+                    {t('nav.carrierVerification')}
+                  </span>
                 </NavLink>
               </>
             )}

@@ -8,26 +8,28 @@ const Support = () => {
   const { t } = useLanguage();
   const faqs = useMemo(
     () => [
-      { q: 'How do I post a load?', a: 'Go to Loads → Post Load, fill details, choose pickup date and deadline, then publish.' },
-      { q: 'How do bids work?', a: 'Carriers place bids with amount and ETA. Shippers accept the best bid to assign the load.' },
-      { q: 'Why can’t I post loads?', a: 'Complete Profile (address + CNIC images) first. This is required for verification.' },
-      { q: 'Why can’t I add a truck?', a: 'Truck front/back images are required for fleet verification.' }
+      { q: t('pages.supportPage.faq1Q'), a: t('pages.supportPage.faq1A') },
+      { q: t('pages.supportPage.faq2Q'), a: t('pages.supportPage.faq2A') },
+      { q: t('pages.supportPage.faq3Q'), a: t('pages.supportPage.faq3A') },
+      { q: t('pages.supportPage.faq4Q'), a: t('pages.supportPage.faq4A') }
     ],
-    []
+    [t]
   );
   const [open, setOpen] = useState(0);
 
   return (
     <div className="container py-3 tp-support-page">
-      <h5 className="mb-3 text-body">Support</h5>
+      <h5 className="mb-3 text-body">{t('pages.supportPage.title')}</h5>
       <Card className="p-3 tp-support-card">
         <p className="small mb-2 tp-support-body">
-          Email:{' '}
+          {t('pages.supportPage.emailLabel')}:{' '}
           <a className="tp-support-link" href="mailto:support@transpak.pk">
             support@transpak.pk
           </a>
         </p>
-        <p className="small mb-0 tp-support-body">Hotline: +92-300-0000000</p>
+        <p className="small mb-0 tp-support-body">
+          {t('pages.supportPage.hotlineLabel')}: +92-300-0000000
+        </p>
       </Card>
 
       <div id="help-demo" className="mt-3">
@@ -39,7 +41,7 @@ const Support = () => {
       </div>
 
       <div id="faq" className="mt-3 tp-support-faq">
-        <h6 className="mb-2 text-body">FAQ</h6>
+        <h6 className="mb-2 text-body">{t('pages.supportPage.faqTitle')}</h6>
         <Card className="p-2 tp-support-card">
           {faqs.map((f, idx) => (
             <button
@@ -54,7 +56,7 @@ const Support = () => {
                   {open === idx ? '−' : '+'}
                 </span>
               </div>
-              {open === idx && <div className="small mt-2 tp-support-faq__a">{f.a}</div>}
+              {open === idx ? <div className="small mt-2 tp-support-faq__a">{f.a}</div> : null}
             </button>
           ))}
         </Card>
@@ -64,4 +66,3 @@ const Support = () => {
 };
 
 export default Support;
-

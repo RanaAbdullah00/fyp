@@ -19,7 +19,8 @@ function toLoadDto(r) {
     acceptedBidId: r.accepted_bid_id ?? r.acceptedBidId,
     bookingReference: r.booking_reference ?? r.bookingReference,
     createdAt: r.created_at ?? r.createdAt,
-    updatedAt: r.updated_at ?? r.updatedAt
+    updatedAt: r.updated_at ?? r.updatedAt,
+    bidCount: r.bid_count != null ? Number(r.bid_count) : Number(r.bidCount ?? 0)
   };
 }
 
@@ -60,7 +61,8 @@ async function listOpenLoads(filters = {}) {
 
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   const { rows } = await query(
-    `SELECT l.*
+    `SELECT l.*,
+            (SELECT COUNT(*)::int FROM bids b WHERE b.load_id = l.id AND b.status IN ('pending','suggested')) AS bid_count
      FROM loads l
      ${where}
      ORDER BY l.created_at DESC

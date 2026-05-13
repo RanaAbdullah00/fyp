@@ -225,6 +225,30 @@ async function upsertDemoAdmin({ email, passwordHash, roles, activeRole, phone, 
   return toAuthUser(rows[0]);
 }
 
+async function setVerifiedByEmail(email, verified = true) {
+  const { rows } = await query(
+    `UPDATE users
+     SET verified = $2, updated_at = now()
+     WHERE lower(trim(email)) = lower(trim($1))
+     RETURNING id, email, roles, active_role, blocked, verified,
+               full_name, phone, cnic_number, cnic_image, cnic_image_back, profile_image, is_profile_complete`,
+    [String(email || ""), Boolean(verified)]
+  );
+  return toAuthUser(rows[0]);
+}
+
+async function updatePasswordHashByEmail(email, passwordHash) {
+  const { rows } = await query(
+    `UPDATE users
+     SET password_hash = $2, updated_at = now()
+     WHERE lower(trim(email)) = lower(trim($1))
+     RETURNING id, email, roles, active_role, blocked, verified,
+               full_name, phone, cnic_number, cnic_image, cnic_image_back, profile_image, is_profile_complete`,
+    [String(email || ""), passwordHash]
+  );
+  return toAuthUser(rows[0]);
+}
+
 module.exports = {
   ALLOWED_ROLES,
   normalizeRole,
@@ -240,5 +264,7 @@ module.exports = {
   setPhoneIfEmpty,
   setFullNameIfEmpty,
   setActiveRole,
-  upsertDemoAdmin
+  upsertDemoAdmin,
+  setVerifiedByEmail,
+  updatePasswordHashByEmail
 };

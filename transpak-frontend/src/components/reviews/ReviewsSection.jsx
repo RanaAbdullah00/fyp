@@ -2,11 +2,15 @@ import React, { useEffect, useState } from 'react';
 import Card from '../ui/Card.jsx';
 import Button from '../ui/Button.jsx';
 import Loader from '../ui/Loader.jsx';
+import TranslatedText from '../ui/TranslatedText.jsx';
 import { useApi } from '../../hooks/useApi.js';
+import { useLanguage } from '../../hooks/useLanguage.js';
 import { notifyError, notifySuccess } from '../ui/ToastProvider.jsx';
+import { formatUserError } from '../../utils/userErrors.js';
 
 const ReviewsSection = ({ userId }) => {
   const { request, loading } = useApi();
+  const { t } = useLanguage();
   const [list, setList] = useState([]);
   const [form, setForm] = useState({ toUser: '', rating: 5, comment: '', loadId: '' });
 
@@ -35,34 +39,34 @@ const ReviewsSection = ({ userId }) => {
           loadId: form.loadId.trim() || undefined
         }
       });
-      notifySuccess('Review submitted');
+      notifySuccess(t('reviews.submittedToast'));
       setForm((f) => ({ ...f, comment: '', loadId: '' }));
       const data = await request({ method: 'GET', url: `/reviews/${userId}` });
       setList(Array.isArray(data) ? data : []);
     } catch (err) {
-      notifyError(err?.message || 'Could not submit review');
+      notifyError(formatUserError(err, t, { fallback: t('reviews.submitFailedToast') }));
     }
   };
 
   return (
     <div className="mt-4">
-      <h6 className="mb-2">Reviews</h6>
+      <h6 className="mb-2">{t('reviews.formSectionTitle')}</h6>
       <Card className="p-3 mb-3">
-        <div className="small text-muted mb-2">Submit a rating (1–5). Optional load ID prevents duplicate reviews per shipment.</div>
+        <div className="small text-muted mb-2">{t('reviews.formHint')}</div>
         <form onSubmit={submit} className="row g-2">
           <div className="col-md-4">
-            <label className="form-label small mb-0">User ID (reviewee)</label>
+            <label className="form-label small mb-0">{t('reviews.revieweeLabel')}</label>
             <input
               className="form-control form-control-sm"
               value={form.toUser}
               onChange={(e) => setForm((f) => ({ ...f, toUser: e.target.value }))}
-              placeholder="User ID (UUID)"
+              placeholder={t('reviews.revieweePlaceholder')}
               required
             />
           </div>
           <div className="col-md-4">
-            <label className="form-label small mb-0 d-block">Rating</label>
-            <div className="d-flex gap-1 flex-wrap tp-star-row" role="group" aria-label="Star rating">
+            <label className="form-label small mb-0 d-block">{t('reviews.ratingLabel')}</label>
+            <div className="d-flex gap-1 flex-wrap tp-star-row" role="group" aria-label={t('reviews.starGroupAria')}>
               {[1, 2, 3, 4, 5].map((n) => (
                 <button
                   key={n}
@@ -77,16 +81,16 @@ const ReviewsSection = ({ userId }) => {
             </div>
           </div>
           <div className="col-md-3">
-            <label className="form-label small mb-0">Load ID (optional)</label>
+            <label className="form-label small mb-0">{t('reviews.loadIdOptionalLabel')}</label>
             <input
               className="form-control form-control-sm"
               value={form.loadId}
               onChange={(e) => setForm((f) => ({ ...f, loadId: e.target.value }))}
-              placeholder="Shipment / load id"
+              placeholder={t('reviews.loadIdPlaceholder')}
             />
           </div>
           <div className="col-md-12">
-            <label className="form-label small mb-0">Comment</label>
+            <label className="form-label small mb-0">{t('reviews.commentLabel')}</label>
             <textarea
               className="form-control form-control-sm"
               rows={2}
@@ -97,7 +101,7 @@ const ReviewsSection = ({ userId }) => {
           </div>
           <div className="col-12">
             <Button type="submit" variant="primary" size="sm" disabled={loading}>
-              Submit review
+              {t('reviews.submitReview')}
             </Button>
           </div>
         </form>
@@ -113,15 +117,19 @@ const ReviewsSection = ({ userId }) => {
               <li key={r.id} className="list-group-item d-flex justify-content-between align-items-start">
                 <div>
                   <div className="fw-semibold">{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</div>
-                  <div className="text-muted">{r.comment || '—'}</div>
+                  <div className="text-muted">
+                    {r.comment ? <TranslatedText text={r.comment} /> : t('reviews.listCommentFallback')}
+                  </div>
                 </div>
-                <div className="text-muted text-nowrap">{r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ''}</div>
+                <div className="text-muted text-nowrap">
+                  {r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ''}
+                </div>
               </li>
             ))}
             {!list.length && (
               <li className="list-group-item text-muted text-center py-4 tp-empty-state">
-                <div className="fw-semibold mb-1">No reviews yet</div>
-                <div className="small">Ratings left for you will show here.</div>
+                <div className="fw-semibold mb-1">{t('reviews.listEmpty')}</div>
+                <div className="small">{t('reviews.noReviewsBody')}</div>
               </li>
             )}
           </ul>

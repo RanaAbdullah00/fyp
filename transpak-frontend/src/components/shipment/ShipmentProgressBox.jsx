@@ -1,22 +1,27 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import Card from '../ui/Card.jsx';
 import { SHIPMENT_ORDER, normalizeShipmentStatus } from '../../utils/shipmentStatus.js';
+import { useLanguage } from '../../hooks/useLanguage.js';
 
-const PRETTY = {
-  posted: 'Posted',
-  booked: 'Booked',
-  pickedup: 'Picked up',
-  intransit: 'In transit',
-  delivered: 'Delivered',
-  closed: 'Closed'
-};
-
-/** Horizontal lifecycle line: labels on the rail; done=green, current=yellow pulse, upcoming=white glow. */
+/** Horizontal lifecycle line: labels on the rail; done / current / upcoming. */
 const ShipmentProgressBox = ({ status, eta }) => {
+  const { t } = useLanguage();
   const cur = normalizeShipmentStatus(status) || 'posted';
   const idx = Math.max(0, SHIPMENT_ORDER.indexOf(cur));
   const n = SHIPMENT_ORDER.length;
   const fillPct = n <= 1 ? 0 : (idx / (n - 1)) * 100;
+
+  const labelFor = useMemo(
+    () => ({
+      posted: t('pages.shipmentLifecycle.posted'),
+      booked: t('pages.shipmentLifecycle.booked'),
+      pickedup: t('pages.shipmentLifecycle.pickedUp'),
+      intransit: t('pages.shipmentLifecycle.inTransit'),
+      delivered: t('pages.shipmentLifecycle.delivered'),
+      closed: t('pages.shipmentLifecycle.closed')
+    }),
+    [t]
+  );
 
   const stepClass = (i) => {
     if (i < idx) return 'done';
@@ -27,7 +32,7 @@ const ShipmentProgressBox = ({ status, eta }) => {
   return (
     <Card className="tp-progress-box mb-0 h-100">
       <div className="d-flex flex-wrap align-items-baseline justify-content-between gap-2 mb-3">
-        <span className="small text-muted text-uppercase">Shipment</span>
+        <span className="small text-muted text-uppercase fw-semibold">{t('pages.shipmentLifecycle.railTitle')}</span>
         {eta ? <span className="small text-muted">{eta}</span> : null}
       </div>
       <div className="tp-progress-lane px-1">
@@ -35,7 +40,7 @@ const ShipmentProgressBox = ({ status, eta }) => {
           {SHIPMENT_ORDER.map((step, i) => (
             <div key={step} className="tp-progress-lane__label-cell flex-fill text-center">
               <span className={`tp-progress-lane__label tp-progress-lane__label--${stepClass(i)}`}>
-                {PRETTY[step] || step}
+                {labelFor[step] || step}
               </span>
             </div>
           ))}

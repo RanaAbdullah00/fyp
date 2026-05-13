@@ -4,6 +4,9 @@ import { useAuth } from './hooks/useAuth.js';
 import Splash from './pages/auth/Splash.jsx';
 import Login from './pages/auth/Login.jsx';
 import Register from './pages/auth/Register.jsx';
+import VerifyEmail from './pages/auth/VerifyEmail.jsx';
+import ForgotPassword from './pages/auth/ForgotPassword.jsx';
+import ResetPassword from './pages/auth/ResetPassword.jsx';
 import RoleSelection from './pages/auth/RoleSelection.jsx';
 import ShipperDashboard from './pages/dashboard/ShipperDashboard.jsx';
 import CarrierDashboard from './pages/dashboard/CarrierDashboard.jsx';
@@ -26,7 +29,9 @@ import ApproveCarrier from './pages/bids/ApproveCarrier.jsx';
 import MyBids from './pages/bids/MyBids.jsx';
 import AcceptedLoads from './pages/loads/AcceptedLoads.jsx';
 import FleetMonitoring from './pages/fleet/FleetMonitoring.jsx';
+import AddTruck from './pages/fleet/AddTruck.jsx';
 import TruckDetails from './pages/carrier/TruckDetails.jsx';
+import CarrierVerification from './pages/auth/CarrierVerification.jsx';
 import ShipmentTracking from './pages/shipments/ShipmentTracking.jsx';
 import ShipmentHistory from './pages/shipments/ShipmentHistory.jsx';
 import Profile from './pages/profile/Profile.jsx';
@@ -37,6 +42,7 @@ import Notifications from './pages/notifications/Notifications.jsx';
 import Messages from './pages/messages/Messages.jsx';
 import About from './pages/static/About.jsx';
 import Contact from './pages/static/Contact.jsx';
+import HomeEntry from './pages/landing/HomeEntry.jsx';
 import Navbar from './components/layout/Navbar.jsx';
 import Sidebar from './components/layout/Sidebar.jsx';
 import MobileNav from './components/layout/MobileNav.jsx';
@@ -46,6 +52,7 @@ import { dashboardPathForRole } from './utils/dashboardPath.js';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return <LoadingScreen />;
@@ -56,7 +63,7 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   }
 
   const activeRole = user.activeRole ?? user.roles?.[0];
-  if (!activeRole) return <Navigate to="/role" replace />;
+  if (!activeRole) return <Navigate to="/role" replace state={{ from: location.pathname }} />;
 
   if (allowedRoles && !allowedRoles.includes(activeRole)) {
     return <Navigate to={dashboardPathForRole(activeRole)} replace />;
@@ -67,15 +74,21 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
 
 const RoleDashboard = () => {
   const { user } = useAuth();
+  const location = useLocation();
   if (!user) return <Navigate to="/login" replace />;
   const activeRole = user.activeRole ?? user.roles?.[0];
-  if (!activeRole) return <Navigate to="/role" replace />;
+  if (!activeRole) return <Navigate to="/role" replace state={{ from: location.pathname }} />;
   return <Navigate to={dashboardPathForRole(activeRole)} replace />;
 };
 
 const PAGE_BG_EXACT = {
+  '/': 'landing',
   '/login': 'auth',
   '/register': 'auth',
+  '/signup': 'auth',
+  '/verify-email': 'auth',
+  '/forgot-password': 'auth',
+  '/reset-password': 'auth',
   '/splash': 'auth',
   '/about': 'auth',
   '/contact': 'auth'
@@ -88,8 +101,12 @@ function resolvePageBackground(pathname) {
 
 function App() {
   const location = useLocation();
-  const isAuthPage = ['/login', '/register', '/splash', '/role', '/about', '/contact'].includes(location.pathname);
-  const isBareAuthMain = ['/login', '/register', '/splash', '/about', '/contact'].includes(location.pathname);
+  const isAuthPage = ['/', '/login', '/register', '/signup', '/verify-email', '/forgot-password', '/reset-password', '/splash', '/about', '/contact'].includes(
+    location.pathname
+  );
+  const isBareAuthMain = ['/', '/login', '/register', '/signup', '/verify-email', '/forgot-password', '/reset-password', '/splash', '/about', '/contact'].includes(
+    location.pathname
+  );
   const pageBg = useMemo(() => resolvePageBackground(location.pathname), [location.pathname]);
   return (
     <>
@@ -107,6 +124,10 @@ function App() {
               <Route path="/splash" element={<Splash />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/signup" element={<Register />} />
+              <Route path="/verify-email" element={<VerifyEmail />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/about" element={<About />} />
               <Route path="/contact" element={<Contact />} />
               <Route
@@ -118,15 +139,10 @@ function App() {
                 }
               />
 
+              {/* Public home + authed redirect */}
+              <Route path="/" element={<HomeEntry />} />
+
               {/* Dashboards */}
-              <Route
-                path="/"
-                element={
-                  <ProtectedRoute>
-                    <RoleDashboard />
-                  </ProtectedRoute>
-                }
-              />
               <Route
                 path="/dashboard"
                 element={
@@ -314,6 +330,22 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={['carrier']}>
                     <TruckDetails />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/carrier/verification"
+                element={
+                  <ProtectedRoute allowedRoles={['carrier']}>
+                    <CarrierVerification />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/fleet/add"
+                element={
+                  <ProtectedRoute allowedRoles={['carrier']}>
+                    <AddTruck />
                   </ProtectedRoute>
                 }
               />

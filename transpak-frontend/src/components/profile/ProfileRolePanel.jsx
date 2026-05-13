@@ -5,6 +5,8 @@ import { useApi } from '../../hooks/useApi.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { dashboardPathForRole } from '../../utils/dashboardPath.js';
 import { useReceivedRatingSummary } from '../../hooks/useReceivedRatingSummary.js';
+import { notifyError } from '../ui/ToastProvider.jsx';
+import { formatUserError } from '../../utils/userErrors.js';
 
 /**
  * Profile “trust center” role summary: active role, role chips, lightweight stats (existing APIs only).
@@ -20,44 +22,29 @@ const ProfileRolePanel = () => {
   const roles = user?.roles?.length ? user.roles : [user?.activeRole].filter(Boolean);
   const activeRole = user?.activeRole ?? roles[0];
   const hasBothCommercial = roles.includes('shipper') && roles.includes('carrier');
+  const hasShipper = roles.includes('shipper');
+  const hasCarrier = roles.includes('carrier');
+  const isAdminPlatformOnly = roles.includes('admin') && !hasShipper && !hasCarrier;
 
-  const [stats, setStats] = useState({
-    loadsTotal: 0,
-    loadsDone: 0,
-    bidsTotal: 0,
-    bidsAccepted: 0
-  });
+  const [snapshot, setSnapshot] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const next = { loadsTotal: 0, loadsDone: 0, bidsTotal: 0, bidsAccepted: 0 };
       try {
-        const loads = await request({ url: '/loads/mine' });
-        if (Array.isArray(loads)) {
-          next.loadsTotal = loads.length;
-          next.loadsDone = loads.filter((l) => {
-            const s = String(l?.status || '').toLowerCase();
-            return s === 'delivered' || s === 'closed';
-          }).length;
+        const data = await request({ url: '/profile/activity-snapshot' });
+        if (!cancelled) setSnapshot(data && typeof data === 'object' ? data : null);
+      } catch (e) {
+        if (!cancelled) {
+          setSnapshot(null);
+          notifyError(formatUserError(e, t, { fallback: t('profile.activitySnapshotFailed') }));
         }
-      } catch {
-        /* not shipper or no access */
       }
-      try {
-        const bids = await request({ url: '/bids/mine' });
-        const arr = Array.isArray(bids) ? bids : [];
-        next.bidsTotal = arr.length;
-        next.bidsAccepted = arr.filter((b) => b.status === 'accepted').length;
-      } catch {
-        /* not carrier */
-      }
-      if (!cancelled) setStats(next);
     })();
     return () => {
       cancelled = true;
     };
-  }, [request]);
+  }, [request, t]);
 
   const roleLabel = (r) => {
     if (r === 'shipper') return t('auth.shipper');
@@ -83,19 +70,98 @@ const ProfileRolePanel = () => {
       ? t('profile.trustScoreLine', { avg: avg.toFixed(1), count })
       : t('profile.trustScoreNone');
 
+  const shipperBlock = snapshot?.shipper;
+  const carrierBlock = snapshot?.carrier;
+  const adminBlock = snapshot?.admin;
+
+  const renderShipperStats = () => (
+    <div className="row g-2 small">
+      <div className="col-6">
+        <div className="tp-secondary-text">{t('profile.statLoadsPosted')}</div>
+        <div className="fw-semibold fs-6">{shipperBlock?.loadsTotal ?? 0}</div>
+      </div>
+      <div className="col-6">
+        <div className="tp-secondary-text">{t('profile.statLoadsCompleted')}</div>
+        <div className="fw-semibold fs-6">{shipperBlock?.loadsDone ?? 0}</div>
+      </div>
+    </div>
+  );
+
+  const renderCarrierStats = () => (
+    <div className="row g-2 small">
+      <div className="col-6">
+        <div className="tp-secondary-text">{t('profile.statBidsPlaced')}</div>
+        <div className="fw-semibold fs-6">{carrierBlock?.bidsTotal ?? 0}</div>
+      </div>
+      <div className="col-6">
+        <div className="tp-secondary-text">{t('profile.statBidsAccepted')}</div>
+        <div className="fw-semibold fs-6">{carrierBlock?.bidsAccepted ?? 0}</div>
+      </div>
+      <div className="col-12">
+        <div className="tp-secondary-text">{t('profile.statFleetVehiclesShort')}</div>
+        <div className="fw-semibold fs-6">{carrierBlock?.fleetCount ?? 0}</div>
+      </div>
+    </div>
+  );
+
+  const renderAdminStats = () => (
+    <div className="row g-2 small">
+      <div className="col-6">
+        <div className="tp-secondary-text">{t('profile.statAdminUsers')}</div>
+        <div className="fw-semibold fs-6">{adminBlock?.totalUsers ?? 0}</div>
+      </div>
+      <div className="col-6">
+        <div className="tp-secondary-text">{t('profile.statAdminLoads')}</div>
+        <div className="fw-semibold fs-6">{adminBlock?.totalLoads ?? 0}</div>
+      </div>
+      <div className="col-6">
+        <div className="tp-secondary-text">{t('profile.statAdminBids')}</div>
+        <div className="fw-semibold fs-6">{adminBlock?.totalBids ?? 0}</div>
+      </div>
+      <div className="col-6">
+        <div className="tp-secondary-text">{t('profile.statAdminActiveShipments')}</div>
+        <div className="fw-semibold fs-6">{adminBlock?.activeShipments ?? 0}</div>
+      </div>
+      <div className="col-12">
+        <div className="tp-secondary-text">{t('profile.statAdminReviews')}</div>
+        <div className="fw-semibold fs-6">{adminBlock?.totalReviews ?? 0}</div>
+      </div>
+    </div>
+  );
+
+  const renderCommercialSnapshot = () => {
+    if (hasShipper && hasCarrier) {
+      return (
+        <div className="d-flex flex-column gap-3">
+          <div>
+            <div className="small fw-semibold mb-2 text-body">{t('profile.activityAsShipper')}</div>
+            {renderShipperStats()}
+          </div>
+          <div className="border-top border-opacity-25 pt-2">
+            <div className="small fw-semibold mb-2 text-body">{t('profile.activityAsCarrier')}</div>
+            {renderCarrierStats()}
+          </div>
+        </div>
+      );
+    }
+    if (hasShipper) return renderShipperStats();
+    if (hasCarrier) return renderCarrierStats();
+    return <p className="small tp-secondary-text mb-0">{t('profile.activityNoCommercialHint')}</p>;
+  };
+
   return (
     <div className="d-flex flex-column gap-3 tp-profile-role-panel">
       <div className="tp-profile-section rounded-4 p-3 border shadow-sm">
-        <div className="small text-muted text-uppercase fw-semibold mb-2">
+        <div className="small tp-secondary-text text-uppercase fw-semibold mb-2">
           {t('profile.activeWorkspace')}
         </div>
         <div className="d-flex flex-wrap align-items-center gap-2 mb-3">
           <span className="badge rounded-pill px-3 py-2 bg-primary tp-profile-active-role-badge">
             {roleLabel(activeRole)}
           </span>
-          <span className="small text-muted">{t('profile.activeRoleHint')}</span>
+          <span className="small tp-secondary-text">{t('profile.activeRoleHint')}</span>
         </div>
-        <div className="small text-muted mb-1">{t('profile.rolesOnAccount')}</div>
+        <div className="small tp-secondary-text mb-1">{t('profile.rolesOnAccount')}</div>
         <div className="d-flex flex-wrap gap-2">
           {roles.map((r) => (
             <span
@@ -117,33 +183,27 @@ const ProfileRolePanel = () => {
             {t('profile.switchRoleVisualCta')}
           </button>
         ) : null}
-        <p className="small text-muted mt-2 mb-0">{t('profile.switchRoleVisualHint')}</p>
+        <p className="small tp-secondary-text mt-2 mb-0">{t('profile.switchRoleVisualHint')}</p>
       </div>
 
       <div className="tp-profile-section rounded-4 p-3 border shadow-sm">
-        <div className="small text-muted text-uppercase fw-semibold mb-2">{t('profile.activitySnapshot')}</div>
-        <div className="row g-2 small">
-          <div className="col-6">
-            <div className="text-muted">{t('profile.statLoadsPosted')}</div>
-            <div className="fw-semibold fs-6">{stats.loadsTotal}</div>
-          </div>
-          <div className="col-6">
-            <div className="text-muted">{t('profile.statLoadsCompleted')}</div>
-            <div className="fw-semibold fs-6">{stats.loadsDone}</div>
-          </div>
-          <div className="col-6">
-            <div className="text-muted">{t('profile.statBidsPlaced')}</div>
-            <div className="fw-semibold fs-6">{stats.bidsTotal}</div>
-          </div>
-          <div className="col-6">
-            <div className="text-muted">{t('profile.statBidsAccepted')}</div>
-            <div className="fw-semibold fs-6">{stats.bidsAccepted}</div>
-          </div>
-        </div>
+        <div className="small tp-secondary-text text-uppercase fw-semibold mb-2">{t('profile.activitySnapshot')}</div>
+        {isAdminPlatformOnly ? (
+          <>
+            <div className="small fw-semibold mb-2 text-body">{t('profile.activityAsAdmin')}</div>
+            {adminBlock ? (
+              renderAdminStats()
+            ) : (
+              <p className="small tp-secondary-text mb-0">{t('profile.activitySnapshotFailed')}</p>
+            )}
+          </>
+        ) : (
+          renderCommercialSnapshot()
+        )}
       </div>
 
       <div className="tp-profile-section rounded-4 p-3 border shadow-sm">
-        <div className="small text-muted text-uppercase fw-semibold mb-1">{t('profile.trustLayer')}</div>
+        <div className="small tp-secondary-text text-uppercase fw-semibold mb-1">{t('profile.trustLayer')}</div>
         <p className="mb-0 small text-body">{trustLine}</p>
       </div>
     </div>

@@ -8,7 +8,7 @@ import { registerApi } from '../../services/authService.js';
 import { notifySuccess, notifyError } from '../ui/ToastProvider.jsx';
 import { useAuth } from '../../hooks/useAuth.js';
 import { unwrapResponseData } from '../../utils/unwrapApi.js';
-import { formatUserError } from '../../utils/userErrors.js';
+import { getRegisterErrorToast } from '../../utils/authApiErrors.js';
 import { dashboardPathForRole } from '../../utils/dashboardPath.js';
 import PhoneInput from 'react-phone-input-2';
 import 'react-phone-input-2/lib/style.css';
@@ -118,14 +118,17 @@ const RegisterForm = ({ prefill: prefillProp = null, upgradeRole: upgradeRolePro
         role: form.role
       });
       const payload = unwrapResponseData(res) || {};
-      const { token, user, currentRole, registrationKind } = payload;
+      const { token, user, currentRole, registrationKind, emailVerification } = payload;
       const mergedOrExisting = registrationKind === 'merged' || registrationKind === 'existing';
       notifySuccess(
-        upgradeRole || mergedOrExisting ? t('auth.roleAddedSuccess') : t('auth.accountCreatedSuccess')
+        upgradeRole || (mergedOrExisting && token)
+          ? t('auth.roleAddedSuccess')
+          : mergedOrExisting && !token
+          ? t('auth.verifyEmailToContinue')
+          : t('auth.accountCreatedSuccess')
       );
 
-      const shouldAutoLogin =
-        Boolean(token && user) && (upgradeRole || mergedOrExisting);
+      const shouldAutoLogin = Boolean(token && user) && (upgradeRole || mergedOrExisting);
       if (shouldAutoLogin) {
         if (token) localStorage.setItem('transpak_token', token);
         login(payload);
@@ -135,24 +138,21 @@ const RegisterForm = ({ prefill: prefillProp = null, upgradeRole: upgradeRolePro
         return;
       }
 
-      // Brand-new account: confirm via email on login screen.
+      if (import.meta.env.DEV && emailVerification?.devOtp) {
+        notifySuccess(`Dev OTP: ${emailVerification.devOtp}`);
+      }
+
       onDone?.(user);
-      navigate('/login', {
+      navigate('/verify-email', {
         replace: true,
-        state: { prefill: { email: form.email } }
+        state: {
+          email: form.email.trim().toLowerCase(),
+          deliveryHint: emailVerification?.deliveryHint || null,
+          deliveryReason: emailVerification?.deliveryReason || null
+        }
       });
     } catch (err) {
-      const raw = formatUserError(err, t, { fallback: t('auth.registrationFailed') });
-      const translated =
-        raw === 'Passwords do not match'
-          ? t('errors.passwordsDoNotMatch')
-          : raw === 'Invalid credentials'
-          ? t('errors.invalidCredentials')
-          : raw?.startsWith('Account already exists with this')
-          ? t('errors.accountAlreadyExists')
-          : raw?.includes('Account is blocked')
-          ? t('errors.accountBlocked')
-          : raw;
+      const translated = getRegisterErrorToast(err, t);
       notifyError(translated);
       setError(translated);
     } finally {

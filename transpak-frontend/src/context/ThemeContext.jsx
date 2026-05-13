@@ -12,6 +12,9 @@ export const ThemeProvider = ({ children }) => {
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, darkMode ? 'dark' : 'light');
+    const root = document.documentElement;
+    root.setAttribute('data-bs-theme', darkMode ? 'dark' : 'light');
+    root.style.colorScheme = darkMode ? 'dark' : 'light';
     if (darkMode) {
       document.body.classList.add('dark-theme');
       document.body.classList.add('dark-mode');

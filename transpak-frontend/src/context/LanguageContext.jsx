@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useEffect, useMemo, useState } from 'react';
 import { translations } from '../i18n/translations.js';
+import { clearRuntimeTranslationCache } from '../services/runtimeTranslation.js';
 
 const STORAGE_KEY = 'transpak_lang';
 
@@ -25,6 +26,7 @@ export const LanguageProvider = ({ children }) => {
     setLang((prev) => {
       const next = prev === 'en' ? 'ur' : 'en';
       localStorage.setItem(STORAGE_KEY, next);
+      clearRuntimeTranslationCache();
       return next;
     });
   };
@@ -33,6 +35,7 @@ export const LanguageProvider = ({ children }) => {
     const safe = next === 'ur' ? 'ur' : 'en';
     setLang(safe);
     localStorage.setItem(STORAGE_KEY, safe);
+    clearRuntimeTranslationCache();
   };
 
   const t = useCallback((key, vars = {}) => {

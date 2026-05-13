@@ -3,9 +3,12 @@ import StatsCards from '../../components/dashboard/StatsCards.jsx';
 import ActivityFeed from '../../components/dashboard/ActivityFeed.jsx';
 import AnalyticsChart from '../../components/dashboard/AnalyticsChart.jsx';
 import { useApi } from '../../hooks/useApi.js';
+import { useLanguage } from '../../hooks/useLanguage.js';
+
 // High-level admin overview of platform metrics.
 const AdminDashboard = () => {
   const { request } = useApi();
+  const { t } = useLanguage();
   const [statsRow, setStatsRow] = useState(null);
   const activities = [];
   const chartData = [];
@@ -28,27 +31,31 @@ const AdminDashboard = () => {
   const stats = useMemo(() => {
     if (!statsRow) {
       return [
-        { label: 'Users', value: '—' },
-        { label: 'Loads', value: '—' },
-        { label: 'Bookings', value: '—' },
-        { label: 'Active shipments', value: '—' }
+        { label: t('pages.adminDashboardPage.statUsers'), value: t('common.emDash') },
+        { label: t('pages.adminDashboardPage.statLoads'), value: t('common.emDash') },
+        { label: t('pages.adminDashboardPage.statBookings'), value: t('common.emDash') },
+        { label: t('pages.adminDashboardPage.statActiveShipments'), value: t('common.emDash') }
       ];
     }
     return [
-      { label: 'Users', value: statsRow.totalUsers ?? 0 },
-      { label: 'Loads', value: statsRow.totalLoads ?? 0 },
-      { label: 'Bookings', value: statsRow.totalBookings ?? 0 },
-      { label: 'Active shipments', value: statsRow.activeShipments ?? 0 }
+      { label: t('pages.adminDashboardPage.statUsers'), value: statsRow.totalUsers ?? 0 },
+      { label: t('pages.adminDashboardPage.statLoads'), value: statsRow.totalLoads ?? 0 },
+      { label: t('pages.adminDashboardPage.statBookings'), value: statsRow.totalBookings ?? 0 },
+      { label: t('pages.adminDashboardPage.statActiveShipments'), value: statsRow.activeShipments ?? 0 }
     ];
-  }, [statsRow]);
+  }, [statsRow, t]);
 
   return (
     <div className="container py-3">
-      <h5 className="mb-3">Admin dashboard</h5>
+      <h5 className="mb-3">{t('pages.adminDashboardPage.title')}</h5>
       <StatsCards stats={stats} />
       <div className="mt-3 row g-2">
         <div className="col-12 col-lg-6">
-          <AnalyticsChart data={chartData} label="New users per week" emptyHint="Analytics will appear as the platform gets real usage." />
+          <AnalyticsChart
+            data={chartData}
+            label={t('pages.adminDashboardPage.chartLabel')}
+            emptyHint={t('pages.adminDashboardPage.chartEmpty')}
+          />
         </div>
         <div className="col-12 col-lg-6">
           <ActivityFeed activities={activities} />
@@ -59,4 +66,3 @@ const AdminDashboard = () => {
 };
 
 export default AdminDashboard;
-

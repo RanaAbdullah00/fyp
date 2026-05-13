@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import Button from '../ui/Button.jsx';
 import Loader from '../ui/Loader.jsx';
 import RoleSelector from './RoleSelector.jsx';
@@ -7,18 +7,25 @@ import { useAuth } from '../../hooks/useAuth.js';
 import { loginApi } from '../../services/authService.js';
 import { notifySuccess, notifyError } from '../ui/ToastProvider.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
-import { unwrapResponseData } from '../../utils/unwrapApi.js';
-import { formatUserError } from '../../utils/userErrors.js';
+import { unwrapResponseData, unwrapErrorCode } from '../../utils/unwrapApi.js';
 import { FaEnvelope, FaLock } from 'react-icons/fa';
 
 const DEMO_ADMIN_EMAIL = 'mrabdullah0456@gmail.com';
 
 const LoginForm = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
   const { t, isUrdu } = useLanguage();
   const [form, setForm] = useState({ email: '', password: '' });
   const [uiRolePref, setUiRolePref] = useState('');
+
+  React.useEffect(() => {
+    const pre = location.state?.prefill?.email;
+    if (typeof pre === 'string' && pre.trim()) {
+      setForm((prev) => ({ ...prev, email: pre.trim() }));
+    }
+  }, [location.state]);
   const [loading, setLoading] = useState(false);
 
   React.useEffect(() => {
@@ -58,11 +65,20 @@ const LoginForm = () => {
       else if (activeRole === 'carrier') path = '/dashboard/carrier';
       navigate(path, { replace: true });
     } catch (err) {
+      const code = unwrapErrorCode(err);
       const raw = formatUserError(err, t, { fallback: t('errors.invalidCredentials') });
+      if (code === 'EMAIL_NOT_VERIFIED') {
+        notifyError(t('errors.emailNotVerified'));
+        navigate('/verify-email', {
+          replace: false,
+          state: { email: emailNorm, deliveryHint: null }
+        });
+        return;
+      }
       const translated =
-        raw === 'Invalid credentials'
+        code === 'INVALID_CREDENTIALS' || raw === 'Invalid credentials'
           ? t('errors.invalidCredentials')
-          : raw === 'Account is blocked'
+          : code === 'ACCOUNT_BLOCKED' || raw === 'Account is blocked'
           ? t('errors.accountBlocked')
           : raw;
       notifyError(translated);
@@ -116,6 +132,11 @@ const LoginForm = () => {
       >
         {loading ? <Loader light /> : t('auth.signInButton')}
       </Button>
+      <div className="text-center mt-2">
+        <Link to="/forgot-password" className="small text-decoration-none">
+          {t('auth.forgotPassword')}
+        </Link>
+      </div>
     </form>
   );
 };

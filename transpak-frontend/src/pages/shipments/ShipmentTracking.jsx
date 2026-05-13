@@ -11,10 +11,22 @@ import { AppContext } from '../../context/AppContext.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { formatUserError } from '../../utils/userErrors.js';
 
+function mergeTrackingHistory(prev, incoming) {
+  if (!Array.isArray(incoming) || incoming.length === 0) return Array.isArray(prev) ? prev : [];
+  const keyOf = (ev) =>
+    `${String(ev?.time ?? '')}|${String(ev?.event ?? ev?.label ?? '')}|${String(ev?.location ?? ev?.note ?? '')}`;
+  const map = new Map();
+  for (const ev of [...incoming, ...(Array.isArray(prev) ? prev : [])]) {
+    const k = keyOf(ev);
+    if (!map.has(k)) map.set(k, ev);
+  }
+  return Array.from(map.values());
+}
+
 const ShipmentTracking = () => {
   const { trackId } = useParams();
   const id = trackId?.trim() || '';
-  const app = useContext(AppContext);
+  const { registerTrackingHandler } = useContext(AppContext) || {};
   const { t } = useLanguage();
 
   const [payload, setPayload] = useState(null);
@@ -47,20 +59,37 @@ const ShipmentTracking = () => {
   }, [load]);
 
   useEffect(() => {
-    const reg = app?.registerTrackingHandler;
-    if (!reg) return undefined;
-    return reg((p) => {
+    if (!registerTrackingHandler) return undefined;
+    return registerTrackingHandler((p) => {
       if (!p || (p.refKey != null && String(p.refKey) !== String(id))) return;
       setPayload((prev) => {
+        const prevCoords = prev?.liveTrackingMap?.coordinates;
+        const incCoords = p.liveTrackingMap?.coordinates;
+        const mergedCoords =
+          Array.isArray(incCoords) && incCoords.length > 0
+            ? incCoords
+            : Array.isArray(prevCoords) && prevCoords.length > 0
+              ? prevCoords
+              : incCoords || prevCoords || [];
+
+        const mergedHist =
+          Array.isArray(p.history) && p.history.length > 0
+            ? mergeTrackingHistory(prev?.history, p.history)
+            : prev?.history || [];
+
         const merged = {
           tracking: { ...(prev?.tracking || {}), ...(p.tracking || {}) },
-          history: Array.isArray(p.history) ? p.history : prev?.history || [],
-          liveTrackingMap: p.liveTrackingMap || prev?.liveTrackingMap || { coordinates: [] }
+          history: mergedHist,
+          liveTrackingMap: {
+            ...(prev?.liveTrackingMap || {}),
+            ...(p.liveTrackingMap || {}),
+            coordinates: mergedCoords
+          }
         };
         return normalizeTracking(merged);
       });
     });
-  }, [app, id]);
+  }, [registerTrackingHandler, id]);
 
   const tracking = payload?.tracking;
   const coords = useMemo(() => {

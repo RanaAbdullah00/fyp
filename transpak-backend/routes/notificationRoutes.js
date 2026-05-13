@@ -57,7 +57,14 @@ router.post(
   async (req, res) => {
     const title = String(req.body.title || "").trim();
     const message = String(req.body.message || "").trim();
-    const roleType = req.body.roleType != null ? String(req.body.roleType).trim() : null;
+    let roleType = req.body.roleType != null ? String(req.body.roleType).trim() : null;
+    if (roleType) {
+      const rt = roleType.toLowerCase();
+      if (!["shipper", "carrier", "admin"].includes(rt)) {
+        return sendError(res, 400, "Invalid roleType", { fields: ["roleType"] });
+      }
+      roleType = rt;
+    }
     const { rows: existing } = await query(
       `SELECT id, title, message, role_type AS "roleType", read, created_at AS "createdAt"
        FROM notifications

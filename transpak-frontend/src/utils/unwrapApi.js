@@ -9,6 +9,12 @@ export function unwrapResponseData(res) {
   return unwrapBody(res?.data);
 }
 
+/** API `code` from axios err.response.data (e.g. WRONG_PASSWORD, VALIDATION_ERROR). */
+export function unwrapErrorCode(err) {
+  const c = err?.response?.data?.code;
+  return typeof c === 'string' && c.length ? c : null;
+}
+
 /** Error payload from axios err.response.data */
 export function unwrapErrorMessage(err) {
   const d = err?.response?.data;

@@ -13,7 +13,7 @@ const Splash = () => {
   useEffect(() => {
     if (!loading) {
       const timer = setTimeout(() => {
-        navigate(user ? '/' : '/login', { replace: true });
+        navigate('/', { replace: true });
       }, 2300);
       return () => clearTimeout(timer);
     }
@@ -21,7 +21,7 @@ const Splash = () => {
 
   return (
     <div className="splash-container d-flex flex-column justify-content-center align-items-center vh-100 bg-gradient text-white">
-      <BrandLogo className="logo-anim mb-4 mx-auto" />
+      <BrandLogo className="tp-brand-logo-intro mb-4 mx-auto" />
       <p className="mb-4 text-center px-4 lead">
         {t('common.appName')} - پاکستان بھر شپर्स اور کیریئرز کو جوڑنے والا ڈیجیٹل فریٹ ایکسچینج
       </p>

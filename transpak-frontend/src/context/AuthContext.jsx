@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect } from 'react';
+import React, { createContext, useState, useEffect, useCallback } from 'react';
 import api from '../services/api.js';
 import { unwrapBody } from '../utils/unwrapApi.js';
 
@@ -22,7 +22,8 @@ function mergeSession(apiData) {
     fullName: user.fullName || user.full_name || '',
     profileComplete: Boolean(
       user.profileComplete ?? user.isProfileComplete ?? user.is_profile_complete
-    )
+    ),
+    verified: Boolean(user.verified)
   };
   next.name = next.fullName || user.name || user.email || 'User';
   delete next.role;
@@ -37,31 +38,60 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const storedUser = localStorage.getItem('transpak_user');
-    if (storedUser) {
-      try {
-        const parsed = JSON.parse(storedUser);
-        const { role: _legacyRole, ...rest } = parsed;
-        const roles =
-          Array.isArray(rest.roles) && rest.roles.length
-            ? rest.roles
-            : [rest.activeRole].filter(Boolean);
-        const activeRole = rest.activeRole || roles?.[0] || null;
-        const id = rest.id || (rest._id != null ? String(rest._id) : null);
-        setUser({ ...rest, id, roles, activeRole });
-      } catch {
-        localStorage.removeItem('transpak_user');
-      }
-    }
-    setLoading(false);
+  const logout = useCallback(() => {
+    setUser(null);
+    localStorage.removeItem('transpak_user');
+    localStorage.removeItem('transpak_token');
   }, []);
 
-  const login = (apiData) => {
+  const login = useCallback((apiData) => {
     const normalized = mergeSession(apiData);
     setUser(normalized);
     localStorage.setItem('transpak_user', JSON.stringify(normalized));
-  };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const token = localStorage.getItem('transpak_token');
+    const storedUser = localStorage.getItem('transpak_user');
+
+    (async () => {
+      if (storedUser) {
+        try {
+          const parsed = JSON.parse(storedUser);
+          const { role: _legacyRole, ...rest } = parsed;
+          const roles =
+            Array.isArray(rest.roles) && rest.roles.length
+              ? rest.roles
+              : [rest.activeRole].filter(Boolean);
+          const activeRole = rest.activeRole || roles?.[0] || null;
+          const id = rest.id || (rest._id != null ? String(rest._id) : null);
+          if (!cancelled) setUser({ ...rest, id, roles, activeRole });
+        } catch {
+          localStorage.removeItem('transpak_user');
+        }
+      }
+
+      if (token) {
+        try {
+          const res = await api.get('/auth/profile');
+          const data = unwrapBody(res.data);
+          if (!cancelled && data?.user) login(data);
+        } catch (e) {
+          const code = e?.response?.data?.code;
+          if (e?.response?.status === 403 && code === 'EMAIL_NOT_VERIFIED') {
+            if (!cancelled) logout();
+          }
+        }
+      }
+
+      if (!cancelled) setLoading(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [login, logout]);
 
   const setActiveRole = async (role) => {
     if (!user) throw new Error('Not authenticated');
@@ -91,12 +121,6 @@ export const AuthProvider = ({ children }) => {
     if (role) document.body.dataset.role = role;
     else delete document.body.dataset.role;
   }, [user?.activeRole]);
-
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('transpak_user');
-    localStorage.removeItem('transpak_token');
-  };
 
   const value = {
     user,

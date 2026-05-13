@@ -14,7 +14,8 @@ import {
   FaCog,
   FaSignOutAlt,
   FaQuestionCircle,
-  FaUserTag
+  FaUserTag,
+  FaClipboardCheck
 } from 'react-icons/fa';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { useAuth } from '../../hooks/useAuth.js';
@@ -91,6 +92,10 @@ const Sidebar = () => {
               <FaTruck />
               {t('nav.truckDetails')}
             </NavLink>
+            <NavLink to="/carrier/verification" className={navLinkClass}>
+              <FaClipboardCheck />
+              {t('nav.carrierVerification')}
+            </NavLink>
             <NavLink to="/shipments/tracking" className={navLinkClass}>
               <FaShippingFast />
               {t('pages.shipments.tracking')}
@@ -121,7 +126,7 @@ const Sidebar = () => {
             </NavLink>
             <NavLink to="/admin/verification" className={navLinkClass}>
               <FaUserShield />
-              Verification
+              {t('nav.verification')}
             </NavLink>
             <NavLink to="/admin/disputes" className={navLinkClass}>
               <FaExclamationTriangle />

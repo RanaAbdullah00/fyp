@@ -14,7 +14,7 @@ const DemoVideoModal = ({ open, onClose, videoUrl, mimeType, emptyMessage }) => 
         <video
           key={`${src}-${mimeType || 'video/mp4'}`}
           className="w-100 rounded-3 tp-demo-video"
-          style={{ maxHeight: 'min(56vh, 520px)', background: '#000' }}
+          style={{ maxHeight: 'min(56vh, 520px)', background: 'var(--tp-video-bg, #0a0a0a)' }}
           controls
           playsInline
           preload="auto"

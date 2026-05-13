@@ -3,7 +3,9 @@ import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
 import Loader from '../../components/ui/Loader.jsx';
 import { useApi } from '../../hooks/useApi.js';
+import { useLanguage } from '../../hooks/useLanguage.js';
 import { notifyError, notifySuccess } from '../../components/ui/ToastProvider.jsx';
+import { unwrapErrorMessage } from '../../utils/unwrapApi.js';
 
 const emptyForm = {
   id: null,
@@ -27,6 +29,7 @@ const fileToDataUrl = (file) =>
   });
 
 const TruckDetails = () => {
+  const { t, isUrdu } = useLanguage();
   const { request, loading } = useApi();
   const [trucks, setTrucks] = useState([]);
   const [form, setForm] = useState(emptyForm);
@@ -70,39 +73,45 @@ const TruckDetails = () => {
       };
 
       if (!payload.engineNumber || !payload.truckType || !payload.licensePlate || !payload.truckCardFrontImage || !payload.truckCardBackImage) {
-        notifyError('Engine number, type, license plate, and both truck card images are required.');
+        notifyError(t('pages.truckDetailsPage.validationMissing'));
         return;
       }
 
       if (editing) {
         await request({ method: 'PUT', url: `/trucks/${form.id}`, data: payload });
-        notifySuccess('Truck updated.');
+        notifySuccess(t('pages.truckDetailsPage.truckUpdated'));
       } else {
         await request({ method: 'POST', url: '/trucks', data: payload });
-        notifySuccess('Truck added.');
+        notifySuccess(t('pages.truckDetailsPage.truckAdded'));
       }
       reset();
       await refresh();
     } catch (err) {
-      notifyError(err?.response?.data?.error || 'Truck save failed');
+      notifyError(unwrapErrorMessage(err) || t('pages.truckDetailsPage.saveFailed'));
     }
   };
 
   return (
-    <div className="container py-3">
-      <h5 className="mb-3">Truck details</h5>
+    <div className={`container py-3 ${isUrdu ? 'tp-rtl' : ''}`}>
+      <h5 className="mb-3">{t('pages.truckDetailsPage.title')}</h5>
 
       <div className="row g-3">
         <div className="col-lg-5">
           <Card className="p-3">
-            <h6 className="mb-3">{editing ? 'Edit truck' : 'Add truck'}</h6>
+            <h6 className="mb-3">{editing ? t('pages.truckDetailsPage.formEdit') : t('pages.truckDetailsPage.formAdd')}</h6>
             <form onSubmit={submit}>
               <div className="mb-2">
-                <label className="form-label small fw-semibold">Engine Number *</label>
-                <input name="engineNumber" className="form-control form-control-sm" value={form.engineNumber} onChange={onChange} placeholder="e.g. EN-12345" />
+                <label className="form-label small fw-semibold">{t('pages.truckDetailsPage.engineLabel')}</label>
+                <input
+                  name="engineNumber"
+                  className="form-control form-control-sm"
+                  value={form.engineNumber}
+                  onChange={onChange}
+                  placeholder={t('pages.truckDetailsPage.enginePlaceholder')}
+                />
               </div>
               <div className="mb-2">
-                <label className="form-label small fw-semibold">Truck Type *</label>
+                <label className="form-label small fw-semibold">{t('pages.truckDetailsPage.typeLabel')}</label>
                 <select name="truckType" className="form-select form-select-sm" value={form.truckType} onChange={onChange}>
                   <option>Truck</option>
                   <option>Trailer</option>
@@ -111,15 +120,15 @@ const TruckDetails = () => {
                 </select>
               </div>
               <div className="mb-2">
-                <label className="form-label small fw-semibold">Capacity (tons)</label>
+                <label className="form-label small fw-semibold">{t('pages.truckDetailsPage.capacityLabel')}</label>
                 <input name="capacity" type="number" className="form-control form-control-sm" value={form.capacity} onChange={onChange} min="0" />
               </div>
               <div className="mb-2">
-                <label className="form-label small fw-semibold">License Plate *</label>
+                <label className="form-label small fw-semibold">{t('pages.truckDetailsPage.plateLabel')}</label>
                 <input name="licensePlate" className="form-control form-control-sm" value={form.licensePlate} onChange={onChange} />
               </div>
               <div className="mb-2">
-                <label className="form-label small fw-semibold">Truck Card Front Image *</label>
+                <label className="form-label small fw-semibold">{t('pages.truckDetailsPage.cardFrontLabel')}</label>
                 <input
                   type="file"
                   accept="image/*"
@@ -133,11 +142,16 @@ const TruckDetails = () => {
                   }}
                 />
                 {form.truckCardFrontImage ? (
-                  <img src={form.truckCardFrontImage} alt="Truck card front" className="mt-2" style={{ width: '100%', maxHeight: 180, objectFit: 'contain', borderRadius: 12, border: '1px solid var(--pak-border)' }} />
+                  <img
+                    src={form.truckCardFrontImage}
+                    alt={t('pages.truckDetailsPage.cardFrontAlt')}
+                    className="mt-2"
+                    style={{ width: '100%', maxHeight: 180, objectFit: 'contain', borderRadius: 12, border: '1px solid var(--pak-border)' }}
+                  />
                 ) : null}
               </div>
               <div className="mb-3">
-                <label className="form-label small fw-semibold">Truck Card Back Image *</label>
+                <label className="form-label small fw-semibold">{t('pages.truckDetailsPage.cardBackLabel')}</label>
                 <input
                   type="file"
                   accept="image/*"
@@ -151,15 +165,26 @@ const TruckDetails = () => {
                   }}
                 />
                 {form.truckCardBackImage ? (
-                  <img src={form.truckCardBackImage} alt="Truck card back" className="mt-2" style={{ width: '100%', maxHeight: 180, objectFit: 'contain', borderRadius: 12, border: '1px solid var(--pak-border)' }} />
+                  <img
+                    src={form.truckCardBackImage}
+                    alt={t('pages.truckDetailsPage.cardBackAlt')}
+                    className="mt-2"
+                    style={{ width: '100%', maxHeight: 180, objectFit: 'contain', borderRadius: 12, border: '1px solid var(--pak-border)' }}
+                  />
                 ) : null}
               </div>
-              <div className="d-flex gap-2">
+              <div className="d-flex gap-2 flex-wrap">
                 <Button variant="primary" type="submit" disabled={loading}>
-                  {loading ? <Loader light size="sm" /> : editing ? 'Save changes' : 'Add truck'}
+                  {loading ? (
+                    <Loader light size="sm" />
+                  ) : editing ? (
+                    t('pages.truckDetailsPage.saveChanges')
+                  ) : (
+                    t('pages.truckDetailsPage.addTruckCta')
+                  )}
                 </Button>
                 <Button variant="outline-secondary" type="button" onClick={reset}>
-                  Reset
+                  {t('pages.truckDetailsPage.reset')}
                 </Button>
               </div>
             </form>
@@ -168,29 +193,33 @@ const TruckDetails = () => {
 
         <div className="col-lg-7">
           <Card className="p-3">
-            <h6 className="mb-3">My trucks</h6>
+            <h6 className="mb-3">{t('pages.truckDetailsPage.myTrucks')}</h6>
             {loading && trucks.length === 0 ? (
               <div className="d-flex justify-content-center py-4">
                 <Loader />
               </div>
             ) : trucks.length === 0 ? (
-              <div className="text-muted small">No trucks added yet.</div>
+              <div className="text-muted small">{t('pages.truckDetailsPage.empty')}</div>
             ) : (
               <div className="list-group list-group-flush">
-                {trucks.map((t) => (
-                  <div key={t.id} className="list-group-item px-0">
-                    <div className="d-flex justify-content-between align-items-start">
-                      <div>
-                        <div className="fw-semibold d-flex align-items-center gap-2">
-                          <span>{t.engineNumber || t.truckNumber}</span>
-                          {isTruckComplete(t) && <span className="badge bg-success" style={{ fontSize: 9 }}>✓</span>}
+                {trucks.map((row) => (
+                  <div key={row.id} className="list-group-item px-0">
+                    <div className="d-flex justify-content-between align-items-start gap-2">
+                      <div className="min-w-0">
+                        <div className="fw-semibold d-flex align-items-center gap-2 flex-wrap">
+                          <span className="text-break">{row.engineNumber || row.truckNumber}</span>
+                          {isTruckComplete(row) ? (
+                            <span className="badge bg-success" style={{ fontSize: 9 }} title={t('pages.truckDetailsPage.verifiedShort')}>
+                              ✓
+                            </span>
+                          ) : null}
                         </div>
                         <div className="small text-muted">
-                          {t.truckType} · {t.capacity || 0}t · {t.licensePlate}
+                          {row.truckType} · {row.capacity || 0}t · {row.licensePlate}
                         </div>
                       </div>
-                      <Button variant="outline-primary" size="sm" onClick={() => startEdit(t)}>
-                        Edit
+                      <Button variant="outline-primary" size="sm" className="flex-shrink-0" onClick={() => startEdit(row)}>
+                        {t('pages.truckDetailsPage.edit')}
                       </Button>
                     </div>
                   </div>

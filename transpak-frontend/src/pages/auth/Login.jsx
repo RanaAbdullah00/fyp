@@ -35,7 +35,7 @@ const Login = () => {
             <h1 className="h5 fw-bold mb-3 text-body tp-auth-v2__title">{t('auth.signIn')}</h1>
             <LoginForm />
             <p className="small text-center mt-auto pt-2 mb-0 text-muted tp-auth-v2__footer-line">
-              {t('auth.newToTranspak')} <Link to="/register">{t('auth.createAccount')}</Link>
+              {t('auth.newToTranspak')} <Link to="/signup">{t('auth.createAccount')}</Link>
             </p>
           </div>
         </div>

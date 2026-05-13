@@ -1,13 +1,7 @@
-import React, {
-  createContext,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState
-} from 'react';
+import React, { createContext, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createSocketClient } from '../services/socket.js';
 import { normalizeNotification } from '../adapters/normalize.js';
+import { isRenderableClientNotification, sanitizeNotificationRoleType } from '../utils/notificationsFilter.js';
 import api from '../services/api.js';
 import { useAuth } from '../hooks/useAuth.js';
 
@@ -19,6 +13,7 @@ export const AppProvider = ({ children }) => {
   const chatMessageHandlers = useRef(new Set());
   const chatSeenHandlers = useRef(new Set());
   const trackingHandlers = useRef(new Set());
+  const lastTrackingSig = useRef({ sig: '', t: 0 });
   const socketRef = useRef(null);
   const addNotificationRef = useRef(null);
 
@@ -38,7 +33,12 @@ export const AppProvider = ({ children }) => {
   }, []);
 
   const addNotification = useCallback((notification) => {
-    const normalized = normalizeNotification(notification) || notification;
+    if (!isRenderableClientNotification(notification)) return;
+    const base = normalizeNotification(notification) || notification;
+    const normalized = {
+      ...base,
+      roleType: sanitizeNotificationRoleType(base.roleType)
+    };
     const nid = normalized.id ?? normalized._id;
     setNotifications((prev) => {
       if (nid != null && prev.some((p) => String(p.id ?? p._id) === String(nid))) {
@@ -79,13 +79,16 @@ export const AppProvider = ({ children }) => {
     let cancelled = false;
     (async () => {
       try {
-        const rows = await api.get('/notifications');
-        if (cancelled || !Array.isArray(rows)) return;
+        const res = await api.get('/notifications');
+        if (cancelled) return;
+        const rows = res?.data;
+        if (!Array.isArray(rows)) return;
         const mapped = rows.map((r) => ({
           id: r.id || r._id,
-          type: r.type || 'INFO',
-          message: r.message || r.title,
-          roleType: r.roleType || '',
+          senderId: r.senderId ?? null,
+          type: r.type != null && String(r.type).trim() !== '' ? String(r.type).trim() : null,
+          message: r.message || r.title || '',
+          roleType: sanitizeNotificationRoleType(r.roleType),
           read: Boolean(r.read || r.isRead),
           createdAt: r.createdAt
         }));
@@ -106,6 +109,12 @@ export const AppProvider = ({ children }) => {
       token: token || undefined,
       onNotification: (n) => addNotificationRef.current?.(n),
       onTracking: (p) => {
+        const sig = `${p?.refKey}|${p?.tracking?.status}|${JSON.stringify(p?.tracking?.currentLocation ?? p?.tracking?.location)}|${(p?.history || []).length}`;
+        const now = Date.now();
+        if (sig && lastTrackingSig.current.sig === sig && now - lastTrackingSig.current.t < 450) {
+          return;
+        }
+        lastTrackingSig.current = { sig, t: now };
         trackingHandlers.current.forEach((fn) => {
           try {
             fn(p);

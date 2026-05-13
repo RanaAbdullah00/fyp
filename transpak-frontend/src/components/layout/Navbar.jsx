@@ -104,7 +104,7 @@ const Navbar = () => {
             <FaBars />
           </button>
           <Link to="/" className="navbar-brand fw-bold mb-0">
-            <BrandLogo />
+            <BrandLogo variant="mark" title={t('common.appName')} />
           </Link>
           <div className="d-flex align-items-center gap-2">
             <LanguageToggle className="rounded-lg" />
@@ -142,7 +142,7 @@ const Navbar = () => {
       >
         <div className="container-fluid px-3">
           <Link to="/" className="navbar-brand d-flex align-items-center fw-bold">
-            <BrandLogo />
+            <BrandLogo title={t('common.appName')} />
           </Link>
 
           <div className="d-flex align-items-center gap-2 flex-wrap justify-content-end">

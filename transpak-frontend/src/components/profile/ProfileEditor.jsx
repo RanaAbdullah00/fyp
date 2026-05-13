@@ -202,7 +202,7 @@ const ProfileEditor = ({ showTabs, onSaved }) => {
         {profilePhotoUrl ? (
           <img src={profilePhotoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
-          <div className="w-100 h-100 d-flex align-items-center justify-content-center bg-light text-muted fw-semibold small">
+          <div className="w-100 h-100 d-flex align-items-center justify-content-center tp-profile-avatar-fallback small">
             {dpInitials}
           </div>
         )}
@@ -217,29 +217,29 @@ const ProfileEditor = ({ showTabs, onSaved }) => {
         <strong className="text-body-secondary">{t('auth.cnic')}:</strong> {form.cnic_number || t('common.emDash')}
       </p>
       {!cnicFrontUrl && !cnicBackUrl ? (
-        <p className="text-muted small mb-0">{t('profile.noCnicScans')}</p>
+        <p className="tp-secondary-text small mb-0">{t('profile.noCnicScans')}</p>
       ) : (
         <div className="row g-2">
           {cnicFrontUrl ? (
             <div className="col-6" key="cnic-front-preview">
-              <div className="text-muted small mb-1">{t('profile.cnicFrontShort')}</div>
+              <div className="tp-secondary-text small mb-1">{t('profile.cnicFrontShort')}</div>
               <img src={cnicFrontUrl} alt="" className="w-100 rounded border" style={{ maxHeight: 120, objectFit: 'cover' }} />
             </div>
           ) : (
             <div className="col-6" key="cnic-front-missing">
-              <div className="text-muted small mb-1">{t('profile.cnicFrontShort')}</div>
-              <p className="text-muted small mb-0 fst-italic">{t('profile.notOnFile')}</p>
+              <div className="tp-secondary-text small mb-1">{t('profile.cnicFrontShort')}</div>
+              <p className="tp-secondary-text small mb-0 fst-italic">{t('profile.notOnFile')}</p>
             </div>
           )}
           {cnicBackUrl ? (
             <div className="col-6" key="cnic-back-preview">
-              <div className="text-muted small mb-1">{t('profile.cnicBackShort')}</div>
+              <div className="tp-secondary-text small mb-1">{t('profile.cnicBackShort')}</div>
               <img src={cnicBackUrl} alt="" className="w-100 rounded border" style={{ maxHeight: 120, objectFit: 'cover' }} />
             </div>
           ) : (
             <div className="col-6" key="cnic-back-missing">
-              <div className="text-muted small mb-1">{t('profile.cnicBackShort')}</div>
-              <p className="text-muted small mb-0 fst-italic">{t('profile.notOnFile')}</p>
+              <div className="tp-secondary-text small mb-1">{t('profile.cnicBackShort')}</div>
+              <p className="tp-secondary-text small mb-0 fst-italic">{t('profile.notOnFile')}</p>
             </div>
           )}
         </div>
@@ -261,7 +261,7 @@ const ProfileEditor = ({ showTabs, onSaved }) => {
       {!cnicValid ? <div className="invalid-feedback d-block">{t('errors.cnicInvalid')}</div> : null}
       {cnicFrontUrl ? (
         <div className="mb-2">
-          <div className="text-muted small mb-1">{t('profile.cnicOnFileFront')}</div>
+          <div className="tp-secondary-text small mb-1">{t('profile.cnicOnFileFront')}</div>
           <img src={cnicFrontUrl} alt="" className="w-100 rounded border" style={{ maxHeight: 100, objectFit: 'cover' }} />
         </div>
       ) : (
@@ -277,7 +277,7 @@ const ProfileEditor = ({ showTabs, onSaved }) => {
       )}
       {cnicBackUrl ? (
         <div className="mb-2">
-          <div className="text-muted small mb-1">{t('profile.cnicOnFileBack')}</div>
+          <div className="tp-secondary-text small mb-1">{t('profile.cnicOnFileBack')}</div>
           <img src={cnicBackUrl} alt="" className="w-100 rounded border" style={{ maxHeight: 100, objectFit: 'cover' }} />
         </div>
       ) : (
@@ -313,7 +313,7 @@ const ProfileEditor = ({ showTabs, onSaved }) => {
       <>
         {photoBlock}
         <label className="form-label small fw-semibold text-body">
-          {t('auth.fullName')} — {t('profile.fullNamePhoto')}
+          {t('auth.fullName')} ({t('profile.fullNamePhoto')})
         </label>
         <input
           type="file"
@@ -355,7 +355,7 @@ const ProfileEditor = ({ showTabs, onSaved }) => {
     <div className="d-flex flex-column gap-3">
       <div className="tp-profile-section rounded-4 p-3 border shadow-sm">
         <div className="d-flex justify-content-between align-items-center mb-2 gap-2">
-          <span className="small text-muted text-uppercase fw-semibold">{t('profile.completionProgress')}</span>
+          <span className="small tp-secondary-text text-uppercase fw-semibold">{t('profile.completionProgress')}</span>
           <span className="fw-bold">{completionPercent}%</span>
         </div>
         <div className="progress rounded-pill tp-profile-completion-progress" style={{ height: 10 }}>
@@ -376,7 +376,7 @@ const ProfileEditor = ({ showTabs, onSaved }) => {
             <span className="badge bg-success rounded-pill px-3 py-2">{t('profile.fullyVerifiedBadge')}</span>
           </div>
           <p className="fw-semibold mb-1">{t('profile.fullyVerifiedTitle')}</p>
-          <p className="small text-muted mb-3">{t('profile.fullyVerifiedBody')}</p>
+          <p className="small tp-secondary-text mb-3">{t('profile.fullyVerifiedBody')}</p>
           <div className="small text-start text-body">
             <p className="mb-1 text-break">
               <strong>{t('auth.fullName')}:</strong> {form.full_name || t('common.emDash')}
@@ -395,7 +395,7 @@ const ProfileEditor = ({ showTabs, onSaved }) => {
         </div>
       ) : (
         <div className="tp-profile-section rounded-4 p-3 border shadow-sm">
-          <p className="text-muted small mb-2">{t('profile.completionHint')}</p>
+          <p className="tp-secondary-text small mb-2">{t('profile.completionHint')}</p>
           {missingProfilePieces.length === 0 ? (
             <p className="small mb-3">{t('profile.completionServerHint')}</p>
           ) : (
@@ -459,7 +459,7 @@ const ProfileEditor = ({ showTabs, onSaved }) => {
           </label>
           {photoBlock}
           <label className="form-label small fw-semibold text-body">
-            {t('auth.fullName')} — {t('profile.fullNamePhoto')}
+            {t('auth.fullName')} ({t('profile.fullNamePhoto')})
           </label>
           <input
             type="file"

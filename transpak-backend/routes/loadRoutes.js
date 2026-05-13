@@ -47,7 +47,7 @@ router.get("/mine", protect, requireAnyRole(["shipper", "admin"]), requireActive
               l.status, l.shipper_id AS "shipperId", l.assigned_carrier_id AS "assignedCarrierId",
               l.accepted_bid_id AS "acceptedBidId", l.booking_reference AS "bookingReference",
               l.created_at AS "createdAt", l.updated_at AS "updatedAt",
-              0::int AS "bidCount"
+              (SELECT COUNT(*)::int FROM bids b WHERE b.load_id = l.id AND b.status IN ('pending','suggested')) AS "bidCount"
        FROM loads l
        WHERE l.shipper_id = $1
        ORDER BY l.created_at DESC

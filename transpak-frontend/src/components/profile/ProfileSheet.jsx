@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { getPortalContainer } from '../../utils/portalRoot.js';
+import { lockOverlayScroll } from '../../utils/overlayScrollLock.js';
 import ProfileEditor from './ProfileEditor.jsx';
 
 /**
@@ -34,11 +35,10 @@ const ProfileSheet = ({ open, onClose }) => {
       if (e.key === 'Escape') runClose();
     };
     window.addEventListener('keydown', onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const unlockScroll = lockOverlayScroll();
     return () => {
       window.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prev;
+      unlockScroll();
     };
   }, [open, runClose]);
 

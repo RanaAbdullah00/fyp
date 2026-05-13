@@ -17,7 +17,9 @@ const ShipmentCard = ({ shipment }) => {
         Driver: {shipment.driverName} · Vehicle: {shipment.vehicleReg}
       </div>
       <div className="small text-muted mt-1">
-        ETA: {shipment.eta} · Last update: {shipment.lastUpdate}
+        Expected delivery:{' '}
+        {shipment.eta != null && String(shipment.eta).trim() !== '' ? shipment.eta : 'Not set'}. Last update:{' '}
+        {shipment.lastUpdate != null && String(shipment.lastUpdate).trim() !== '' ? shipment.lastUpdate : 'Not set'}
       </div>
     </Card>
   );

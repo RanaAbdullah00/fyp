@@ -16,6 +16,8 @@ const chatRoutes = require("../routes/chatRoutes");
 const truckRoutes = require("../routes/truckRoutes");
 const demoVideoRoutes = require("../routes/demoVideoRoutes");
 const disputeRoutes = require("../routes/disputeRoutes");
+const translationRoutes = require("../routes/translationRoutes");
+const uploadRoutes = require("../routes/uploadRoutes");
 
 function createApp({ uploadsDir, dbState = { ready: true, error: null } }) {
   const app = express();
@@ -92,6 +94,8 @@ function createApp({ uploadsDir, dbState = { ready: true, error: null } }) {
   app.use("/api/trucks", truckRoutes);
   app.use("/api/demo-video", demoVideoRoutes);
   app.use("/api/disputes", disputeRoutes);
+  app.use("/api/translations", translationRoutes);
+  app.use("/api/upload", uploadRoutes);
 
   if (process.env.ENABLE_EXAMPLE_UPLOAD === "true") {
     const exampleUploadRoutes = require("../routes/exampleUploadRoutes");

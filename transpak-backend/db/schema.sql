@@ -184,9 +184,17 @@ CREATE TABLE IF NOT EXISTS messages (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   conversation_id uuid NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
   sender_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  body text NOT NULL,
+  body text,
+  attachment_url text,
+  attachment_public_id text,
+  attachment_kind text,
+  attachment_file_name text,
   seen_at timestamptz,
-  created_at timestamptz NOT NULL DEFAULT now()
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT messages_body_or_attachment CHECK (
+    (char_length(trim(coalesce(body, ''))) > 0)
+    OR (attachment_url IS NOT NULL AND char_length(trim(attachment_url)) > 0)
+  )
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id, created_at DESC);
@@ -262,6 +270,43 @@ CREATE TABLE IF NOT EXISTS ratings (
   created_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT ratings_unique UNIQUE (shipment_id, from_user_id)
 );
+
+-- Email OTP (registration + password reset)
+CREATE TABLE IF NOT EXISTS email_otp_challenges (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  email text NOT NULL,
+  purpose text NOT NULL CHECK (purpose IN ('register_verify', 'password_reset')),
+  code_hash text NOT NULL,
+  expires_at timestamptz NOT NULL,
+  consumed_at timestamptz,
+  attempt_count int NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_otp_open
+  ON email_otp_challenges (lower(email), purpose, created_at DESC)
+  WHERE consumed_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_email_otp_email_purpose_created
+  ON email_otp_challenges (lower(trim(email)), purpose, created_at DESC);
+
+-- Generic auth OTP (POST /api/auth/send-otp, /verify-otp)
+CREATE TABLE IF NOT EXISTS auth_otp_codes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  email text NOT NULL,
+  otp_hash text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL,
+  is_verified boolean NOT NULL DEFAULT false,
+  attempt_count int NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_auth_otp_open
+  ON auth_otp_codes (lower(trim(email)), created_at DESC)
+  WHERE is_verified = false;
+
+CREATE INDEX IF NOT EXISTS idx_auth_otp_email_created
+  ON auth_otp_codes (lower(trim(email)), created_at DESC);
 
 COMMIT;
 

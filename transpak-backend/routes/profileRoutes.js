@@ -2,7 +2,7 @@ const express = require("express");
 const { body } = require("express-validator");
 const { protect } = require("../middleware/authMiddleware");
 const { uploadProfileImages } = require("../middleware/uploadProfileImages");
-const { getProfile, updateProfile, getProfileStatus } = require("../controllers/profileController");
+const { getProfile, updateProfile, getProfileStatus, getActivitySnapshot } = require("../controllers/profileController");
 const { sendError } = require("../utils/apiResponse");
 
 const router = express.Router();
@@ -20,15 +20,20 @@ function handleProfileUpload(req, res, next) {
 
 router.get("/", protect, getProfile);
 router.get("/status", protect, getProfileStatus);
+router.get("/activity-snapshot", protect, getActivitySnapshot);
 
 router.put(
   "/update",
   protect,
   handleProfileUpload,
   [
-    body("full_name").optional().trim().isLength({ min: 2, max: 120 }).withMessage("full_name must be 2-120 chars"),
+    body("full_name")
+      .optional({ values: "falsy" })
+      .trim()
+      .isLength({ min: 2, max: 120 })
+      .withMessage("full_name must be 2-120 chars"),
     body("phone")
-      .optional()
+      .optional({ values: "falsy" })
       .trim()
       .custom((value) => {
         const raw = String(value ?? "").trim();
@@ -38,7 +43,11 @@ router.put(
         }
         return true;
       }),
-    body("cnic_number").optional().trim().isLength({ min: 15, max: 15 }).withMessage("Invalid CNIC")
+    body("cnic_number")
+      .optional({ values: "falsy" })
+      .trim()
+      .isLength({ min: 15, max: 15 })
+      .withMessage("Invalid CNIC")
       .matches(/^[0-9]{5}-[0-9]{7}-[0-9]{1}$/)
       .withMessage("CNIC must be XXXXX-XXXXXXX-X")
   ],

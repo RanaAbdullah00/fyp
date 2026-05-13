@@ -1,54 +1,52 @@
 import React from 'react';
-import Badge from '../ui/Badge.jsx';
+import { useLanguage } from '../../hooks/useLanguage.js';
+import TranslatedText from '../ui/TranslatedText.jsx';
+import { translateNotificationType } from '../../utils/i18nLabels.js';
 
-const roleText = (roleType) => {
-  if (roleType === 'carrier') return 'Carrier';
-  if (roleType === 'shipper') return 'Shipper';
-  return 'Role';
-};
+const NotificationItem = ({ notification, onClick }) => {
+  const { t } = useLanguage();
+  const role = notification.roleType;
+  const typeLbl = notification.type ? translateNotificationType(t, notification.type) : '';
+  const unread = !(notification.read || notification.isRead);
 
-const roleVariant = (roleType) => {
-  if (roleType === 'carrier') return 'warning'; // amber
-  if (roleType === 'shipper') return 'success'; // green
-  return 'secondary';
-};
+  const roleBadge =
+    role === 'carrier'
+      ? { cls: 'tp-notif-role-badge--carrier', label: t('nav.carrierShort') }
+      : role === 'shipper'
+      ? { cls: 'tp-notif-role-badge--shipper', label: t('nav.shipperShort') }
+      : role === 'admin'
+      ? { cls: 'tp-notif-role-badge--admin', label: t('common.admin') }
+      : null;
 
-const typeVariant = (type) => {
-  if (!type) return 'secondary';
-  const t = String(type).toUpperCase();
-  if (t.includes('BID')) return 'success';
-  if (t.includes('LOAD')) return 'primary';
-  if (t.includes('PAY')) return 'warning';
-  return 'secondary';
-};
-
-// Single notification entry.
-const NotificationItem = ({ notification, onClick }) => (
-  <button
-    type="button"
-    className="list-group-item list-group-item-action border-0 px-3 py-2 d-flex justify-content-between align-items-start"
-    onClick={onClick}
-  >
-    <div className="me-2">
-      <div className="small">
-        <strong>{roleText(notification.roleType)}:</strong> {notification.message}
+  return (
+    <button
+      type="button"
+      className={`tp-notif-item w-100 text-start border-0 ${unread ? 'tp-notif-item--unread' : ''}`}
+      onClick={onClick}
+    >
+      <div className="tp-notif-item__row">
+        <div className="tp-notif-item__main min-w-0">
+          <div className="tp-notif-item__meta d-flex align-items-center flex-wrap gap-2 mb-1">
+            {roleBadge ? (
+              <span className={`tp-notif-role-badge rounded-pill ${roleBadge.cls}`}>{roleBadge.label}</span>
+            ) : null}
+            {typeLbl ? (
+              <span className="small text-uppercase tp-notif-item__type">{typeLbl}</span>
+            ) : null}
+            <span className="small tp-notif-item__time ms-auto">
+              {notification.createdAt ? new Date(notification.createdAt).toLocaleString() : ''}
+            </span>
+          </div>
+          <div className="tp-notif-item__message small text-body">
+            <TranslatedText text={notification.message} className="" />
+          </div>
+        </div>
+        {unread ? (
+          <span className="tp-notif-item__dot flex-shrink-0" aria-label={t('notifications.badgeNew')} />
+        ) : null}
       </div>
-      <div className="small text-muted d-flex gap-2 flex-wrap">
-        <Badge variant={roleVariant(notification.roleType)}>{roleText(notification.roleType)}</Badge>
-        {notification.type && (
-          <span className="text-uppercase">{notification.type}</span>
-        )}
-        <span>
-          {notification.createdAt ? new Date(notification.createdAt).toLocaleString() : ''}
-        </span>
-      </div>
-    </div>
-    <div className="d-flex align-items-center gap-2">
-      {notification.type && <Badge variant={typeVariant(notification.type)}>{notification.type}</Badge>}
-      {!(notification.read || notification.isRead) && <Badge variant="primary">New</Badge>}
-    </div>
-  </button>
-);
+    </button>
+  );
+};
 
 export default NotificationItem;
-

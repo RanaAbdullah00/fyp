@@ -55,7 +55,10 @@ function loginAuthData(user, token) {
       _id: idStr,
       email: user.email,
       roles,
-      activeRole: user.activeRole
+      activeRole: user.activeRole,
+      verified: Boolean(user.verified),
+      profileImage: user.profileImage || user.profile_image || "",
+      fullName: user.fullName || user.full_name || user.name || ""
     },
     roles: roleFlags(roles),
     currentRole: user.activeRole

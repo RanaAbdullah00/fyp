@@ -1,13 +1,19 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { FaPaperclip } from 'react-icons/fa';
 import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
 import { useAuth } from '../../hooks/useAuth.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { AppContext } from '../../context/AppContext.jsx';
 import * as chatApi from '../../services/chatApi.js';
+import api from '../../services/api.js';
+import { formatUserError } from '../../utils/userErrors.js';
+import { translateRoleLabel } from '../../utils/i18nLabels.js';
+import TranslatedText from '../../components/ui/TranslatedText.jsx';
 
 const SEEN_DEBOUNCE_MS = 800;
+const CHAT_FILE_PREVIEW = '__TP_FILE__';
 
 /** Strict dedupe: API `id` (UUID) or clientMessageId. */
 function chatMessageDedupeKey(m) {
@@ -18,6 +24,12 @@ function chatMessageDedupeKey(m) {
     return `c:${String(m.clientMessageId)}`;
   }
   return null;
+}
+
+function threadPreviewFromMessage(msg) {
+  if (msg?.body != null && String(msg.body).trim() !== '') return String(msg.body).trim().slice(0, 120);
+  if (msg?.attachmentUrl) return CHAT_FILE_PREVIEW;
+  return '';
 }
 
 function formatTime(iso) {
@@ -50,6 +62,9 @@ const Messages = () => {
   const [showNew, setShowNew] = useState(false);
   const [newPeer, setNewPeer] = useState('');
   const [newLoad, setNewLoad] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadPct, setUploadPct] = useState(0);
+  const fileRef = useRef(null);
   const seenTimer = useRef(null);
 
   const mergeMessage = useCallback((convId, msg) => {
@@ -68,38 +83,41 @@ const Messages = () => {
     setErr('');
     try {
       const rows = await chatApi.fetchConversations();
-      setThreads(Array.isArray(rows) ? rows : []);
+      const list = Array.isArray(rows) ? rows : [];
+      setThreads(
+        list.map((r) => ({
+          ...r,
+          lastPreview: r.lastPreview ?? r.lastMessage ?? ''
+        }))
+      );
     } catch (e) {
-      setErr(e?.response?.data?.message || e?.message || 'Failed to load conversations');
+      setErr(formatUserError(e, t, { fallback: t('pages.messagesPage.loadConversationsFailed') }));
     } finally {
       setLoadingList(false);
     }
-  }, []);
+  }, [t]);
 
-  const loadMessages = useCallback(
-    async (convId) => {
-      if (!convId) return;
-      setLoadingMsg(true);
-      try {
-        const rows = await chatApi.fetchMessages(convId, { limit: 80 });
-        const raw = Array.isArray(rows) ? rows : [];
-        const seen = new Set();
-        const deduped = [];
-        for (const m of raw) {
-          const k = chatMessageDedupeKey(m);
-          if (!k || seen.has(k)) continue;
-          seen.add(k);
-          deduped.push(m);
-        }
-        setMessagesByConv((prev) => ({ ...prev, [convId]: deduped }));
-      } catch {
-        setMessagesByConv((prev) => ({ ...prev, [convId]: prev[convId] || [] }));
-      } finally {
-        setLoadingMsg(false);
+  const loadMessages = useCallback(async (convId) => {
+    if (!convId) return;
+    setLoadingMsg(true);
+    try {
+      const rows = await chatApi.fetchMessages(convId, { limit: 80 });
+      const raw = Array.isArray(rows) ? rows : [];
+      const seen = new Set();
+      const deduped = [];
+      for (const m of raw) {
+        const k = chatMessageDedupeKey(m);
+        if (!k || seen.has(k)) continue;
+        seen.add(k);
+        deduped.push(m);
       }
-    },
-    []
-  );
+      setMessagesByConv((prev) => ({ ...prev, [convId]: deduped }));
+    } catch {
+      setMessagesByConv((prev) => ({ ...prev, [convId]: prev[convId] || [] }));
+    } finally {
+      setLoadingMsg(false);
+    }
+  }, []);
 
   useEffect(() => {
     loadThreads();
@@ -116,9 +134,10 @@ const Messages = () => {
           peerUserId: peer,
           loadId: load || undefined
         });
-        if (cancelled || !data?.conversationId) return;
+        const cid = data?.conversationId ?? data?.id;
+        if (cancelled || !cid) return;
         await loadThreads();
-        setActiveId(data.conversationId);
+        setActiveId(cid);
         setSearchParams({}, { replace: true });
       } catch {
         // ignore invalid deep link
@@ -135,11 +154,10 @@ const Messages = () => {
       const cid = msg?.conversationId;
       if (!cid) return;
       mergeMessage(cid, msg);
+      const pv = threadPreviewFromMessage(msg);
       setThreads((prev) =>
-        prev.map((t) =>
-          t.id === cid
-            ? { ...t, lastPreview: msg.body?.slice(0, 120), lastMessageAt: msg.createdAt }
-            : t
+        prev.map((th) =>
+          th.id === cid ? { ...th, lastPreview: pv, lastMessageAt: msg.createdAt } : th
         )
       );
     });
@@ -195,22 +213,71 @@ const Messages = () => {
   const active = useMemo(() => threads.find((x) => x.id === activeId), [threads, activeId]);
   const messages = activeId ? messagesByConv[activeId] || [] : [];
 
-  const send = async () => {
-    if (!draft.trim() || !activeId) return;
+  const send = async (attachment) => {
+    if (!activeId) return;
     const text = draft.trim();
+    if (!text && !attachment) return;
+    const prevDraft = draft;
     setDraft('');
     const clientMessageId = `c_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
     try {
-      const msg = await chatApi.sendMessageHttp(activeId, text, clientMessageId);
+      const msg = await chatApi.sendMessageHttp(activeId, {
+        body: text,
+        clientMessageId,
+        attachment: attachment || undefined
+      });
       mergeMessage(activeId, msg);
+      const pv = threadPreviewFromMessage(msg);
       setThreads((prev) =>
-        prev.map((t) =>
-          t.id === activeId ? { ...t, lastPreview: text, lastMessageAt: msg?.createdAt } : t
+        prev.map((th) =>
+          th.id === activeId ? { ...th, lastPreview: pv, lastMessageAt: msg?.createdAt } : th
         )
       );
     } catch (e) {
-      setDraft(text);
-      setErr(e?.response?.data?.message || e?.message || 'Send failed');
+      setDraft(prevDraft);
+      setErr(formatUserError(e, t, { fallback: t('pages.messagesPage.sendFailed') }));
+    }
+  };
+
+  const onPickFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !activeId) return;
+    const maxBytes = 12 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      setErr(t('pages.messagesPage.uploadFailed'));
+      return;
+    }
+    const isPdf = file.type === 'application/pdf';
+    const isImg = String(file.type || '').startsWith('image/');
+    if (!isPdf && !isImg) {
+      setErr(t('pages.messagesPage.uploadFailed'));
+      return;
+    }
+    setUploading(true);
+    setUploadPct(0);
+    setErr('');
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const path = isPdf ? '/upload/document' : '/upload/image';
+      const res = await api.post(path, formData, {
+        onUploadProgress: (ev) => {
+          if (ev.total) setUploadPct(Math.round((ev.loaded / ev.total) * 100));
+        }
+      });
+      const data = res.data;
+      await send({
+        url: data.url,
+        publicId: data.publicId,
+        kind: isPdf ? 'pdf' : 'image',
+        fileName: file.name
+      });
+    } catch (ex) {
+      setErr(formatUserError(ex, t, { fallback: t('pages.messagesPage.uploadFailed') }));
+    } finally {
+      setUploading(false);
+      setUploadPct(0);
     }
   };
 
@@ -222,14 +289,21 @@ const Messages = () => {
         peerUserId: newPeer.trim(),
         loadId: newLoad.trim() || undefined
       });
+      const cid = data?.conversationId ?? data?.id;
       setShowNew(false);
       setNewPeer('');
       setNewLoad('');
       await loadThreads();
-      if (data?.conversationId) setActiveId(data.conversationId);
+      if (cid) setActiveId(cid);
     } catch (e) {
-      setErr(e?.response?.data?.message || e?.message || 'Could not open chat');
+      setErr(formatUserError(e, t, { fallback: t('pages.messagesPage.openChatFailed') }));
     }
+  };
+
+  const renderPreviewLine = (preview) => {
+    if (!preview) return t('common.emDash');
+    if (preview === CHAT_FILE_PREVIEW) return t('pages.messagesPage.attachmentLabel');
+    return <TranslatedText text={preview} />;
   };
 
   return (
@@ -243,17 +317,13 @@ const Messages = () => {
             <div className="d-flex justify-content-between align-items-center mb-2">
               <h6 className="mb-0">{t('common.messages')}</h6>
               <Button variant="outline-primary" className="btn-sm" type="button" onClick={() => setShowNew(true)}>
-                {isUrdu ? 'نیا' : 'New'}
+                {t('pages.messagesPage.newButton')}
               </Button>
             </div>
             {loadingList ? (
-              <div className="small text-muted">{isUrdu ? 'لوڈ ہو رہا ہے…' : 'Loading…'}</div>
+              <div className="small text-muted">{t('pages.messagesPage.loadingList')}</div>
             ) : threads.length === 0 ? (
-              <div className="small text-muted">
-                {isUrdu
-                  ? 'کوئی گفتگو نہیں۔ نیا چیٹ شروع کریں یا قبول شدہ لوڈ سے لنک استعمال کریں۔'
-                  : 'No conversations yet. Start one with “New” or open from an accepted load link (?peer=&load=).'}
-              </div>
+              <div className="small text-muted">{t('pages.messagesPage.emptyList')}</div>
             ) : (
               <div className="list-group list-group-flush">
                 {threads.map((th) => (
@@ -266,10 +336,10 @@ const Messages = () => {
                     onClick={() => setActiveId(th.id)}
                   >
                     <div className="d-flex justify-content-between">
-                      <span>{th.peerName || 'User'}</span>
+                      <span>{th.peerName || t('common.userFallback')}</span>
                       <small className="text-muted">{formatTime(th.lastMessageAt)}</small>
                     </div>
-                    <div className="small text-muted text-truncate">{th.lastPreview || '—'}</div>
+                    <div className="small text-muted text-truncate">{renderPreviewLine(th.lastPreview)}</div>
                   </button>
                 ))}
               </div>
@@ -281,33 +351,62 @@ const Messages = () => {
           <Card>
             <div className="d-flex justify-content-between align-items-center mb-2">
               <div>
-                <div className="fw-semibold">{active?.peerName || (activeId ? '…' : '—')}</div>
-                <div className="small text-muted text-capitalize">{activeRole}</div>
+                <div className="fw-semibold">{active?.peerName || (activeId ? '…' : t('common.emDash'))}</div>
+                <div className="small text-muted">{translateRoleLabel(t, activeRole)}</div>
               </div>
             </div>
 
             {!activeId ? (
-              <div className="small text-muted py-4 text-center">
-                {isUrdu ? 'گفتگو منتخب کریں' : 'Select a conversation'}
-              </div>
+              <div className="small text-muted py-4 text-center">{t('pages.messagesPage.selectConversation')}</div>
             ) : (
               <>
                 <div className="tp-chat-box rounded-4 p-2 mb-2" style={{ minHeight: 220 }}>
                   {loadingMsg && messages.length === 0 ? (
-                    <div className="small text-muted p-2">{isUrdu ? 'لوڈ…' : 'Loading…'}</div>
+                    <div className="small text-muted p-2">{t('pages.messagesPage.loadingThread')}</div>
                   ) : null}
-                  {messages.map((m, idx) => {
+                  {messages.map((m) => {
                     const mine = String(m.senderId) === String(uid);
+                    const rowKey =
+                      chatMessageDedupeKey(m) ||
+                      `f-${m.createdAt || ''}-${m.senderId || ''}-${String(m.body || '').slice(0, 12)}`;
                     return (
                       <div
-                        key={chatMessageDedupeKey(m) || `m-${idx}`}
+                        key={rowKey}
                         className={`d-flex mb-2 ${mine ? 'justify-content-end' : 'justify-content-start'}`}
                       >
                         <div className={`tp-chat-bubble ${mine ? 'me' : 'them'}`}>
-                          <div className="small">{m.body}</div>
+                          {m.attachmentUrl && m.attachmentKind === 'image' ? (
+                            <a href={m.attachmentUrl} target="_blank" rel="noopener noreferrer" className="d-block mb-1">
+                              <img
+                                src={m.attachmentUrl}
+                                alt=""
+                                className="img-fluid rounded-3"
+                                style={{ maxHeight: 220, maxWidth: '100%' }}
+                              />
+                            </a>
+                          ) : null}
+                          {m.attachmentUrl && m.attachmentKind === 'pdf' ? (
+                            <a
+                              href={m.attachmentUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="small fw-semibold d-block mb-1"
+                            >
+                              {m.attachmentFileName || t('pages.messagesPage.pdfDocument')}
+                            </a>
+                          ) : null}
+                          {m.body != null && String(m.body).trim() !== '' ? (
+                            <div className="small">
+                              <TranslatedText text={m.body} />
+                            </div>
+                          ) : null}
                           <div className="tp-chat-time d-flex align-items-center gap-1">
                             <span>{formatTime(m.createdAt)}</span>
-                            {mine && m.seenByPeer ? <span title="Seen">✓✓</span> : mine ? <span>✓</span> : null}
+                            {mine && m.seenByPeer ? (
+                              <span title={t('notifications.seen')}>✓✓</span>
+                            ) : mine ? (
+                              <span>✓</span>
+                            ) : null}
                           </div>
                         </div>
                       </div>
@@ -315,10 +414,32 @@ const Messages = () => {
                   })}
                 </div>
 
-                <div className="d-flex gap-2">
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                  className="d-none"
+                  onChange={onPickFile}
+                />
+                {uploading ? (
+                  <div className="small text-muted mb-2">
+                    {t('pages.messagesPage.uploadingPct', { pct: uploadPct })}
+                  </div>
+                ) : null}
+                <div className="d-flex gap-2 align-items-center flex-wrap">
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary btn-sm rounded-pill"
+                    disabled={uploading}
+                    aria-label={t('pages.messagesPage.attachImage')}
+                    title={t('pages.messagesPage.attachImage')}
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    <FaPaperclip />
+                  </button>
                   <input
-                    className={`form-control form-control-sm rounded-pill ${isUrdu ? 'text-end' : ''}`}
-                    placeholder={isUrdu ? 'پیغام لکھیں…' : 'Type a message…'}
+                    className={`form-control form-control-sm rounded-pill flex-grow-1 ${isUrdu ? 'text-end' : ''}`}
+                    placeholder={t('pages.messagesPage.typeMessage')}
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
                     onKeyDown={(e) => {
@@ -328,8 +449,8 @@ const Messages = () => {
                       }
                     }}
                   />
-                  <Button variant="primary" className="btn-sm px-3" type="button" onClick={send}>
-                    {isUrdu ? 'بھیجیں' : 'Send'}
+                  <Button variant="primary" className="btn-sm px-3" type="button" disabled={uploading} onClick={() => send()}>
+                    {t('pages.messagesPage.send')}
                   </Button>
                 </div>
               </>
@@ -343,18 +464,23 @@ const Messages = () => {
           <div className="modal-dialog modal-dialog-centered">
             <div className="modal-content">
               <div className="modal-header py-2">
-                <h6 className="modal-title">{isUrdu ? 'نیا چیٹ' : 'New chat'}</h6>
-                <button type="button" className="btn-close" aria-label="Close" onClick={() => setShowNew(false)} />
+                <h6 className="modal-title">{t('pages.messagesPage.newChat')}</h6>
+                <button
+                  type="button"
+                  className="btn-close"
+                  aria-label={t('common.close')}
+                  onClick={() => setShowNew(false)}
+                />
               </div>
               <div className="modal-body">
-                <label className="form-label small">Peer user ID (UUID)</label>
+                <label className="form-label small">{t('pages.messagesPage.peerIdLabel')}</label>
                 <input
                   className="form-control form-control-sm mb-2"
                   value={newPeer}
                   onChange={(e) => setNewPeer(e.target.value)}
-                  placeholder="e.g. 0f1a2b3c-4d5e-678f-9012-3456789abcde"
+                  placeholder={t('pages.messagesPage.peerIdPlaceholder')}
                 />
-                <label className="form-label small">{isUrdu ? 'لوڈ (اختیاری)' : 'Load ID (optional)'}</label>
+                <label className="form-label small">{t('pages.messagesPage.loadIdOptional')}</label>
                 <input
                   className="form-control form-control-sm"
                   value={newLoad}
@@ -363,10 +489,10 @@ const Messages = () => {
               </div>
               <div className="modal-footer py-2">
                 <Button variant="secondary" className="btn-sm" type="button" onClick={() => setShowNew(false)}>
-                  {isUrdu ? 'بند' : 'Cancel'}
+                  {t('common.cancel')}
                 </Button>
                 <Button variant="primary" className="btn-sm" type="button" onClick={openNew}>
-                  {isUrdu ? 'کھولیں' : 'Open'}
+                  {t('pages.messagesPage.open')}
                 </Button>
               </div>
             </div>

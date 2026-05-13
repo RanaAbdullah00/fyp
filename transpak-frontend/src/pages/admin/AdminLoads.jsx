@@ -6,6 +6,7 @@ import { useApi } from '../../hooks/useApi.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { notifyError, notifySuccess } from '../../components/ui/ToastProvider.jsx';
 import { formatUserError } from '../../utils/userErrors.js';
+import { translateShipmentOrLoadStatus } from '../../utils/i18nLabels.js';
 
 const AdminLoads = () => {
   const { request } = useApi();
@@ -88,7 +89,7 @@ const AdminLoads = () => {
                     </td>
                     <td className="py-3">
                       <span className={`badge rounded-pill ${statusBadgeClass(l.status)}`}>
-                        {String(l.status || '').replaceAll('_', ' ')}
+                        {translateShipmentOrLoadStatus(t, l.status)}
                       </span>
                     </td>
                     <td className="pe-3 py-3 text-end">

@@ -1,9 +1,12 @@
 import React from 'react';
 import Badge from '../ui/Badge.jsx';
 import { normalizeShipmentStatus } from '../../utils/shipmentStatus.js';
+import { useLanguage } from '../../hooks/useLanguage.js';
+import { translateShipmentOrLoadStatus } from '../../utils/i18nLabels.js';
 
 // Visual indicator for shipment / tracking status.
 const StatusBadge = ({ status, size }) => {
+  const { t } = useLanguage();
   const canon = normalizeShipmentStatus(status) || String(status || '').toLowerCase();
   const map = {
     posted: 'secondary',
@@ -16,19 +19,8 @@ const StatusBadge = ({ status, size }) => {
     in_transit: 'primary',
     cancelled: 'secondary'
   };
-  const labelMap = {
-    posted: 'Posted',
-    booked: 'Booked',
-    pickedup: 'Picked up',
-    intransit: 'In transit',
-    delivered: 'Delivered',
-    closed: 'Closed',
-    pending: 'Pending',
-    in_transit: 'In transit',
-    cancelled: 'Cancelled'
-  };
   const variant = map[canon] || map[String(status || '').toLowerCase()] || 'secondary';
-  const label = labelMap[canon] || String(status || 'Unknown').replace(/_/g, ' ');
+  const label = translateShipmentOrLoadStatus(t, status);
   const cls = size === 'lg' ? 'fs-6 px-3 py-2' : '';
   return (
     <Badge variant={variant} className={cls}>

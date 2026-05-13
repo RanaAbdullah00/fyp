@@ -56,15 +56,18 @@ export const normalizeBids = (arr) => (Array.isArray(arr) ? arr.map(normalizeBid
 
 export const normalizeNotification = (raw) => {
   if (!raw) return null;
+  const rt = raw.roleType != null && String(raw.roleType).trim() !== '' ? String(raw.roleType).toLowerCase().trim() : null;
+  const ty = raw.type != null && String(raw.type).trim() !== '' ? String(raw.type).trim() : null;
   return {
     id: raw.id ?? raw._id ?? null,
-    senderId: raw.senderId ?? 'system',
+    senderId: raw.senderId ?? null,
     receiverId: raw.receiverId ?? null,
-    roleType: raw.roleType ?? 'shipper',
-    type: raw.type ?? 'INFO',
-    message: raw.message ?? '',
+    roleType: rt,
+    type: ty,
+    message: raw.message ?? raw.title ?? '',
+    title: raw.title ?? null,
     createdAt: raw.createdAt ?? new Date().toISOString(),
-    read: Boolean(raw.read)
+    read: Boolean(raw.read ?? raw.isRead)
   };
 };
 
