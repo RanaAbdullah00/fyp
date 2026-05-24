@@ -1,28 +1,83 @@
 import axios from 'axios';
+import { getApiRoot, API_BASE, resolveViteApiOrigin } from '../config/apiConfig.js';
+import { notifyApiError } from '../utils/notifySystem.js';
+import { unwrapErrorDetail } from '../utils/unwrapApi.js';
+import { logApiFailure } from '../utils/apiDevLog.js';
+const BASE_URL = getApiRoot();
 
-// Base URL: explicit VITE_API_URL wins. In dev, empty/unset uses same-origin `/api` (Vite proxy → backend).
-function apiBaseUrl() {
-  const raw = import.meta.env.VITE_API_URL;
-  const explicit = typeof raw === 'string' ? raw.trim() : '';
-  if (explicit) {
-    let base = explicit.replace(/\/$/, '');
-    if (!base.endsWith('/api')) base = `${base}/api`;
-    return base;
+const ALLOWED_API_PREFIXES = [
+  '/auth',
+  '/profile',
+  '/shipments',
+  '/loads',
+  '/bids',
+  '/fare',
+  '/carrier-space',
+  '/operations',
+  '/admin',
+  '/reviews',
+  '/ratings',
+  '/notifications',
+  '/feedback',
+  '/chat',
+  '/trucks',
+  '/demo-video',
+  '/disputes',
+  '/translations',
+  '/upload',
+  '/public',
+  '/health'
+];
+
+const AUTH_DEBUG =
+  import.meta.env.DEV || String(import.meta.env.VITE_AUTH_API_DEBUG || '').toLowerCase() === 'true';
+
+function assertProductionApiTarget(config) {
+  if (import.meta.env.DEV) return;
+  const base = String(config.baseURL || BASE_URL || '');
+  if (/localhost|127\.0\.0\.1/i.test(base)) {
+    throw new Error('Production build cannot call localhost API — set VITE_API_URL to Render URL');
   }
-  if (import.meta.env.DEV) return '/api';
-  return 'http://localhost:5000/api';
 }
 
-const BASE_URL = apiBaseUrl();
+function assertAllowedEndpoint(url) {
+  const path = String(url || '').split('?')[0];
+  if (!path || path === '/health') return;
+  const normalized = path.startsWith('/') ? path : `/${path}`;
+  const ok = ALLOWED_API_PREFIXES.some((p) => normalized === p || normalized.startsWith(`${p}/`));
+  if (!ok && import.meta.env.DEV) {
+    // eslint-disable-next-line no-console
+    console.warn('[api] Unlisted endpoint (verify backend route exists):', normalized);
+  }
+}
+
+function fullUrl(config) {
+  const url = config.url || '';
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${String(config.baseURL || '').replace(/\/$/, '')}${url.startsWith('/') ? url : `/${url}`}`;
+}
+
+function handleApiFailure(error, config) {
+  logApiFailure(error, config);
+  if (config?.skipGlobalErrorToast) return;
+  const { displayMessage } = unwrapErrorDetail(error);
+  const endpoint = fullUrl(config || {});
+  const msg = displayMessage || `Request failed (${endpoint})`;
+  notifyApiError(error, msg);
+}
 
 const api = axios.create({
   baseURL: BASE_URL,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json'
-  }
+  },
 });
 
 api.interceptors.request.use((config) => {
+  assertProductionApiTarget(config);
+  assertAllowedEndpoint(config.url);
+
   const token = localStorage.getItem('transpak_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -30,16 +85,77 @@ api.interceptors.request.use((config) => {
   if (config.data instanceof FormData) {
     delete config.headers['Content-Type'];
   }
+
+  const method = String(config.method || 'get').toUpperCase();
+  const resolved = fullUrl(config);
+  const isAuth = /\/api\/auth(\/|$)/i.test(resolved) || /\/auth(\/|$)/i.test(config.url || '');
+
+  if (isAuth && import.meta.env.DEV && !/^https?:\/\//i.test(config.url || '') && String(config.url || '').startsWith('/')) {
+    // eslint-disable-next-line no-console
+    console.error('[api] relative auth path bypasses authService — use authService.js only:', resolved);
+  }
+
+  if (isAuth && AUTH_DEBUG) {
+    const payload =
+      config.data && typeof config.data === 'object' && !(config.data instanceof FormData)
+        ? { ...config.data }
+        : config.data;
+    if (payload && typeof payload === 'object') {
+      for (const key of ['password', 'confirmPassword', 'code']) {
+        if (payload[key] != null) payload[key] = '[redacted]';
+      }
+    }
+    // eslint-disable-next-line no-console
+    console.log('[api] auth request', { method, url: resolved, payload });
+  }
+
   return config;
 });
 
-api.interceptors.response.use((response) => {
-  const body = response.data;
-  if (body && typeof body.success === 'boolean' && 'data' in body) {
-    return { ...response, data: body.data };
+api.interceptors.response.use(
+  (response) => {
+    const body = response.data;
+    if (body && typeof body.success === 'boolean') {
+      if (body.success === false) {
+        const err = new Error(body.message || 'Request failed');
+        err.response = { status: response.status, data: body };
+        err.config = response.config;
+        handleApiFailure(err, response.config);
+        return Promise.reject(err);
+      }
+      if ('data' in body) {
+        return { ...response, data: body.data };
+      }
+    }
+    return response;
+  },
+  (error) => {
+    if (!error.response && error.code === 'ERR_NETWORK') {
+      const target = API_BASE || resolveViteApiOrigin() || BASE_URL;
+      error.message = import.meta.env.DEV
+        ? `Cannot reach API (${target}). Start transpak-backend and set VITE_PROXY_TARGET.`
+        : `Cannot reach API (${target || 'VITE_API_URL not set'}). Rebuild with correct VITE_API_URL.`;
+    }
+    const body = error.response?.data;
+    if (body && typeof body === 'object') {
+      if (!body.code && typeof body.error === 'string') {
+        body.code = body.error;
+      }
+      const msg =
+        typeof body.message === 'string' && body.message.trim()
+          ? body.message.trim()
+          : typeof body.error === 'string'
+            ? body.error.trim()
+            : '';
+      if (msg) {
+        error.message =
+          body.code && !msg.includes(body.code) ? `${msg} (${body.code})` : msg;
+      }
+    }
+    handleApiFailure(error, error.config || {});
+    return Promise.reject(error);
   }
-  return response;
-});
+);
 
+export { API_BASE, BASE_URL };
 export default api;
-

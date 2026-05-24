@@ -8,6 +8,7 @@ import { useAuth } from '../../hooks/useAuth.js';
 import { useApi } from '../../hooks/useApi.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { notifySuccess, notifyError, notifyInfo } from '../../components/ui/ToastProvider.jsx';
+import { notifyProfileIncomplete } from '../../utils/notifySystem.js';
 import { formatUserError } from '../../utils/userErrors.js';
 
 // Carrier bid placement page. Expects "load" object from AvailableLoads route state.
@@ -20,11 +21,17 @@ const PlaceBid = () => {
   const { request, loading } = useApi();
 
   useEffect(() => {
+    const role = user?.activeRole ?? user?.roles?.[0];
+    if (role === 'carrier' && !load) {
+      notifyInfo(t('pages.loads.carrierUseFreightBoard'));
+      navigate('/loads/manage', { replace: true, state: { tab: 'freight' } });
+      return;
+    }
     if (user && user.profileComplete === false) {
-      notifyInfo(t('pages.placeBid.profileCompleteFirst'));
+      notifyProfileIncomplete(t);
       navigate('/profile', { replace: true });
     }
-  }, [user, navigate, t]);
+  }, [user, navigate, t, load]);
 
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState('PKR');

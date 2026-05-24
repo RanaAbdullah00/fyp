@@ -7,9 +7,10 @@ import AuthHeaderActions from '../../components/auth/AuthHeaderActions.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { useAuthViewportLock } from '../../hooks/useAuthViewportLock.js';
 import { sendForgotPasswordOtpApi } from '../../services/authService.js';
-import { unwrapResponseData } from '../../utils/unwrapApi.js';
-import { formatUserError } from '../../utils/userErrors.js';
+import { safeUnwrapAuthResponse, blockNativeFormSubmit } from '../../utils/authApiSafe.js';
 import { notifyError, notifySuccess } from '../../components/ui/ToastProvider.jsx';
+import { notifyAuthError } from '../../utils/notifySystem.js';
+import { isEmailDelivered, getDeliveryHint } from '../../utils/otpDelivery.js';
 import { FaEnvelope } from 'react-icons/fa';
 
 const ForgotPassword = () => {
@@ -20,25 +21,34 @@ const ForgotPassword = () => {
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    blockNativeFormSubmit(e);
     if (!email.trim()) return;
     setLoading(true);
     try {
       const res = await sendForgotPasswordOtpApi({ email: email.trim().toLowerCase() });
-      const data = unwrapResponseData(res) || {};
+      const data = safeUnwrapAuthResponse(res);
       if (data?.devOtp && import.meta.env.DEV) {
         notifySuccess(`Dev OTP: ${data.devOtp}`);
         navigate('/reset-password', { replace: false, state: { email: email.trim().toLowerCase() } });
         return;
       }
-      if (!data.sent && data.deliveryHint) {
-        notifyError(data.deliveryHint);
-        return;
+      if (!isEmailDelivered(data)) {
+        const hint = getDeliveryHint(data, t('auth.otpResendNotDelivered'));
+        if (hint) notifyError(hint);
+      } else {
+        notifySuccess(t('auth.forgotSubtitle'));
       }
-      notifySuccess(t('auth.forgotSubtitle'));
-      navigate('/reset-password', { replace: false, state: { email: email.trim().toLowerCase() } });
+      navigate('/reset-password', {
+        replace: false,
+        state: {
+          email: email.trim().toLowerCase(),
+          emailDelivered: isEmailDelivered(data),
+          deliveryHint: getDeliveryHint(data, '') || null,
+          deliveryReason: data.deliveryReason || null
+        }
+      });
     } catch (err) {
-      notifyError(formatUserError(err, t, { fallback: t('errors.generic') }));
+      notifyAuthError(err, t, 'otp');
     } finally {
       setLoading(false);
     }
@@ -62,7 +72,7 @@ const ForgotPassword = () => {
           <div className="tp-auth-v2__glass-content tp-auth-v2__glass-content--login">
             <h1 className="h5 fw-bold mb-2 text-body tp-auth-v2__title">{t('auth.forgotTitle')}</h1>
             <p className="small text-muted mb-3">{t('auth.forgotSubtitle')}</p>
-            <form onSubmit={handleSubmit} className="tp-auth-login-form mt-2">
+            <form action="#" method="post" noValidate onSubmit={handleSubmit} className="tp-auth-login-form mt-2">
               <div className="mb-3">
                 <label className="form-label small">{t('auth.email')}</label>
                 <div className="input-group input-group-sm">

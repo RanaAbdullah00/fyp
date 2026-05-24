@@ -5,19 +5,24 @@ import Loader from '../ui/Loader.jsx';
 import ProfileRateUsersPanel from './ProfileRateUsersPanel.jsx';
 import ProfileReviewsPanel from './ProfileReviewsPanel.jsx';
 import ProfileRolePanel from './ProfileRolePanel.jsx';
+import { fetchProfileApi } from '../../services/authService.js';
+import { safeUnwrapAuthResponse } from '../../utils/authApiSafe.js';
 import { useAuth } from '../../hooks/useAuth.js';
 import { useApi } from '../../hooks/useApi.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
-import { notifyError, notifySuccess } from '../ui/ToastProvider.jsx';
+import { notifyError } from '../ui/ToastProvider.jsx';
+import { notifySystem, SystemNotifyType } from '../../utils/notifySystem.js';
 import { unwrapErrorMessage } from '../../utils/unwrapApi.js';
 import { formatUserError } from '../../utils/userErrors.js';
+import SafeAvatar from '../ui/SafeAvatar.jsx';
+import SafeImage from '../ui/SafeImage.jsx';
+import { resolveImageUrl } from '../../utils/imageUrl.js';
 
 const CNIC_REGEX = /^[0-9]{5}-[0-9]{7}-[0-9]{1}$/;
 const PROFILE_FIELD_COUNT = 6;
 
 function imageFieldUrl(value) {
-  const s = typeof value === 'string' ? value.trim() : '';
-  return s || '';
+  return resolveImageUrl(value) || '';
 }
 
 function initialsFrom(name, email) {
@@ -143,22 +148,44 @@ const ProfileEditor = ({ showTabs, onSaved }) => {
         setCnicLocked(Boolean(updated.cnic_number));
         setProfileComplete(Boolean(updated.is_profile_complete));
         setFiles({ cnic_image: null, cnic_image_back: null, profile_image: null });
-        login({
-          user: {
-            ...user,
-            name: updated.full_name || user?.name,
-            fullName: updated.full_name || user?.fullName,
-            profileImage: updated.profile_image || user?.profileImage,
-            profileComplete: Boolean(updated.is_profile_complete)
-          },
-          currentRole: user?.activeRole,
-          roles: {
-            hasShipper: user?.hasShipper,
-            hasCarrier: user?.hasCarrier
+        try {
+          const profRes = await fetchProfileApi();
+          const prof = safeUnwrapAuthResponse(profRes);
+          if (prof?.user) login(prof);
+          else {
+            login({
+              user: {
+                ...user,
+                name: updated.full_name || user?.name,
+                fullName: updated.full_name || user?.fullName,
+                profileImage: updated.profile_image || user?.profileImage,
+                profileComplete: Boolean(updated.is_profile_complete)
+              },
+              currentRole: user?.activeRole,
+              roles: {
+                hasShipper: user?.hasShipper,
+                hasCarrier: user?.hasCarrier
+              }
+            });
           }
-        });
+        } catch {
+          login({
+            user: {
+              ...user,
+              name: updated.full_name || user?.name,
+              fullName: updated.full_name || user?.fullName,
+              profileImage: updated.profile_image || user?.profileImage,
+              profileComplete: Boolean(updated.is_profile_complete)
+            },
+            currentRole: user?.activeRole,
+            roles: {
+              hasShipper: user?.hasShipper,
+              hasCarrier: user?.hasCarrier
+            }
+          });
+        }
         onSaved?.();
-        notifySuccess(t('common.save'));
+        notifySystem(SystemNotifyType.PROFILE_UPDATED, t('common.save'));
         if (Array.isArray(updated.upload_failures) && updated.upload_failures.length) {
           notifyError(t('errors.fileUploadPartial'));
         }
@@ -200,7 +227,12 @@ const ProfileEditor = ({ showTabs, onSaved }) => {
         style={{ width: 72, height: 72, borderColor: 'var(--pak-border)' }}
       >
         {profilePhotoUrl ? (
-          <img src={profilePhotoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <SafeAvatar
+            src={profilePhotoUrl}
+            name={form.full_name || user?.name}
+            email={user?.email}
+            imgClassName="tp-img-cover"
+          />
         ) : (
           <div className="w-100 h-100 d-flex align-items-center justify-content-center tp-profile-avatar-fallback small">
             {dpInitials}
@@ -223,7 +255,13 @@ const ProfileEditor = ({ showTabs, onSaved }) => {
           {cnicFrontUrl ? (
             <div className="col-6" key="cnic-front-preview">
               <div className="tp-secondary-text small mb-1">{t('profile.cnicFrontShort')}</div>
-              <img src={cnicFrontUrl} alt="" className="w-100 rounded border" style={{ maxHeight: 120, objectFit: 'cover' }} />
+              <SafeImage
+                src={cnicFrontUrl}
+                alt=""
+                className="w-100 rounded border"
+                style={{ maxHeight: 120, objectFit: 'cover' }}
+                fallback={<p className="tp-secondary-text small mb-0 fst-italic">{t('profile.notOnFile')}</p>}
+              />
             </div>
           ) : (
             <div className="col-6" key="cnic-front-missing">
@@ -234,7 +272,13 @@ const ProfileEditor = ({ showTabs, onSaved }) => {
           {cnicBackUrl ? (
             <div className="col-6" key="cnic-back-preview">
               <div className="tp-secondary-text small mb-1">{t('profile.cnicBackShort')}</div>
-              <img src={cnicBackUrl} alt="" className="w-100 rounded border" style={{ maxHeight: 120, objectFit: 'cover' }} />
+              <SafeImage
+                src={cnicBackUrl}
+                alt=""
+                className="w-100 rounded border"
+                style={{ maxHeight: 120, objectFit: 'cover' }}
+                fallback={<p className="tp-secondary-text small mb-0 fst-italic">{t('profile.notOnFile')}</p>}
+              />
             </div>
           ) : (
             <div className="col-6" key="cnic-back-missing">
@@ -262,7 +306,13 @@ const ProfileEditor = ({ showTabs, onSaved }) => {
       {cnicFrontUrl ? (
         <div className="mb-2">
           <div className="tp-secondary-text small mb-1">{t('profile.cnicOnFileFront')}</div>
-          <img src={cnicFrontUrl} alt="" className="w-100 rounded border" style={{ maxHeight: 100, objectFit: 'cover' }} />
+          <SafeImage
+            src={cnicFrontUrl}
+            alt=""
+            className="w-100 rounded border"
+            style={{ maxHeight: 100, objectFit: 'cover' }}
+            fallback={<p className="tp-secondary-text small mb-0 fst-italic">{t('profile.notOnFile')}</p>}
+          />
         </div>
       ) : (
         <>
@@ -278,7 +328,13 @@ const ProfileEditor = ({ showTabs, onSaved }) => {
       {cnicBackUrl ? (
         <div className="mb-2">
           <div className="tp-secondary-text small mb-1">{t('profile.cnicOnFileBack')}</div>
-          <img src={cnicBackUrl} alt="" className="w-100 rounded border" style={{ maxHeight: 100, objectFit: 'cover' }} />
+          <SafeImage
+            src={cnicBackUrl}
+            alt=""
+            className="w-100 rounded border"
+            style={{ maxHeight: 100, objectFit: 'cover' }}
+            fallback={<p className="tp-secondary-text small mb-0 fst-italic">{t('profile.notOnFile')}</p>}
+          />
         </div>
       ) : (
         <>

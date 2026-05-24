@@ -1,3 +1,5 @@
+import { normalizeBidStatus } from '../utils/bidStatus.js';
+
 // Data normalization adapters so UI never breaks on field mismatches.
 
 export const normalizeLoad = (raw) => {
@@ -25,7 +27,23 @@ export const normalizeLoad = (raw) => {
     expectedPrice: price,
     pickupDate: raw.pickupDate ?? raw.date ?? '',
     deadlineHours: raw.deadlineHours != null ? raw.deadlineHours : 2,
-    deadline: raw.deadline
+    deadlineMinutes:
+      raw.deadlineMinutes != null
+        ? Number(raw.deadlineMinutes)
+        : (raw.deadlineHours != null ? Number(raw.deadlineHours) * 60 : 120),
+    biddingEndsAt: raw.biddingEndsAt ?? raw.bidding_ends_at ?? null,
+    deadline:
+      raw.deadline ??
+      raw.biddingEndsAt ??
+      (() => {
+        const created = raw.createdAt ?? raw.created_at;
+        if (!created) return undefined;
+        const mins =
+          raw.deadlineMinutes != null
+            ? Number(raw.deadlineMinutes)
+            : Number(raw.deadlineHours != null ? raw.deadlineHours : 2) * 60;
+        return new Date(new Date(created).getTime() + mins * 60000).toISOString();
+      })()
   };
 };
 
@@ -38,13 +56,15 @@ export const normalizeBid = (raw) => {
   return {
     id,
     loadId: raw.loadId ?? raw.load ?? null,
+    loadCode: raw.loadCode ?? raw.load_code ?? null,
     carrierId: raw.carrierId ?? raw.carrier ?? null,
     carrierName: raw.carrierName ?? raw.name ?? 'Carrier',
     vehicleType: raw.vehicleType ?? 'Truck',
     transitTime: raw.transitTime ?? raw.etaDays ?? 2,
     price,
     amount: price,
-    status: raw.status ?? 'pending',
+    status: normalizeBidStatus(raw.status ?? raw.flowStatus ?? 'pending'),
+    flowStatus: raw.flowStatus ?? null,
     suggestedAmount: raw.suggestedAmount != null ? Number(raw.suggestedAmount) : null,
     suggestedAt: raw.suggestedAt ?? null,
     suggestedBy: raw.suggestedBy ?? null,
@@ -57,15 +77,19 @@ export const normalizeBids = (arr) => (Array.isArray(arr) ? arr.map(normalizeBid
 export const normalizeNotification = (raw) => {
   if (!raw) return null;
   const rt = raw.roleType != null && String(raw.roleType).trim() !== '' ? String(raw.roleType).toLowerCase().trim() : null;
-  const ty = raw.type != null && String(raw.type).trim() !== '' ? String(raw.type).trim() : null;
+  const title = raw.title != null && String(raw.title).trim() !== '' ? String(raw.title).trim() : null;
+  const ty =
+    raw.type != null && String(raw.type).trim() !== ''
+      ? String(raw.type).trim()
+      : title;
   return {
     id: raw.id ?? raw._id ?? null,
     senderId: raw.senderId ?? null,
     receiverId: raw.receiverId ?? null,
     roleType: rt,
     type: ty,
-    message: raw.message ?? raw.title ?? '',
-    title: raw.title ?? null,
+    message: raw.message ?? title ?? '',
+    title,
     createdAt: raw.createdAt ?? new Date().toISOString(),
     read: Boolean(raw.read ?? raw.isRead)
   };
@@ -93,10 +117,18 @@ export const normalizeTracking = (raw) => {
       eta: t.eta,
       locationUnavailable,
       location: safeLoc,
-      currentLocation: safeLoc
+      currentLocation: safeLoc,
+      locationUpdatedAt: t.locationUpdatedAt ?? null,
+      ts: raw.ts ?? t.ts ?? null
     },
     history: Array.isArray(raw.history) ? raw.history : [],
-    liveTrackingMap: raw.liveTrackingMap || { coordinates: [] }
+    liveTrackingMap: raw.liveTrackingMap || { coordinates: [] },
+    origin: raw.origin || null,
+    destination: raw.destination || null,
+    refKey: raw.refKey != null ? String(raw.refKey) : null,
+    loadId: raw.loadId != null ? String(raw.loadId) : null,
+    lifecycleStage: raw.lifecycleStage ?? null,
+    ts: raw.ts != null ? Number(raw.ts) : null
   };
 };
 

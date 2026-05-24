@@ -1,4 +1,5 @@
 const express = require("express");
+const { body } = require("express-validator");
 const { protect, requireAnyRole, requireActiveRole } = require("../middleware/authMiddleware");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
 const { normalizeShipmentStatus, validateShipmentTransition } = require("../utils/shipmentStatus");
@@ -8,6 +9,20 @@ const {
   handleValidationErrors
 } = require("../middleware/validateShipmentBody");
 const { query } = require("../db/pool");
+const { notifyUser } = require("../utils/notifyEvent");
+const { emitToTracking } = require("../services/realtimeHub");
+const {
+  buildRouteCoordinates,
+  trackRoomKey,
+  trackingRefKey,
+  buildTrackingUpdatePayload
+} = require("../utils/trackingPayload");
+const {
+  validateGpsCoordinates,
+  checkGpsThrottle,
+  markGpsWritten,
+  assertAssignedCarrierForGps
+} = require("../utils/gpsTracking");
 
 const router = express.Router();
 
@@ -56,8 +71,7 @@ function assertTrackAccessOrThrow(load, auth, { allowCarrierStatusWrite = false 
   const uid = String(auth?.userId || "");
   const isShipper = String(load?.shipper_id || "") === uid;
   const isAssignedCarrier = String(load?.assigned_carrier_id || "") === uid;
-  if (isShipper) return;
-  if (allowCarrierStatusWrite && isAssignedCarrier) return;
+  if (isShipper || isAssignedCarrier) return;
   throw Object.assign(new Error("Forbidden"), { statusCode: 403 });
 }
 
@@ -111,6 +125,32 @@ async function getShipmentHistory(shipmentId) {
 }
 
 router.get(
+  "/completed",
+  protect,
+  requireAnyRole(["shipper", "carrier", "admin"]),
+  async (req, res) => {
+    try {
+      const uid = req.auth.userId;
+      const { rows } = await query(
+        `SELECT l.id, l.code, l.cargo, l.origin, l.destination,
+                l.vehicle_type AS "vehicleType", l.pickup_date AS "pickupDate",
+                s.status AS "shipmentStatus", s.updated_at AS "completedAt"
+         FROM shipments s
+         JOIN loads l ON l.id = s.load_id
+         WHERE s.status IN ('delivered', 'closed')
+           AND (l.shipper_id = $1 OR l.assigned_carrier_id = $1)
+         ORDER BY s.updated_at DESC
+         LIMIT 100`,
+        [uid]
+      );
+      return sendSuccess(res, 200, rows);
+    } catch (err) {
+      return sendError(res, 500, err.message || "Server error");
+    }
+  }
+);
+
+router.get(
   "/track/:id",
   protect,
   requireAnyRole(["shipper", "carrier", "admin"]),
@@ -122,21 +162,22 @@ router.get(
       if (!load) return sendError(res, 404, "Not found");
       assertTrackAccessOrThrow(load, req.auth, { allowCarrierStatusWrite: false });
 
+      const { rows: loadRows } = await query(
+        `SELECT origin, destination FROM loads WHERE id = $1`,
+        [load.id]
+      );
+      const origin = loadRows[0]?.origin || "";
+      const destination = loadRows[0]?.destination || "";
+      const routeCoords = buildRouteCoordinates(origin, destination);
+
       const shipment = await getOrCreateShipment(load.id);
       const history = await getShipmentHistory(shipment.id);
-      const tracking = {
-        status: normalizeShipmentStatus(shipment.status) || "posted",
-        currentLocation:
-          shipment.location_unavailable || shipment.current_lat == null || shipment.current_lng == null
-            ? null
-            : [Number(shipment.current_lat), Number(shipment.current_lng)],
-        locationUnavailable: Boolean(shipment.location_unavailable)
-      };
+      const core = await buildTrackingUpdatePayload(load.id, null, null);
       const payload = toTrackResponse(req, {
-        refKey: load.code || load.id,
-        tracking,
+        ...core,
+        refKey: trackingRefKey(load),
         history,
-        liveTrackingMap: { coordinates: [] }
+        liveTrackingMap: core?.liveTrackingMap || { coordinates: routeCoords }
       });
       return sendSuccess(res, 200, payload);
     } catch (err) {
@@ -177,7 +218,7 @@ router.put(
           res,
           200,
           toTrackResponse(req, {
-            refKey: load.code || load.id,
+            refKey: trackRoomKey(load),
             tracking: { status: canonical, locationUnavailable: Boolean(shipment.location_unavailable) },
             history,
             liveTrackingMap: { coordinates: [] }
@@ -203,19 +244,114 @@ router.put(
         await query(`UPDATE loads SET status = $2, updated_at = now() WHERE id = $1`, [load.id, nextLoadStatus]);
       }
 
+      if (canonical === "delivered" || canonical === "closed") {
+        const { rows: parties } = await query(
+          `SELECT shipper_id, assigned_carrier_id FROM loads WHERE id = $1`,
+          [load.id]
+        );
+        const p = parties[0];
+        const ref = load.code || String(load.id).slice(0, 8);
+        const msg = `Shipment ${ref} marked ${canonical}`;
+        if (p?.shipper_id) {
+          await notifyUser({
+            receiverId: p.shipper_id,
+            senderId: req.auth.userId,
+            roleType: "carrier",
+            title: "DELIVERY_COMPLETED",
+            type: "DELIVERY_COMPLETED",
+            message: msg
+          });
+        }
+        if (p?.assigned_carrier_id) {
+          await notifyUser({
+            receiverId: p.assigned_carrier_id,
+            senderId: req.auth.userId,
+            roleType: "shipper",
+            title: "DELIVERY_COMPLETED",
+            type: "DELIVERY_COMPLETED",
+            message: msg
+          });
+        }
+      }
+
       const history = await getShipmentHistory(shipment.id);
+      const core = await buildTrackingUpdatePayload(load.id, null, null);
       const payload = toTrackResponse(req, {
-        refKey: load.code || load.id,
-        tracking: { status: canonical, locationUnavailable: Boolean(shipment.location_unavailable) },
-        history,
-        liveTrackingMap: { coordinates: [] }
+        ...core,
+        refKey: trackingRefKey(load),
+        history
       });
+      const room = trackRoomKey(load);
+      if (room && core) emitToTracking(room, "tracking:update", core);
       return sendSuccess(res, 200, payload);
     } catch (err) {
       const status = err.statusCode || 500;
       const safeMsg =
         status >= 500 ? "Server error" : err.message || "Request failed";
       return sendError(res, status, safeMsg);
+    }
+  }
+);
+
+router.put(
+  "/:id/location",
+  protect,
+  requireAnyRole(["carrier"]),
+  requireActiveRole("carrier"),
+  shipmentIdParam,
+  [
+    body("lat").isFloat({ min: -90, max: 90 }).withMessage("Invalid lat"),
+    body("lng").isFloat({ min: -180, max: 180 }).withMessage("Invalid lng")
+  ],
+  handleValidationErrors,
+  async (req, res) => {
+    try {
+      const load = await resolveLoadForRef(req.params.id);
+      if (!load) return sendError(res, 404, "Not found");
+      assertTrackAccessOrThrow(load, req.auth, { allowCarrierStatusWrite: true });
+
+      const carrierErr = assertAssignedCarrierForGps(load, req.auth.userId);
+      if (carrierErr) throw carrierErr;
+
+      const coordCheck = validateGpsCoordinates(req.body.lat, req.body.lng);
+      if (!coordCheck.ok) return sendError(res, 400, coordCheck.message);
+
+      const throttle = checkGpsThrottle(load.id);
+      if (!throttle.ok) {
+        return sendError(res, 429, throttle.message, { retryAfterMs: throttle.retryAfterMs });
+      }
+
+      const lat = coordCheck.lat;
+      const lng = coordCheck.lng;
+      const shipment = await getOrCreateShipment(load.id);
+
+      const updateResult = await query(
+        `UPDATE shipments
+         SET current_lat = $2, current_lng = $3, location_unavailable = false, updated_at = now()
+         WHERE load_id = $1`,
+        [load.id, lat, lng]
+      );
+      if (!updateResult.rowCount) {
+        return sendError(res, 500, "Could not save location");
+      }
+      markGpsWritten(load.id);
+
+      const history = await getShipmentHistory(shipment.id);
+      const core = await buildTrackingUpdatePayload(load.id, lat, lng);
+      const payload = toTrackResponse(req, {
+        ...core,
+        refKey: trackingRefKey(load),
+        history
+      });
+
+      const room = trackRoomKey(load);
+      if (room && core) {
+        emitToTracking(room, "tracking:update", core);
+      }
+      return sendSuccess(res, 200, payload);
+    } catch (err) {
+      const status = err.statusCode || 500;
+      return sendError(res, status, status >= 500 ? "Server error" : err.message || "Request failed");
     }
   }
 );

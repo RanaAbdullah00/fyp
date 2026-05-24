@@ -1,8 +1,7 @@
 const { verifyToken } = require("../utils/jwt");
 const { sendError } = require("../utils/apiResponse");
 const userRepo = require("../repositories/userRepo");
-
-const DEMO_FORCE_ADMIN_EMAIL = "mrabdullah0456@gmail.com";
+const { isDemoAdminEmail } = require("../utils/demoAdmin");
 
 async function protect(req, res, next) {
   try {
@@ -27,7 +26,7 @@ async function protect(req, res, next) {
       return sendError(res, 403, "Account is blocked");
     }
     const emailLc = String(user.email || "").trim().toLowerCase();
-    if (!user.verified && emailLc !== DEMO_FORCE_ADMIN_EMAIL) {
+    if (!user.verified && !isDemoAdminEmail(emailLc)) {
       return sendError(res, 403, "Please verify your email before using the app.", null, "EMAIL_NOT_VERIFIED");
     }
 
@@ -48,7 +47,7 @@ function requireRole(role) {
   return (req, res, next) => {
     const roles = req.auth?.roles || req.user?.roles || [];
     if (!roles.includes(role)) {
-      return sendError(res, 403, "Forbidden");
+      return sendError(res, 403, "Forbidden", null, "FORBIDDEN_ROLE");
     }
     return next();
   };
@@ -59,7 +58,7 @@ function requireAnyRole(rolesList) {
   return (req, res, next) => {
     const roles = req.auth?.roles || req.user?.roles || [];
     if (!required.some((r) => roles.includes(r))) {
-      return sendError(res, 403, "Forbidden");
+      return sendError(res, 403, "Forbidden", null, "FORBIDDEN_ROLE");
     }
     return next();
   };
@@ -72,7 +71,7 @@ function requireActiveRole(...allowed) {
     if (roles.includes("admin")) return next();
     const active = req.auth?.activeRole;
     if (list.includes(active)) return next();
-    return sendError(res, 403, "Switch role to continue");
+    return sendError(res, 403, "Switch role to continue", null, "WRONG_ACTIVE_ROLE");
   };
 }
 

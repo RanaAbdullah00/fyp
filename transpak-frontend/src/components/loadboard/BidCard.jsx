@@ -4,7 +4,10 @@ import Badge from '../ui/Badge.jsx';
 import Button from '../ui/Button.jsx';
 import ConfirmActionModal from '../ui/ConfirmActionModal.jsx';
 import UserRatingBadge from '../reviews/UserRatingBadge.jsx';
+import ProfileLink from '../profile/ProfileLink.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
+import { translateBidStatus } from '../../utils/i18nLabels.js';
+import { isAwaitingShipper, isCounterOffered, normalizeBidStatus } from '../../utils/bidStatus.js';
 
 function formatHHMMSS(totalSeconds) {
   const s = Math.max(0, Math.floor(totalSeconds));
@@ -27,6 +30,8 @@ const BidCard = ({
   actionsDisabled,
   /** UUID of counterpart for trust badge (carrier when shipper; shipper when carrier) */
   ratingTargetUserId = null,
+  /** Explicit profile link target (defaults to ratingTargetUserId or bid.carrierId) */
+  profileUserId = null,
   /** Optional label when carrierName is empty (carrier view) */
   counterpartyLabel = null
 }) => {
@@ -54,29 +59,23 @@ const BidCard = ({
 
   const remainingSeconds = Math.max(0, Math.floor((expiresAtMs - nowMs) / 1000));
   const isExpired = remainingSeconds <= 0 || bid.status === 'expired';
-  const statusBadgeLabel =
-    isExpired
-      ? t('bidCard.expired')
-      : bid.status === 'suggested'
-      ? t('bidCard.suggested')
-      : bid.status === 'accepted'
-      ? t('bidCard.accepted')
-      : bid.status === 'rejected'
-      ? t('bidCard.rejected')
-      : bid.status === 'pending'
-      ? t('bidCard.pending')
-      : (bid.status && String(bid.status).toUpperCase()) || t('bidCard.pending');
+  const canonStatus = normalizeBidStatus(bid.status);
+  const statusBadgeLabel = isExpired
+    ? t('bidCard.expired')
+    : translateBidStatus(t, canonStatus);
   const progressPct = Math.max(0, Math.min(100, Math.round((remainingSeconds / totalWindow) * 100)));
   const amount = Number(bid?.amount ?? bid?.price ?? 0);
   const suggestedAmount = bid?.suggestedAmount != null ? Number(bid.suggestedAmount) : null;
   const currency = bid?.currency || 'PKR';
-  const isSuggested = bid?.status === 'suggested';
+  const isSuggested = isCounterOffered(bid.status);
   const suggestedByShipper = isSuggested && bid?.suggestedBy === 'shipper';
   const suggestedByCarrier = isSuggested && bid?.suggestedBy === 'carrier';
   const displayAmount = suggestedAmount != null ? suggestedAmount : amount;
 
+  const profileId = profileUserId || ratingTargetUserId || (isShipper ? bid.carrierId : bid.shipperId);
   const primaryName =
     (isShipper ? bid.carrierName : counterpartyLabel || bid.carrierName) || (isShipper ? t('auth.carrier') : t('auth.shipper'));
+  const profileRole = isShipper ? t('auth.carrier') : t('auth.shipper');
 
   const [suggestInput, setSuggestInput] = useState('');
   const [showSuggestInput, setShowSuggestInput] = useState(false);
@@ -92,7 +91,7 @@ const BidCard = ({
     : false;
 
   const canReject = isShipper
-    ? showActions && bid.status === 'pending' && typeof onReject === 'function'
+    ? showActions && isAwaitingShipper(bid.status) && typeof onReject === 'function'
     : isCarrier
     ? showActions && suggestedByShipper && typeof onRejectSuggestion === 'function'
     : false;
@@ -128,10 +127,16 @@ const BidCard = ({
   return (
     <Card className={`tp-bid-card ${isExpired ? 'opacity-50' : ''}`}>
       <div className="d-flex justify-content-between align-items-center mb-2 gap-2 flex-wrap">
-        <div className="min-w-0 flex-grow-1" style={{ minWidth: 'min(100%, 12rem)' }}>
+        <div className="min-w-0 flex-grow-1 tp-min-w-12">
           <div className="d-flex align-items-center gap-2 flex-wrap">
-            <h6 className="mb-0 text-break">{primaryName}</h6>
-            {ratingTargetUserId ? <UserRatingBadge userId={ratingTargetUserId} /> : null}
+            {profileId ? (
+              <h6 className="mb-0">
+                <ProfileLink userId={profileId} name={primaryName} showBadge role={profileRole} />
+              </h6>
+            ) : (
+              <h6 className="mb-0 text-break">{primaryName}</h6>
+            )}
+            {profileId ? <UserRatingBadge userId={profileId} /> : null}
           </div>
           <small className="text-muted d-block text-break">
             {bid.vehicleType} · {bid.transitTime} {t('bidCard.daysSuffix')}
@@ -168,11 +173,11 @@ const BidCard = ({
           <span>{t('bidCard.expiresIn')}</span>
           <span className={isExpired ? 'text-muted' : 'fw-semibold'}>{formatHHMMSS(remainingSeconds)}</span>
         </div>
-        <div className="progress" style={{ height: 6 }}>
+        <div className="progress tp-progress-thin">
           <div
-            className={`progress-bar ${isExpired ? 'bg-secondary' : 'bg-success'}`}
+            className={`progress-bar tp-progress-bar ${isExpired ? 'bg-secondary' : 'bg-success'}`}
             role="progressbar"
-            style={{ width: `${progressPct}%` }}
+            style={{ '--tp-progress': `${progressPct}%` }}
             aria-valuenow={progressPct}
             aria-valuemin="0"
             aria-valuemax="100"
@@ -260,5 +265,5 @@ const BidCard = ({
   );
 };
 
-export default BidCard;
+export default React.memo(BidCard);
 

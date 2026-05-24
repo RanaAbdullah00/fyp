@@ -7,12 +7,11 @@ import AuthHeaderActions from '../../components/auth/AuthHeaderActions.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { useAuth } from '../../hooks/useAuth.js';
 import { useAuthViewportLock } from '../../hooks/useAuthViewportLock.js';
-import { verifyRegisterOtpApi, resendRegisterOtpApi } from '../../services/authService.js';
-import { unwrapResponseData } from '../../utils/unwrapApi.js';
-import { formatUserError } from '../../utils/userErrors.js';
-import { getOtpFlowErrorToast } from '../../utils/authApiErrors.js';
+import { verifyRegisterOtpApi, resendRegisterOtpApi, fetchProfileApi } from '../../services/authService.js';
+import { safeUnwrapAuthResponse, blockNativeFormSubmit, safeDashboardPath } from '../../utils/authApiSafe.js';
 import { notifyError, notifySuccess } from '../../components/ui/ToastProvider.jsx';
-import { dashboardPathForRole } from '../../utils/dashboardPath.js';
+import { notifyAuthError } from '../../utils/notifySystem.js';
+import { isEmailDelivered, getDeliveryHint } from '../../utils/otpDelivery.js';
 
 const VerifyEmail = () => {
   const navigate = useNavigate();
@@ -28,13 +27,17 @@ const VerifyEmail = () => {
   const [cooldown, setCooldown] = useState(0);
   const [deliveryBanner, setDeliveryBanner] = useState(() => ({
     hint: location.state?.deliveryHint || null,
-    reason: location.state?.deliveryReason || null
+    reason: location.state?.deliveryReason || null,
+    showWarning:
+      location.state?.emailDelivered === false || Boolean(location.state?.deliveryHint)
   }));
 
   useEffect(() => {
     setDeliveryBanner({
       hint: location.state?.deliveryHint || null,
-      reason: location.state?.deliveryReason || null
+      reason: location.state?.deliveryReason || null,
+      showWarning:
+        location.state?.emailDelivered === false || Boolean(location.state?.deliveryHint)
     });
   }, [location.state]);
 
@@ -60,15 +63,23 @@ const VerifyEmail = () => {
     setLoading(true);
     try {
       const res = await verifyRegisterOtpApi({ email, code: c });
-      const payload = unwrapResponseData(res) || {};
+      const payload = safeUnwrapAuthResponse(res);
       const { token, user, currentRole } = payload;
       if (token) localStorage.setItem('transpak_token', token);
-      if (user) login(payload);
+      let session = payload;
+      try {
+        const profRes = await fetchProfileApi();
+        const prof = safeUnwrapAuthResponse(profRes);
+        if (prof?.user) session = prof;
+      } catch {
+        /* use verify payload */
+      }
+      if (session?.user) login(session);
       notifySuccess(t('auth.verifyEmailTitle'));
-      const role = currentRole || user?.activeRole || user?.roles?.[0];
-      navigate(dashboardPathForRole(role), { replace: true });
+      const role = session?.user?.activeRole ?? currentRole ?? user?.activeRole ?? user?.roles?.[0];
+      navigate(safeDashboardPath(role), { replace: true });
     } catch (err) {
-      notifyError(getOtpFlowErrorToast(err, t) || formatUserError(err, t, { fallback: t('errors.generic') }));
+      notifyAuthError(err, t, 'otp');
     } finally {
       setLoading(false);
     }
@@ -79,17 +90,18 @@ const VerifyEmail = () => {
     setResendLoading(true);
     try {
       const res = await resendRegisterOtpApi({ email });
-      const data = unwrapResponseData(res) || {};
+      const data = safeUnwrapAuthResponse(res);
       if (data?.devOtp && import.meta.env.DEV) {
         notifySuccess(`Dev OTP: ${data.devOtp}`);
         const retry = Number(data?.retryAfterSeconds);
         if (Number.isFinite(retry) && retry > 0) setCooldown(retry);
         else setCooldown(45);
-      } else if (data?.deliveryFailed && !data?.devOtp) {
-        const hint = data.deliveryHint || t('auth.otpResendNotDelivered');
+      } else if (!isEmailDelivered(data) && !data?.devOtp) {
+        const hint = getDeliveryHint(data, t('auth.otpResendNotDelivered'));
         setDeliveryBanner((prev) => ({
           hint,
-          reason: data.deliveryReason || prev.reason
+          reason: data.deliveryReason || prev.reason,
+          showWarning: true
         }));
         notifyError(hint);
         const retry = Number(data?.retryAfterSeconds);
@@ -97,20 +109,19 @@ const VerifyEmail = () => {
         else setCooldown(45);
       } else {
         notifySuccess(t('auth.resendOtp'));
-        setDeliveryBanner((prev) => ({ ...prev, hint: null, reason: null }));
+        setDeliveryBanner((prev) => ({ ...prev, hint: null, reason: null, showWarning: false }));
         const retry = Number(data?.retryAfterSeconds);
         if (Number.isFinite(retry) && retry > 0) setCooldown(retry);
         else setCooldown(45);
       }
     } catch (err) {
-      const raw = getOtpFlowErrorToast(err, t) || formatUserError(err, t, { fallback: t('errors.generic') });
+      notifyAuthError(err, t, 'otp');
       const retryRaw =
         err?.response?.data?.data?.retryAfterSeconds ??
         err?.response?.data?.retryAfterSeconds ??
         err?.response?.data?.data?.retry_after_seconds;
       const retry = Number(retryRaw);
       if (Number.isFinite(retry) && retry > 0) setCooldown(retry);
-      notifyError(raw);
     } finally {
       setResendLoading(false);
     }
@@ -139,12 +150,15 @@ const VerifyEmail = () => {
             <p className="small text-body-secondary mb-3">
               <strong className="text-body">{email}</strong>
             </p>
-            {deliveryBanner.hint ? (
-              <p className="small text-body-secondary mb-3 border-start border-3 ps-2" role="status">
+            {deliveryBanner.showWarning && deliveryBanner.hint ? (
+              <p
+                className="small text-warning-emphasis mb-3 border-start border-warning border-3 ps-2"
+                role="status"
+              >
                 {deliveryBanner.hint}
               </p>
             ) : null}
-            <form onSubmit={handleVerify} className="tp-auth-login-form" noValidate aria-busy={loading}>
+            <form action="#" method="post" onSubmit={handleVerify} className="tp-auth-login-form" noValidate aria-busy={loading}>
               <div className="mb-3">
                 <label className="form-label small" htmlFor="tp-otp-code">
                   {t('auth.otpCodeLabel')}

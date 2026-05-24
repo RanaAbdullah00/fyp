@@ -4,22 +4,25 @@ import Button from '../ui/Button.jsx';
 import Loader from '../ui/Loader.jsx';
 import RoleSelector from './RoleSelector.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
-import { registerApi } from '../../services/authService.js';
+import { registerApi, fetchProfileApi } from '../../services/authService.js';
 import { notifySuccess, notifyError } from '../ui/ToastProvider.jsx';
+import { notifyAuthError } from '../../utils/notifySystem.js';
+import { formatUserError } from '../../utils/userErrors.js';
 import { useAuth } from '../../hooks/useAuth.js';
-import { unwrapResponseData } from '../../utils/unwrapApi.js';
-import { getRegisterErrorToast } from '../../utils/authApiErrors.js';
-import { dashboardPathForRole } from '../../utils/dashboardPath.js';
+import { safeUnwrapAuthResponse } from '../../utils/authApiSafe.js';
+import { isEmailDelivered, getDeliveryHint } from '../../utils/otpDelivery.js';
+import { blockNativeFormSubmit, safeDashboardPath } from '../../utils/authApiSafe.js';
 import PhoneInput from 'react-phone-input-2';
 import 'react-phone-input-2/lib/style.css';
-import { FaUser, FaEnvelope, FaIdCard, FaLock } from 'react-icons/fa';
+import { FaUser, FaEnvelope, FaIdCard } from 'react-icons/fa';
+import PasswordField from '../ui/PasswordField.jsx';
 
 const CNIC_REGEX = /^\d{5}-\d{7}-\d{1}$/;
 
 const RegisterForm = ({ prefill: prefillProp = null, upgradeRole: upgradeRoleProp = null, onDone }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login } = useAuth();
+  const { login, user } = useAuth();
   const { t, isUrdu } = useLanguage();
   const prefill = useMemo(() => prefillProp || location.state?.prefill || null, [prefillProp, location.state]);
   const upgradeRole = useMemo(() => upgradeRoleProp || location.state?.upgradeRole || null, [upgradeRoleProp, location.state]);
@@ -102,7 +105,7 @@ const RegisterForm = ({ prefill: prefillProp = null, upgradeRole: upgradeRolePro
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    blockNativeFormSubmit(e);
     setError('');
     setSuccess('');
     if (!validate()) return;
@@ -117,13 +120,16 @@ const RegisterForm = ({ prefill: prefillProp = null, upgradeRole: upgradeRolePro
         confirmPassword: form.confirmPassword,
         role: form.role
       });
-      const payload = unwrapResponseData(res) || {};
+      const payload = safeUnwrapAuthResponse(res);
       const { token, user, currentRole, registrationKind, emailVerification } = payload;
       const mergedOrExisting = registrationKind === 'merged' || registrationKind === 'existing';
+      const isPendingSignup = registrationKind === 'pending';
       notifySuccess(
         upgradeRole || (mergedOrExisting && token)
           ? t('auth.roleAddedSuccess')
           : mergedOrExisting && !token
+          ? t('auth.verifyEmailToContinue')
+          : isPendingSignup
           ? t('auth.verifyEmailToContinue')
           : t('auth.accountCreatedSuccess')
       );
@@ -131,15 +137,26 @@ const RegisterForm = ({ prefill: prefillProp = null, upgradeRole: upgradeRolePro
       const shouldAutoLogin = Boolean(token && user) && (upgradeRole || mergedOrExisting);
       if (shouldAutoLogin) {
         if (token) localStorage.setItem('transpak_token', token);
-        login(payload);
+        let session = payload;
+        try {
+          const profRes = await fetchProfileApi();
+          const prof = safeUnwrapAuthResponse(profRes);
+          if (prof?.user) session = prof;
+        } catch {
+          /* use register payload */
+        }
+        login(session);
         onDone?.(user);
-        const role = currentRole || user?.activeRole || user?.roles?.[0];
-        navigate(dashboardPathForRole(role), { replace: true });
+        const role = session?.user?.activeRole ?? currentRole ?? user?.activeRole ?? user?.roles?.[0];
+        navigate(safeDashboardPath(role), { replace: true });
         return;
       }
 
       if (import.meta.env.DEV && emailVerification?.devOtp) {
         notifySuccess(`Dev OTP: ${emailVerification.devOtp}`);
+      } else if (emailVerification && !isEmailDelivered(emailVerification)) {
+        const hint = getDeliveryHint(emailVerification, t('auth.otpResendNotDelivered'));
+        if (hint) notifyError(hint);
       }
 
       onDone?.(user);
@@ -147,21 +164,21 @@ const RegisterForm = ({ prefill: prefillProp = null, upgradeRole: upgradeRolePro
         replace: true,
         state: {
           email: form.email.trim().toLowerCase(),
-          deliveryHint: emailVerification?.deliveryHint || null,
+          emailDelivered: emailVerification ? isEmailDelivered(emailVerification) : true,
+          deliveryHint: getDeliveryHint(emailVerification, '') || null,
           deliveryReason: emailVerification?.deliveryReason || null
         }
       });
     } catch (err) {
-      const translated = getRegisterErrorToast(err, t);
-      notifyError(translated);
-      setError(translated);
+      notifyAuthError(err, t, 'register');
+      setError(formatUserError(err, t, { fallback: t('errors.generic') }));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="tp-auth-register-form mt-2">
+    <form action="#" method="post" noValidate onSubmit={handleSubmit} className="tp-auth-register-form mt-2">
       {error && (
         <div className="alert alert-danger py-2 small" role="alert">
           {error}
@@ -257,36 +274,28 @@ const RegisterForm = ({ prefill: prefillProp = null, upgradeRole: upgradeRolePro
       </div>
       <div className="mb-3">
         <label className="form-label small">{t('auth.password')} *</label>
-        <div className="input-group input-group-sm">
-          <span className="input-group-text tp-input-group-addon">
-            <FaLock className="tp-input-icon" />
-          </span>
-          <input
-            type="password"
-            name="password"
-            className={`form-control rounded-3 ${errors.password ? 'is-invalid' : ''} ${isUrdu ? 'text-end' : ''}`}
-            placeholder={t('auth.passwordPlaceholder')}
-            value={form.password}
-            onChange={handleChange}
-          />
-        </div>
+        <PasswordField
+          name="password"
+          value={form.password}
+          onChange={handleChange}
+          placeholder={t('auth.passwordPlaceholder')}
+          invalid={Boolean(errors.password)}
+          isUrdu={isUrdu}
+          autoComplete="new-password"
+        />
         {errors.password && <div className="invalid-feedback">{errors.password}</div>}
       </div>
       <div className="mb-3">
         <label className="form-label small">{t('auth.confirmPassword')} *</label>
-        <div className="input-group input-group-sm">
-          <span className="input-group-text tp-input-group-addon">
-            <FaLock className="tp-input-icon" />
-          </span>
-          <input
-            type="password"
-            name="confirmPassword"
-            className={`form-control rounded-3 ${errors.confirmPassword ? 'is-invalid' : ''} ${isUrdu ? 'text-end' : ''}`}
-            placeholder={t('auth.reenterPasswordPlaceholder')}
-            value={form.confirmPassword}
-            onChange={handleChange}
-          />
-        </div>
+        <PasswordField
+          name="confirmPassword"
+          value={form.confirmPassword}
+          onChange={handleChange}
+          placeholder={t('auth.reenterPasswordPlaceholder')}
+          invalid={Boolean(errors.confirmPassword)}
+          isUrdu={isUrdu}
+          autoComplete="new-password"
+        />
         {errors.confirmPassword && <div className="invalid-feedback">{errors.confirmPassword}</div>}
       </div>
       <div className="d-flex flex-column flex-sm-row gap-2">
@@ -295,7 +304,13 @@ const RegisterForm = ({ prefill: prefillProp = null, upgradeRole: upgradeRolePro
           type="button"
           className="flex-sm-fill py-2 rounded-lg"
           disabled={loading}
-          onClick={() => (upgradeRole ? navigate(-1) : navigate('/login', { replace: false }))}
+          onClick={() => {
+            if (upgradeRole) {
+              navigate(safeDashboardPath(user?.activeRole ?? user?.roles?.[0]), { replace: true });
+              return;
+            }
+            navigate('/login', { replace: false });
+          }}
         >
           {t('auth.cancelRegistration')}
         </Button>

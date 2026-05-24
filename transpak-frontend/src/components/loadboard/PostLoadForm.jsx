@@ -1,7 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import Button from '../ui/Button.jsx';
+import CitySelect from '../ui/CitySelect.jsx';
+import VehicleTypeSelect from './VehicleTypeSelect.jsx';
 import { notifyError } from '../ui/ToastProvider.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
+import { useFareEstimate } from '../../hooks/useFareEstimate.js';
+import { isKnownCity } from '../../data/pakistanCities.js';
 
 const defaultForm = () => ({
   cargo: '',
@@ -11,10 +15,10 @@ const defaultForm = () => ({
   vehicleType: 'Truck',
   expectedPrice: '',
   pickupDate: '',
-  deadlineHours: '2'
+  deadlineValue: '6',
+  deadlineUnit: 'hours'
 });
 
-// Form used by shippers to post or edit a load.
 const PostLoadForm = ({ onSubmit, initialValues = null, submitLabel = null }) => {
   const { t } = useLanguage();
   const primaryCta = submitLabel ?? t('pages.postLoadForm.submitPost');
@@ -23,11 +27,24 @@ const PostLoadForm = ({ onSubmit, initialValues = null, submitLabel = null }) =>
     ...(initialValues || {})
   }));
 
+  const { estimate, loading: fareLoading } = useFareEstimate({
+    origin: form.origin,
+    destination: form.destination,
+    vehicleType: form.vehicleType,
+    enabled: !initialValues
+  });
+
   useEffect(() => {
     if (initialValues && typeof initialValues === 'object') {
       setForm({ ...defaultForm(), ...initialValues });
     }
   }, [initialValues]);
+
+  useEffect(() => {
+    if (!initialValues && estimate?.suggestedFare != null && !form.expectedPrice) {
+      setForm((p) => ({ ...p, expectedPrice: String(Math.round(estimate.suggestedFare)) }));
+    }
+  }, [estimate?.suggestedFare, initialValues, form.expectedPrice]);
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -44,7 +61,32 @@ const PostLoadForm = ({ onSubmit, initialValues = null, submitLabel = null }) =>
       notifyError(t('pages.postLoadForm.pickupFutureError'));
       return;
     }
-    onSubmit?.(form);
+    if (!isKnownCity(form.origin) || !isKnownCity(form.destination)) {
+      notifyError(t('pages.postLoadForm.cityInvalid'));
+      return;
+    }
+    const val = Number(form.deadlineValue);
+    const unit = form.deadlineUnit === 'minutes' ? 'minutes' : 'hours';
+    const deadlineMinutes = unit === 'minutes' ? val : val * 60;
+    if (!Number.isFinite(val) || val < 1) {
+      notifyError(t('pages.postLoadForm.deadlineInvalid'));
+      return;
+    }
+    if (deadlineMinutes < 15 || deadlineMinutes > 72 * 60) {
+      notifyError(t('pages.postLoadForm.deadlineInvalid'));
+      return;
+    }
+    if (minFare > 0 && enteredPrice + 0.01 < minFare) {
+      notifyError(t('pages.postLoadForm.fareBelowMinimum', { fare: Math.ceil(minFare).toLocaleString() }));
+      return;
+    }
+    onSubmit?.({
+      ...form,
+      deadlineMinutes,
+      deadlineHours: Math.ceil(deadlineMinutes / 60),
+      distanceKm: estimate?.distanceKm,
+      suggestedFare: estimate?.suggestedFare
+    });
   };
 
   const tomorrow = (() => {
@@ -58,13 +100,12 @@ const PostLoadForm = ({ onSubmit, initialValues = null, submitLabel = null }) =>
       ? String(initialValues.pickupDate)
       : tomorrow;
 
-  const vType = (code) => {
-    if (code === 'Truck') return t('pages.truckForm.typeTruck');
-    if (code === 'Trailer') return t('pages.truckForm.typeTrailer');
-    if (code === 'Container') return t('pages.truckForm.typeContainer');
-    if (code === 'Flatbed') return t('pages.truckForm.typeFlatbed');
-    return code;
-  };
+  const minFare = Number(estimate?.minimumFare ?? estimate?.suggestedFare ?? 0);
+  const enteredPrice = Number(form.expectedPrice) || 0;
+  const showFareEstimate = isKnownCity(form.origin) && isKnownCity(form.destination) && !initialValues;
+  const fareTooLow = minFare > 0 && enteredPrice > 0 && enteredPrice + 0.01 < minFare;
+  const awaitingFare = showFareEstimate && (fareLoading || !estimate);
+  const submitDisabled = awaitingFare || fareTooLow;
 
   return (
     <form onSubmit={handleSubmit}>
@@ -81,30 +122,55 @@ const PostLoadForm = ({ onSubmit, initialValues = null, submitLabel = null }) =>
       </div>
       <div className="row g-2">
         <div className="col-6">
-          <label className="form-label small">{t('pages.postLoadForm.pickupCity')}</label>
-          <input
+          <CitySelect
             name="origin"
-            className="form-control form-control-sm rounded-3"
-            placeholder={t('pages.postLoadForm.pickupPlaceholder')}
+            label={t('pages.postLoadForm.pickupCity')}
             value={form.origin}
             onChange={handleChange}
             required
           />
         </div>
         <div className="col-6">
-          <label className="form-label small">{t('pages.postLoadForm.dropoffCity')}</label>
-          <input
+          <CitySelect
             name="destination"
-            className="form-control form-control-sm rounded-3"
-            placeholder={t('pages.postLoadForm.dropoffPlaceholder')}
+            label={t('pages.postLoadForm.dropoffCity')}
             value={form.destination}
             onChange={handleChange}
             required
           />
         </div>
       </div>
+      {showFareEstimate ? (
+        <div className="tp-fare-hint mt-2 mb-0" role="status">
+          {fareLoading ? (
+            <p className="mb-0">{t('pages.postLoadForm.fareCalculating')}</p>
+          ) : estimate ? (
+            <>
+              <p className="mb-0">
+                {t('pages.postLoadForm.fareHint', {
+                  km: estimate.distanceKm,
+                  fare: Number(minFare || 0).toLocaleString()
+                })}
+              </p>
+              {estimate.estimatedTravelHours != null ? (
+                <p className="mb-0 small text-muted">
+                  {t('pages.postLoadForm.fareTravelHint', {
+                    hours: estimate.estimatedTravelHours,
+                    minutes: estimate.estimatedTravelMinutes ?? Math.round(estimate.estimatedTravelHours * 60)
+                  })}
+                </p>
+              ) : null}
+            </>
+          ) : null}
+          {fareTooLow ? (
+            <p className="mb-0 small text-danger mt-1">
+              {t('pages.postLoadForm.fareBelowMinimum', { fare: Math.ceil(minFare).toLocaleString() })}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       <div className="row g-2 mt-1">
-        <div className="col-6">
+        <div className="col-12">
           <label className="form-label small">{t('pages.postLoadForm.weightTons')}</label>
           <input
             type="number"
@@ -116,35 +182,84 @@ const PostLoadForm = ({ onSubmit, initialValues = null, submitLabel = null }) =>
             required
           />
         </div>
-        <div className="col-6">
-          <label className="form-label small">{t('pages.postLoadForm.vehicleType')}</label>
-          <select
-            name="vehicleType"
-            className="form-select form-select-sm rounded-3"
-            value={form.vehicleType}
-            onChange={handleChange}
-          >
-            <option value="Truck">{vType('Truck')}</option>
-            <option value="Trailer">{vType('Trailer')}</option>
-            <option value="Container">{vType('Container')}</option>
-            <option value="Flatbed">{vType('Flatbed')}</option>
-          </select>
-        </div>
+      </div>
+      <div className="mt-2">
+        <VehicleTypeSelect name="vehicleType" value={form.vehicleType} onChange={handleChange} />
       </div>
       <div className="row g-2 mt-1">
-        <div className="col-6">
-          <label className="form-label small">{t('pages.postLoadForm.expectedPrice')}</label>
-          <input
-            type="number"
-            name="expectedPrice"
-            className="form-control form-control-sm rounded-3"
-            placeholder={t('pages.postLoadForm.pricePlaceholder')}
-            value={form.expectedPrice}
-            onChange={handleChange}
-            required
-          />
+        <div className="col-12">
+          <label className="form-label small">{t('pages.postLoadForm.recommendedFareLabel')}</label>
+          {showFareEstimate && estimate && minFare > 0 ? (
+            <div className="tp-fare-negotiate mb-2">
+              <div className="d-flex justify-content-between small text-muted mb-1">
+                <span>{t('pages.postLoadForm.fareMinLabel')}: PKR {Math.ceil(minFare).toLocaleString()}</span>
+                <span>
+                  {t('pages.postLoadForm.fareMaxLabel')}: PKR{' '}
+                  {Math.ceil(minFare * 1.5).toLocaleString()}
+                </span>
+              </div>
+              <input
+                type="range"
+                className="form-range"
+                min={Math.ceil(minFare)}
+                max={Math.ceil(minFare * 1.5)}
+                step={500}
+                value={enteredPrice || Math.ceil(minFare)}
+                onChange={(e) =>
+                  setForm((p) => ({ ...p, expectedPrice: String(Math.round(Number(e.target.value))) }))
+                }
+                aria-label={t('pages.postLoadForm.fareAdjust')}
+              />
+              <div className="input-group input-group-sm mt-2">
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary"
+                  onClick={() =>
+                    setForm((p) => ({
+                      ...p,
+                      expectedPrice: String(Math.max(Math.ceil(minFare), (Number(p.expectedPrice) || 0) - 1000))
+                    }))
+                  }
+                >
+                  −
+                </button>
+                <input
+                  type="number"
+                  name="expectedPrice"
+                  className="form-control rounded-3 text-center"
+                  value={form.expectedPrice}
+                  onChange={handleChange}
+                  required
+                />
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary"
+                  onClick={() =>
+                    setForm((p) => ({
+                      ...p,
+                      expectedPrice: String(
+                        Math.min(Math.ceil(minFare * 1.5), (Number(p.expectedPrice) || 0) + 1000)
+                      )
+                    }))
+                  }
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          ) : (
+            <input
+              type="number"
+              name="expectedPrice"
+              className="form-control form-control-sm rounded-3"
+              placeholder={t('pages.postLoadForm.pricePlaceholder')}
+              value={form.expectedPrice}
+              onChange={handleChange}
+              required
+            />
+          )}
         </div>
-        <div className="col-6">
+        <div className="col-12 col-md-6">
           <label className="form-label small">{t('pages.postLoadForm.pickupDate')}</label>
           <input
             type="date"
@@ -156,23 +271,44 @@ const PostLoadForm = ({ onSubmit, initialValues = null, submitLabel = null }) =>
             required
           />
         </div>
-        <div className="col-6">
+        <div className="col-12">
           <label className="form-label small">{t('pages.postLoadForm.deadlineBidding')}</label>
-          <select
-            name="deadlineHours"
-            className="form-select form-select-sm rounded-3"
-            value={form.deadlineHours}
-            onChange={handleChange}
-            required
-          >
-            <option value="2">{t('pages.postLoadForm.deadlineOpt2')}</option>
-            <option value="4">{t('pages.postLoadForm.deadlineOpt4')}</option>
-            <option value="8">{t('pages.postLoadForm.deadlineOpt8')}</option>
-            <option value="24">{t('pages.postLoadForm.deadlineOpt24')}</option>
-          </select>
+          <div className="input-group input-group-sm">
+            <input
+              type="number"
+              name="deadlineValue"
+              className="form-control rounded-3"
+              min={1}
+              max={form.deadlineUnit === 'minutes' ? 4320 : 72}
+              step={1}
+              value={form.deadlineValue}
+              onChange={handleChange}
+              required
+              aria-describedby="deadlineHelp"
+            />
+            <select
+              name="deadlineUnit"
+              className="form-select form-select-sm rounded-3"
+              style={{ maxWidth: '7rem' }}
+              value={form.deadlineUnit}
+              onChange={handleChange}
+              aria-label={t('pages.postLoadForm.deadlineUnitAria')}
+            >
+              <option value="hours">{t('pages.postLoadForm.deadlineHoursUnit')}</option>
+              <option value="minutes">{t('pages.postLoadForm.deadlineMinutesUnit')}</option>
+            </select>
+          </div>
+          <div id="deadlineHelp" className="form-text">
+            {t('pages.postLoadForm.deadlineHelp')}
+          </div>
         </div>
       </div>
-      <Button variant="primary" className="w-100 mt-3 py-2 rounded-lg" type="submit">
+      <Button
+        variant="primary"
+        className="w-100 mt-3 py-2 rounded-lg"
+        type="submit"
+        disabled={submitDisabled}
+      >
         {primaryCta}
       </Button>
     </form>

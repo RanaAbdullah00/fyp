@@ -18,9 +18,11 @@ import {
   FaClipboardCheck
 } from 'react-icons/fa';
 import { useLanguage } from '../../hooks/useLanguage.js';
+import SafeAvatar from '../ui/SafeAvatar.jsx';
 import { useAuth } from '../../hooks/useAuth.js';
 import LogoutConfirmModal from '../ui/LogoutConfirmModal.jsx';
 import { SidebarProfileSheet } from '../profile/ProfileSheet.jsx';
+import ActiveRoleBadge from '../profile/ActiveRoleBadge.jsx';
 
 const navLinkClass = ({ isActive }) =>
   `nav-link d-flex align-items-center gap-2 rounded-lg px-3 py-2 mb-1 ${isActive ? 'active' : ''}`;
@@ -37,7 +39,7 @@ const Sidebar = () => {
   const isCarrier = activeRole === 'carrier';
   const isShipper = activeRole === 'shipper';
 
-  const dashboardPath = isShipper ? '/dashboard/shipper' : isCarrier ? '/dashboard/carrier' : '/dashboard/admin';
+  const dashboardPath = isShipper ? '/dashboard/shipper' : isCarrier ? '/dashboard/carrier' : '/admin/dashboard';
 
   return (
     <aside className="d-none d-md-block sidebar-fixed sidebar-aside d-flex flex-column">
@@ -78,7 +80,7 @@ const Sidebar = () => {
           <>
             <NavLink to="/loads" className={navLinkClass}>
               <FaListUl />
-              {t('common.loads')}
+              {t('loadsHub.navOperations')}
             </NavLink>
             <NavLink to="/bids/mine" className={navLinkClass}>
               <FaGavel />
@@ -116,6 +118,18 @@ const Sidebar = () => {
               <FaUserShield />
               {t('nav.adminUsers')}
             </NavLink>
+            <NavLink to="/admin/bids" className={navLinkClass}>
+              <FaGavel />
+              {t('pages.admin.bidsTitle')}
+            </NavLink>
+            <NavLink to="/admin/notifications" className={navLinkClass}>
+              <FaBell />
+              {t('pages.admin.notificationsTitle')}
+            </NavLink>
+            <NavLink to="/admin/otp-logs" className={navLinkClass}>
+              <FaClipboardCheck />
+              {t('pages.admin.otpLogsTitle')}
+            </NavLink>
             <NavLink to="/admin/roles" className={navLinkClass}>
               <FaUserTag />
               {t('nav.roleManagement')}
@@ -149,10 +163,7 @@ const Sidebar = () => {
           {t('nav.settings')}
         </NavLink>
       </nav>
-      <div
-        className="border-top flex-shrink-0 tp-sidebar-footer"
-        style={{ borderColor: 'var(--pak-border)' }}
-      >
+      <div className="border-top flex-shrink-0 tp-sidebar-footer tp-border-theme">
         <div className="p-3 pb-2">
           {user && (
             <button
@@ -164,33 +175,20 @@ const Sidebar = () => {
                 setProfileSheetOpen(true);
               }}
             >
-              <div
-                className="rounded-circle overflow-hidden border flex-shrink-0"
-                style={{ width: 36, height: 36, borderColor: 'var(--pak-border)' }}
-              >
-                {user.profileImage ? (
-                  <img src={user.profileImage} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                ) : (
-                  <div
-                    className="w-100 h-100 d-flex align-items-center justify-content-center tp-sidebar-avatar-placeholder fw-semibold"
-                    style={{ fontSize: 12 }}
-                  >
-                    {(user.fullName || user.name || user.email || '?')
-                      .split(/\s+/)
-                      .filter(Boolean)
-                      .slice(0, 2)
-                      .map((s) => s[0])
-                      .join('')
-                      .toUpperCase() || '?'}
-                  </div>
-                )}
+              <div className="tp-avatar-36 tp-border-theme rounded-circle overflow-hidden border flex-shrink-0">
+                <SafeAvatar
+                  src={user.profileImage}
+                  name={user.fullName || user.name}
+                  email={user.email}
+                  fallbackClassName="w-100 h-100 d-flex align-items-center justify-content-center tp-sidebar-avatar-placeholder fw-semibold tp-badge-sm"
+                />
               </div>
               <div className="flex-grow-1 min-w-0">
                 <div className="fw-semibold text-truncate small">{user.name || t('common.userFallback')}</div>
                 {user.profileComplete ? (
-                  <span className="badge bg-success" style={{ fontSize: 9 }}>{t('nav.profileCompleteBadge')}</span>
+                  <ActiveRoleBadge className="mt-1" />
                 ) : (
-                  <span className="badge bg-danger" style={{ fontSize: 9 }}>{t('nav.profileIncompleteBadge')}</span>
+                  <span className="badge bg-danger tp-badge-xs">{t('nav.profileIncompleteBadge')}</span>
                 )}
               </div>
             </button>

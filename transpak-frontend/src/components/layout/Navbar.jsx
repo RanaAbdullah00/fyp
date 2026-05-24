@@ -1,49 +1,24 @@
-import React, { useEffect, useState } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { FaBars, FaBell } from 'react-icons/fa';
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { FaBars } from 'react-icons/fa';
 import { useAuth } from '../../hooks/useAuth.js';
-import { AppContext } from '../../context/AppContext.jsx';
 import MobileDrawer from './MobileDrawer.jsx';
 import BrandLogo from './BrandLogo.jsx';
+import NotificationDropdown from '../notifications/NotificationDropdown.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { dashboardPathForRole } from '../../utils/dashboardPath.js';
 import { notifyError } from '../ui/ToastProvider.jsx';
 import { formatUserError } from '../../utils/userErrors.js';
-import api from '../../services/api.js';
 import LanguageToggle from '../ui/LanguageToggle.jsx';
+import ActiveRoleBadge from '../profile/ActiveRoleBadge.jsx';
 
 const Navbar = () => {
   const navigate = useNavigate();
   const { t, isUrdu } = useLanguage();
   const { user, setActiveRole } = useAuth();
-  const app = React.useContext(AppContext);
-  const [serverUnread, setServerUnread] = useState(0);
-  const ephemeralUnread = Array.isArray(app?.notifications)
-    ? app.notifications.filter((n) => !(n.read || n.isRead)).length
-    : 0;
-  const unreadCount = Math.max(serverUnread, ephemeralUnread);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [roleSwitching, setRoleSwitching] = useState(false);
 
-  useEffect(() => {
-    const load = async () => {
-      if (!user) {
-        setServerUnread(0);
-        return;
-      }
-      try {
-        const res = await api.get('/notifications/unread-count');
-        const body = res.data;
-        const n = typeof body?.count === 'number' ? body.count : 0;
-        setServerUnread(n);
-      } catch {
-        setServerUnread(0);
-      }
-    };
-    load();
-    const onRead = () => load();
-    window.addEventListener('tp_notifications_read', onRead);
-    return () => window.removeEventListener('tp_notifications_read', onRead);
-  }, [user]);
   const roles = user?.roles?.length ? user.roles : [user?.activeRole].filter(Boolean);
   const activeRole = user?.activeRole ?? roles[0];
 
@@ -57,19 +32,24 @@ const Navbar = () => {
 
   const navRoleActionLabel = hasBothCommercial ? t('nav.switchAccount') : t('nav.addProfile');
 
-  const handleNavRoleAction = () => {
-    if (!user || !showCommercialRoleAction) return;
+  const handleNavRoleAction = async () => {
+    if (!user || !showCommercialRoleAction || roleSwitching) return;
 
     const originalRole = activeRole;
 
     if (hasBothCommercial) {
       const targetRole = activeRole === 'shipper' ? 'carrier' : activeRole === 'carrier' ? 'shipper' : null;
       if (!targetRole || !roles.includes(targetRole)) return;
-      setActiveRole(targetRole).catch((err) => {
+      setRoleSwitching(true);
+      try {
+        await setActiveRole(targetRole);
+        navigate(dashboardPathForRole(targetRole), { replace: true });
+      } catch (err) {
         notifyError(formatUserError(err, t, { fallback: t('errors.generic') }));
         if (originalRole) navigate(dashboardPathForRole(originalRole), { replace: true });
-      });
-      navigate(dashboardPathForRole(targetRole), { replace: true });
+      } finally {
+        setRoleSwitching(false);
+      }
       return;
     }
 
@@ -89,6 +69,30 @@ const Navbar = () => {
     }
   };
 
+  const roleActionBtn = showCommercialRoleAction ? (
+    <button
+      type="button"
+      className="btn btn-outline-success btn-sm rounded-lg px-2 text-nowrap d-none d-md-inline-flex px-3"
+      onClick={handleNavRoleAction}
+      title={navRoleActionLabel}
+      disabled={roleSwitching}
+    >
+      {roleSwitching ? '…' : navRoleActionLabel}
+    </button>
+  ) : null;
+
+  const roleActionBtnMobile = showCommercialRoleAction ? (
+    <button
+      type="button"
+      className="btn btn-outline-success btn-sm rounded-lg px-2 text-nowrap d-md-none"
+      onClick={handleNavRoleAction}
+      title={navRoleActionLabel}
+      disabled={roleSwitching}
+    >
+      {roleSwitching ? '…' : navRoleActionLabel}
+    </button>
+  ) : null;
+
   return (
     <>
       <nav
@@ -103,35 +107,16 @@ const Navbar = () => {
           >
             <FaBars />
           </button>
-          <Link to="/" className="navbar-brand fw-bold mb-0">
+          <Link to="/" className="navbar-brand fw-bold mb-0 d-flex align-items-center gap-2">
             <BrandLogo variant="mark" title={t('common.appName')} />
+            {user && <ActiveRoleBadge alwaysShow className="tp-active-role-badge--compact" />}
           </Link>
           <div className="d-flex align-items-center gap-2">
             <LanguageToggle className="rounded-lg" />
             {user && (
               <>
-                <NavLink
-                  to="/notifications"
-                  className="btn btn-outline-secondary btn-sm rounded-lg position-relative d-flex align-items-center justify-content-center"
-                  aria-label={t('nav.notificationsAria')}
-                >
-                  <FaBell size={14} />
-                  {unreadCount > 0 && (
-                    <span className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style={{ fontSize: 9 }}>
-                      {unreadCount}
-                    </span>
-                  )}
-                </NavLink>
-                {showCommercialRoleAction && (
-                  <button
-                    type="button"
-                    className="btn btn-outline-success btn-sm rounded-lg px-2 text-nowrap"
-                    onClick={handleNavRoleAction}
-                    title={navRoleActionLabel}
-                  >
-                    {navRoleActionLabel}
-                  </button>
-                )}
+                <NotificationDropdown />
+                {roleActionBtnMobile}
               </>
             )}
           </div>
@@ -141,41 +126,22 @@ const Navbar = () => {
         className={`navbar navbar-expand-md navbar-light shadow-sm sticky-top d-none d-md-flex navbar-custom tp-navbar-surface ${isUrdu ? 'tp-rtl' : ''}`}
       >
         <div className="container-fluid px-3">
-          <Link to="/" className="navbar-brand d-flex align-items-center fw-bold">
-            <BrandLogo title={t('common.appName')} />
+          <Link to="/" className="navbar-brand d-flex align-items-center gap-2 fw-bold">
+            <BrandLogo variant="mark" title={t('common.appName')} />
+            {user && <ActiveRoleBadge alwaysShow className="tp-active-role-badge--compact" />}
           </Link>
 
           <div className="d-flex align-items-center gap-2 flex-wrap justify-content-end">
             <LanguageToggle className="rounded-lg" />
             {user ? (
               <>
-                <NavLink
-                  to="/notifications"
-                  className="btn btn-outline-secondary btn-sm rounded-lg position-relative d-flex align-items-center gap-1"
-                  aria-label={t('nav.notificationsAria')}
-                >
-                  <FaBell size={14} />
-                  {unreadCount > 0 && (
-                    <span className="badge rounded-pill bg-danger" style={{ fontSize: 9 }}>{unreadCount}</span>
-                  )}
-                </NavLink>
-                {showCommercialRoleAction && (
-                  <button
-                    type="button"
-                    className="btn btn-outline-success btn-sm rounded-lg px-3"
-                    onClick={handleNavRoleAction}
-                    title={navRoleActionLabel}
-                  >
-                    {navRoleActionLabel}
-                  </button>
-                )}
+                <NotificationDropdown />
+                {roleActionBtn}
               </>
             ) : (
-              <>
-                <Link to="/login" className="btn btn-primary btn-sm px-3 rounded-lg">
-                  {t('nav.login')}
-                </Link>
-              </>
+              <Link to="/login" className="btn btn-primary btn-sm px-3 rounded-lg">
+                {t('nav.login')}
+              </Link>
             )}
           </div>
         </div>

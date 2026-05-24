@@ -1,0 +1,34 @@
+# TransPak backend only — use this file when THIS FOLDER is the Git repository root
+# (no parent monorepo). If your repo root is the FYP folder instead, use ../render.yaml there.
+#
+# After first deploy: Shell → npm run db:migrate:otp
+# CORS_ORIGIN defaults for Cloudflare Pages + Render; override in the Dashboard if needed.
+
+databases:
+  - name: transpak-db
+    plan: free
+    databaseName: transpak
+
+services:
+  - type: web
+    name: transpak-backend
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: transpak-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGIN
+        value: "https://626c52a8.transpak-frontend.pages.dev,https://20f26555.transpak-frontend.pages.dev,https://transpak-backend-1.onrender.com"
+      - key: CORS_EXTRA_ORIGINS
+        value: "http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173"
+      - key: PG_CONNECTION_TIMEOUT_MS
+        value: "30000"

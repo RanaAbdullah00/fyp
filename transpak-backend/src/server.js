@@ -4,16 +4,65 @@ const fs = require("fs");
 const http = require("http");
 const { Server } = require("socket.io");
 
-const { verifySmtpConnection } = require("../services/emailService");
+const { verifyBrevoApi, validateOutboundMailConfig } = require("../services/emailService");
+const { isDatabaseUrlConfigured } = require("../db/pool");
 const connectDB = require("../config/db");
 const realtimeHub = require("../services/realtimeHub");
 const registerSocketHandlers = require("../sockets");
 const { createApp } = require("./app");
+const { registerProcessSafetyHandlers } = require("../utils/globalErrorHandler");
 
-const PORT = process.env.PORT || 5000;
+const { version: APP_VERSION } = require(path.join(__dirname, "..", "package.json"));
+const BUILD_ID = String(process.env.RENDER_GIT_COMMIT || process.env.BUILD_ID || "local").slice(0, 12);
+
+registerProcessSafetyHandlers();
+
+const BIND_HOST = String(process.env.BIND_HOST || "0.0.0.0").trim() || "0.0.0.0";
+
+/**
+ * True when this process runs on a PaaS that assigns a single HTTP port (Render, Railway, Fly, Cloud Run).
+ * Never try PORT+1 fallback here — the reverse proxy only routes to the assigned PORT.
+ */
+function isPaasPortLock() {
+  if (String(process.env.FORCE_PLATFORM_PORT || "").toLowerCase() === "true") return true;
+  const renderExt = String(process.env.RENDER_EXTERNAL_URL || "");
+  if (renderExt.includes("onrender.com")) return true;
+  if (String(process.env.RENDER || "").toLowerCase() === "true") return true;
+  if (String(process.env.RAILWAY_ENVIRONMENT || "").trim()) return true;
+  if (String(process.env.FLY_APP_NAME || "").trim()) return true;
+  if (String(process.env.K_SERVICE || "").trim()) return true;
+  return false;
+}
+
+const paasPortLock = isPaasPortLock();
+const envPortRaw = String(process.env.PORT || "").trim();
+const initialListenPort = paasPortLock
+  ? Number(envPortRaw)
+  : Number(envPortRaw || 5000) || 5000;
+
+if (paasPortLock && (!Number.isFinite(initialListenPort) || initialListenPort <= 0)) {
+  console.error(
+    "[server] Invalid or missing PORT on this host. On Render, do not set PORT in Environment — the platform injects it."
+  );
+  process.exit(1);
+}
+
+const allowPortFallbackEnv = String(process.env.ALLOW_PORT_FALLBACK || "").toLowerCase();
+const denyPortFallback = allowPortFallbackEnv === "false";
+/** Laptop: try next ports if busy. Render: never (single assigned PORT only). */
+const allowPortFallback =
+  !paasPortLock &&
+  !denyPortFallback &&
+  (allowPortFallbackEnv === "true" ||
+    process.env.NODE_ENV !== "production" ||
+    !String(process.env.RENDER || "").trim());
+
 const DB_RETRY_BASE_MS = Number(process.env.DB_RETRY_BASE_MS || 5000);
 const DB_RETRY_MAX_QUICK = Number(process.env.DB_RETRY_MAX_QUICK || 8);
 const DB_RETRY_SLOW_MS = Number(process.env.DB_RETRY_SLOW_MS || 120000);
+/** After wrong password / Supabase ECIRCUITBREAKER — long wait so we do not extend the lockout (Render unchanged: optional env). */
+const DB_RETRY_CIRCUIT_MS = Number(process.env.DB_RETRY_CIRCUIT_MS || 300000);
+const MAX_PORT_FALLBACK_ATTEMPTS = 25;
 
 function ensureUploadsDir() {
   const uploadsDir = path.join(__dirname, "..", "uploads");
@@ -53,27 +102,34 @@ async function seedAdminIfNeeded() {
       cnicNumber: cfg.cnic,
       fullName: cfg.name
     });
-    // eslint-disable-next-line no-console
     console.log(`Admin ensured: ${cfg.email}`);
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.warn("Seed admin skipped:", err.message);
   }
 }
 
-const TRANSPAK_DEMO_ADMIN_EMAIL = "mrabdullah0456@gmail.com";
-const TRANSPAK_DEMO_ADMIN_NAME = "Demo Admin";
-const TRANSPAK_DEMO_ADMIN_PASSWORD = "12345678";
+const { isDemoAdminEnabled, getDemoAdminEmail } = require("../utils/demoAdmin");
 
 async function ensureTranspakDemoAdmin() {
+  if (!isDemoAdminEnabled()) return;
+
   const bcrypt = require("bcrypt");
   const userRepo = require("../repositories/userRepo");
-  const email = TRANSPAK_DEMO_ADMIN_EMAIL.trim().toLowerCase();
+  const email = getDemoAdminEmail();
+  if (!email) return;
+
+  const password = String(process.env.TRANSPAK_DEMO_ADMIN_PASSWORD || "").trim();
+  if (!password) {
+    console.warn("[demo] TRANSPAK_DEMO_ADMIN_PASSWORD not set — skipping demo admin seed");
+    return;
+  }
+
   const phone = String(process.env.TRANSPAK_DEMO_ADMIN_PHONE || "+923001234568").trim();
   const cnic = String(process.env.TRANSPAK_DEMO_ADMIN_CNIC || "00000-0000000-0").trim();
+  const fullName = String(process.env.TRANSPAK_DEMO_ADMIN_NAME || "Demo Admin").trim();
 
   try {
-    const passwordHash = await bcrypt.hash(TRANSPAK_DEMO_ADMIN_PASSWORD, 10);
+    const passwordHash = await bcrypt.hash(password, 10);
     await userRepo.upsertDemoAdmin({
       email,
       passwordHash,
@@ -81,12 +137,10 @@ async function ensureTranspakDemoAdmin() {
       activeRole: "admin",
       phone,
       cnicNumber: cnic,
-      fullName: TRANSPAK_DEMO_ADMIN_NAME
+      fullName
     });
-    // eslint-disable-next-line no-console
-    console.log("Admin user ensured");
+    console.log("[demo] demo admin ensured:", email);
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error("TransPak: ensureTranspakDemoAdmin failed:", err.message || err);
   }
 }
@@ -95,6 +149,24 @@ function formatDbError(err) {
   const code = err && err.code ? String(err.code) : "UNKNOWN";
   const msg = err && err.message ? String(err.message) : String(err);
   return { code, msg };
+}
+
+function isSupabaseCircuitBreaker(err) {
+  const m = String(err?.message || "").toLowerCase();
+  return m.includes("ecircuitbreaker") || m.includes("too many authentication");
+}
+
+function isPasswordAuthFailure(err) {
+  const c = String(err?.code || "");
+  if (c === "28P01") return true;
+  const m = String(err?.message || "").toLowerCase();
+  return m.includes("password authentication failed");
+}
+
+function isDnsNotFound(err) {
+  const c = String(err?.code || "");
+  if (c === "ENOTFOUND") return true;
+  return String(err?.message || "").includes("ENOTFOUND");
 }
 
 async function start() {
@@ -107,8 +179,6 @@ async function start() {
       dbState.ready = true;
       dbState.error = null;
       quickAttempts = 0;
-      // eslint-disable-next-line no-console
-      console.log("[db] connected");
       await seedAdminIfNeeded();
       await ensureTranspakDemoAdmin();
     } catch (err) {
@@ -117,90 +187,131 @@ async function start() {
       const { code, msg } = formatDbError(err);
       const isProd = process.env.NODE_ENV === "production";
       const safeDetail = isProd ? `${code}` : `${code}: ${msg}`;
+
+      if (isSupabaseCircuitBreaker(err) || isPasswordAuthFailure(err)) {
+        // eslint-disable-next-line no-console
+        console.error(
+          "[db] Supabase blocked or rejected login (wrong DATABASE_URL password, or pooler user must be postgres.<project-ref>).",
+          "Dashboard → Database → Connect → copy Session pooler URI. If blocked, wait a few minutes or reset DB password; do not rapid-retry."
+        );
+        quickAttempts = 0;
+        // eslint-disable-next-line no-console
+        console.error(`[db] backing off ${DB_RETRY_CIRCUIT_MS}ms before next attempt (${safeDetail})`);
+        setTimeout(connectWithRetry, DB_RETRY_CIRCUIT_MS);
+        return;
+      }
+
+      if (isDnsNotFound(err)) {
+        // eslint-disable-next-line no-console
+        console.error(
+          "[db] DNS ENOTFOUND: host not resolved. On IPv4 networks use Supabase Session pooler (*.pooler.supabase.com), not direct db.*.supabase.co, unless you use the IPv4 add-on."
+        );
+      }
+
       quickAttempts += 1;
       if (quickAttempts <= DB_RETRY_MAX_QUICK) {
         const backoff = Math.min(DB_RETRY_BASE_MS * 2 ** Math.min(quickAttempts - 1, 5), 60000);
-        // eslint-disable-next-line no-console
-        console.error(`[db] connection failed (quick retry ${quickAttempts}/${DB_RETRY_MAX_QUICK}) ${safeDetail}; next in ${backoff}ms`);
+        console.error(`[db] retry ${quickAttempts}/${DB_RETRY_MAX_QUICK} after failure (${safeDetail}); next in ${backoff}ms`);
         setTimeout(connectWithRetry, backoff);
         return;
       }
-      // eslint-disable-next-line no-console
       console.error(`[db] quick retries exhausted; backing off ${DB_RETRY_SLOW_MS}ms — ${safeDetail}`);
       quickAttempts = 0;
       setTimeout(connectWithRetry, DB_RETRY_SLOW_MS);
     }
   }
 
-  // Start DB connection loop (do not block server boot).
   connectWithRetry();
 
   const uploadsDir = ensureUploadsDir();
   const { app, socketCorsOrigin } = createApp({ uploadsDir, dbState });
 
-  const basePort = Number(PORT) || 5000;
-  const maxAttempts = 20;
-  const allowPortFallback = String(process.env.ALLOW_PORT_FALLBACK || "").toLowerCase() === "true";
+  const httpServer = http.createServer(app);
+  const io = new Server(httpServer, {
+    cors: { origin: socketCorsOrigin, credentials: true },
+    transports: ["websocket", "polling"],
+    allowEIO3: true,
+    pingTimeout: 60000,
+    pingInterval: 25000
+  });
 
-  const tryListen = (port, attempt = 0) => {
-    const httpServer = http.createServer(app);
-    const io = new Server(httpServer, {
-      cors: { origin: socketCorsOrigin, credentials: true }
-    });
+  realtimeHub.setIO(io);
+  registerSocketHandlers(io);
 
-    realtimeHub.setIO(io);
-    registerSocketHandlers(io);
+  const mailPre = validateOutboundMailConfig();
+  const mailLabel = mailPre.ok ? "enabled" : `disabled (${mailPre.reason})`;
 
-    httpServer.listen(port, () => {
-      // eslint-disable-next-line no-console
-      console.log(`TransPak backend (HTTP + Socket.io) on port ${port}`);
-      if (String(process.env.SMTP_VERIFY_ON_START || "").toLowerCase() === "true") {
-        verifySmtpConnection().catch((e) => {
-          // eslint-disable-next-line no-console
-          console.error("[server] SMTP_VERIFY_ON_START:", e?.message || e);
-        });
+  console.log("[server] boot", {
+    NODE_ENV: process.env.NODE_ENV || "undefined",
+    PORT: initialListenPort,
+    BIND_HOST,
+    paasPortLock,
+    allowPortFallback,
+    DATABASE_URL: isDatabaseUrlConfigured() ? "set" : "missing",
+    email: mailLabel,
+    DB: dbState.ready ? "ready" : "pending_first_connection"
+  });
+
+  let listenAttemptPort = initialListenPort;
+  let listenAnnounced = false;
+
+  function startListen(attempt) {
+    httpServer.once("error", (err) => {
+      if (err && err.code === "EADDRINUSE" && allowPortFallback && attempt < MAX_PORT_FALLBACK_ATTEMPTS) {
+        listenAttemptPort += 1;
+        console.warn(`[server] Port ${listenAttemptPort - 1} busy (EADDRINUSE); trying ${listenAttemptPort}...`);
+        startListen(attempt + 1);
+        return;
       }
-    });
-
-    httpServer.on("error", (err) => {
       if (err && err.code === "EADDRINUSE") {
-        if (allowPortFallback && attempt < maxAttempts) {
-          // eslint-disable-next-line no-console
-          console.warn(`Port ${port} already in use. Trying ${port + 1}...`);
-          try {
-            io.close();
-            httpServer.close();
-          } catch {
-            // ignore
-          }
-          return tryListen(port + 1, attempt + 1);
-        }
-        // eslint-disable-next-line no-console
-        console.error(`[server] Port ${port} is already in use (EADDRINUSE).`);
-        if (allowPortFallback && attempt >= maxAttempts) {
-          // eslint-disable-next-line no-console
-          console.error(`[server] No free port found after ${maxAttempts} attempts from ${basePort}.`);
-        }
-        if (!allowPortFallback) {
-          // eslint-disable-next-line no-console
+        console.error(`[server] Port ${listenAttemptPort} is already in use (EADDRINUSE).`);
+        if (paasPortLock) {
           console.error(
-            "[server] Another process is bound to this port (often a duplicate `npm run dev`). Stop it, or set ALLOW_PORT_FALLBACK=true and VITE_PROXY_TARGET to the same port."
+            "[server] PORT is fixed by your hosting provider (Render/Railway/Fly, etc.); only one process may bind it."
           );
-          // eslint-disable-next-line no-console
-          console.error(`[server] Windows: netstat -ano | findstr :${basePort}`);
+        } else if (!allowPortFallback) {
+          console.error("[server] Stop the other process or set ALLOW_PORT_FALLBACK=true for local multi-instance dev.");
+          console.error(
+            `[server] Inspect listeners on :${initialListenPort} (e.g. netstat, ss, or Get-NetTCPConnection on Windows).`
+          );
+        } else {
+          console.error(`[server] No free port after ${MAX_PORT_FALLBACK_ATTEMPTS} attempts from ${initialListenPort}.`);
         }
         process.exit(1);
+        return;
       }
-      // eslint-disable-next-line no-console
       console.error("Server listen failed:", err.message || err);
       process.exit(1);
     });
 
-    return httpServer;
-  };
+    httpServer.listen(listenAttemptPort, BIND_HOST, () => {
+      if (listenAnnounced) return;
+      listenAnnounced = true;
+      if (!paasPortLock && listenAttemptPort !== initialListenPort) {
+        console.warn(
+          `[server] Bound on port ${listenAttemptPort} (first choice was ${initialListenPort}). Set transpak-frontend VITE_PROXY_TARGET=http://127.0.0.1:${listenAttemptPort} while using npm run dev.`
+        );
+      }
+      console.log("[server] listening", {
+        url: `http://${BIND_HOST}:${listenAttemptPort}`,
+        boundPort: listenAttemptPort,
+        NODE_ENV: process.env.NODE_ENV || "development",
+        email: mailLabel,
+        DB: dbState.ready ? "ready" : "connecting"
+      });
+      console.log(
+        `TransPak backend running - version ${APP_VERSION} - build ${BUILD_ID} - build OK - port ${listenAttemptPort}`
+      );
 
-  tryListen(basePort);
+      if (String(process.env.BREVO_VERIFY_ON_START || "").toLowerCase() === "true") {
+        verifyBrevoApi().catch((e) => {
+          console.error("[server] BREVO_VERIFY_ON_START (non-fatal):", e?.message || e);
+        });
+      }
+    });
+  }
+
+  startListen(0);
 }
 
 module.exports = { start };
-

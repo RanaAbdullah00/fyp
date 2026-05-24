@@ -1,21 +1,22 @@
 import React from 'react';
-import { FaTruck, FaShip, FaPlane } from 'react-icons/fa';
+
+/** TransPak TP mark — italic T (contrast) + P (green). Used site-wide. */
+export const TpMark = ({ compact = false, className = '' }) => (
+  <span
+    className={`tp-brand-mark ${compact ? 'tp-brand-mark--compact' : ''} ${className}`.trim()}
+    aria-hidden="true"
+  >
+    <span className="tp-brand-mark__t">T</span>
+    <span className="tp-brand-mark__p">P</span>
+  </span>
+);
 
 /**
- * TransPak wordmark: TRANS (italic, theme-contrast) + PAK (green).
- * Subtle truck / ship / plane for logistics identity.
+ * TransPak branding — consistent TP mark + optional wordmark.
  */
 const BrandLogo = ({ className = '', onClick, title = 'TransPak', variant = 'full' }) => {
   const isMark = variant === 'mark';
   const isAuth = variant === 'auth';
-
-  const icons = (
-    <span className="tp-brand-logo__modes" aria-hidden="true">
-      <FaTruck className="tp-brand-logo__mode-icon" />
-      <FaShip className="tp-brand-logo__mode-icon" />
-      <FaPlane className="tp-brand-logo__mode-icon" />
-    </span>
-  );
 
   const wordmark = (
     <span className={`tp-brand-logo__wordmark ${isAuth ? 'tp-brand-logo__wordmark--auth' : ''}`}>
@@ -45,22 +46,10 @@ const BrandLogo = ({ className = '', onClick, title = 'TransPak', variant = 'ful
       tabIndex={onClick ? 0 : undefined}
       aria-label={title}
     >
-      {isMark ? (
-        <span className="tp-brand-logo__wordmark tp-brand-logo__wordmark--compact">
-          <span className="tp-brand-logo__trans">TRANS</span>
-          <span className="tp-brand-logo__pak">PAK</span>
-        </span>
-      ) : (
-        wordmark
-      )}
+      <TpMark compact={isMark || isAuth} />
+      {isMark ? null : wordmark}
       {!isMark && !isAuth ? <span className="tp-brand-logo__rule" aria-hidden="true" /> : null}
       {isAuth ? <span className="tp-brand-logo__rule tp-brand-logo__rule--vertical d-none d-sm-inline" aria-hidden="true" /> : null}
-      <div
-        className={`tp-brand-logo__icons ${isMark ? 'tp-brand-logo__icons--mark' : ''} ${isAuth ? 'tp-brand-logo__icons--auth' : ''}`}
-        aria-hidden="true"
-      >
-        {icons}
-      </div>
     </div>
   );
 };

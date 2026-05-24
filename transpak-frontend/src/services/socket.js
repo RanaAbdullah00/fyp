@@ -1,4 +1,5 @@
 import { io } from 'socket.io-client';
+import { getBackendOrigin } from '../utils/backendOrigin.js';
 
 /**
  * Socket.io client (JWT in handshake). Server-delivered events only.
@@ -8,11 +9,18 @@ export function createSocketClient({
   onNotification,
   onTracking,
   onChatMessage,
-  onChatSeen
+  onChatSeen,
+  onReconnect
 }) {
-  const url =
-    import.meta.env.VITE_SOCKET_URL ||
-    (import.meta.env.DEV ? window.location.origin : 'http://localhost:5000');
+  const explicitSocket = typeof import.meta.env.VITE_SOCKET_URL === 'string' ? import.meta.env.VITE_SOCKET_URL.trim() : '';
+  let url = explicitSocket;
+  if (!url) {
+    if (import.meta.env.DEV && !import.meta.env.VITE_API_URL?.trim()) {
+      url = window.location.origin;
+    } else {
+      url = getBackendOrigin() || window.location.origin;
+    }
+  }
 
   let socket = null;
 
@@ -23,14 +31,35 @@ export function createSocketClient({
     };
   }
 
+  if (!url) {
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.warn('[socket] No backend URL — set VITE_API_URL (or VITE_SOCKET_URL) in production');
+    }
+    return { socket: null, disconnect: () => {} };
+  }
+
   try {
     socket = io(url, {
       auth: { token },
       transports: ['websocket', 'polling'],
-      autoConnect: true
+      autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: 12,
+      reconnectionDelay: 800
+    });
+
+    let hadConnected = false;
+    socket.on('connect', () => {
+      if (hadConnected) onReconnect?.();
+      hadConnected = true;
     });
 
     socket.on('notification:new', (n) => onNotification?.(n));
+    socket.on('notifications:batch', (payload) => {
+      const items = Array.isArray(payload?.items) ? payload.items : [];
+      items.forEach((n) => onNotification?.(n));
+    });
     socket.on('tracking:update', (p) => onTracking?.(p));
     socket.on('chat:message', (m) => onChatMessage?.(m));
     socket.on('chat:seen', (p) => onChatSeen?.(p));

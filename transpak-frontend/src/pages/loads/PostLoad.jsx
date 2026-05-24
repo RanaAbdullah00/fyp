@@ -5,7 +5,8 @@ import Loader from '../../components/ui/Loader.jsx';
 import { useAuth } from '../../hooks/useAuth.js';
 import { useApi } from '../../hooks/useApi.js';
 import { AppContext } from '../../context/AppContext.jsx';
-import { notifySuccess, notifyError, notifyInfo } from '../../components/ui/ToastProvider.jsx';
+import { notifySuccess } from '../../components/ui/ToastProvider.jsx';
+import { notifyProfileIncomplete } from '../../utils/notifySystem.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
 
 // Screen for shippers to post new loads.
@@ -19,10 +20,10 @@ const PostLoad = () => {
 
   useEffect(() => {
     if (user && user.profileComplete === false) {
-      notifyInfo('Please complete your profile first to post loads.');
+      notifyProfileIncomplete(t);
       navigate('/profile', { replace: true });
     }
-  }, [user, navigate]);
+  }, [user, navigate, t]);
 
   const handleSubmit = async (payload) => {
     try {
@@ -37,17 +38,20 @@ const PostLoad = () => {
           vehicleType: payload.vehicleType,
           expectedPrice: Number(payload.expectedPrice),
           pickupDate: payload.pickupDate,
-          deadlineHours: Number(payload.deadlineHours || 2)
+          deadlineMinutes: Number(payload.deadlineMinutes || (Number(payload.deadlineHours || 6) * 60)),
+          deadlineHours: Number(payload.deadlineHours || 6),
+          distanceKm: payload.distanceKm
         }
       });
-      notifySuccess(`Load ${loadData?.code || 'L-' + Date.now()} posted! Bidding open.`);
+      const code = loadData?.code || `L-${Date.now()}`;
+      notifySuccess(t('pages.loads.postLoadSuccess', { code }));
       addNotification({
         type: 'load',
-        message: `Your load ${payload.code || 'L-' + Date.now()} is now live for bidding!`
+        message: t('pages.loads.postLoadNotify', { code })
       });
       navigate('/loads/manage');
     } catch (error) {
-      notifyError('Failed to post load. Please try again.');
+      /* useApi → notifyApiError */
     }
   };
 
@@ -55,7 +59,7 @@ const PostLoad = () => {
     return (
       <div className="container py-5 text-center">
         <Loader />
-        <p className="mt-3 text-muted">Redirecting to profile...</p>
+        <p className="mt-3 text-muted">{t('common.redirectingProfile')}</p>
       </div>
     );
   }

@@ -6,8 +6,7 @@ import Loader from '../../components/ui/Loader.jsx';
 import { useAuth } from '../../hooks/useAuth.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { dashboardPathForRole } from '../../utils/dashboardPath.js';
-import { notifyError } from '../../components/ui/ToastProvider.jsx';
-import { formatUserError } from '../../utils/userErrors.js';
+import { notifyAuthError } from '../../utils/notifySystem.js';
 import { getPortalContainer } from '../../utils/portalRoot.js';
 import { lockOverlayScroll } from '../../utils/overlayScrollLock.js';
 
@@ -122,7 +121,7 @@ const RoleSelection = () => {
         });
       }
     } catch (err) {
-      notifyError(formatUserError(err, t, { fallback: t('errors.generic') }));
+      notifyAuthError(err, t, 'login');
     } finally {
       setSwitching(false);
     }

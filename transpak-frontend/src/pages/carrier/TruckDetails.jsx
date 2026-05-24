@@ -1,11 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
 import Loader from '../../components/ui/Loader.jsx';
 import { useApi } from '../../hooks/useApi.js';
+import { useAuth } from '../../hooks/useAuth.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { notifyError, notifySuccess } from '../../components/ui/ToastProvider.jsx';
 import { unwrapErrorMessage } from '../../utils/unwrapApi.js';
+import { uploadMediaFile } from '../../services/uploadMedia.js';
+import VehicleTypeDropdown from '../../components/loadboard/VehicleTypeDropdown.jsx';
+import SafeImage from '../../components/ui/SafeImage.jsx';
+import { syncTrucksAfterCreate } from '../../utils/truckListSync.js';
 
 const emptyForm = {
   id: null,
@@ -20,41 +26,81 @@ const emptyForm = {
 const isTruckComplete = (t) =>
   t && (t.engineNumber || t.truckNumber) && (t.truckCardFrontImage || t.truckFrontImage) && (t.truckCardBackImage || t.truckBackImage);
 
-const fileToDataUrl = (file) =>
-  new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result || ''));
-    r.onerror = reject;
-    r.readAsDataURL(file);
-  });
-
 const TruckDetails = () => {
   const { t, isUrdu } = useLanguage();
-  const { request, loading } = useApi();
+  const { user } = useAuth();
+  const { request } = useApi();
   const [trucks, setTrucks] = useState([]);
   const [form, setForm] = useState(emptyForm);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [listLoading, setListLoading] = useState(true);
   const editing = useMemo(() => Boolean(form.id), [form.id]);
 
-  const refresh = useCallback(async () => {
-    const data = await request({ method: 'GET', url: '/trucks/mine' });
-    setTrucks(Array.isArray(data) ? data : []);
-  }, [request]);
+  const activeRole = user?.activeRole ?? user?.roles?.[0];
+  const [profileReady, setProfileReady] = useState(user?.profileComplete === true);
+  const isCarrier = activeRole === 'carrier';
+  const canSubmit = profileReady && isCarrier && !uploadingImage && !saving;
 
   useEffect(() => {
-    refresh().catch(() => {});
+    if (user?.profileComplete === true) {
+      setProfileReady(true);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const u = await request({ method: 'GET', url: '/profile' });
+        if (!cancelled) setProfileReady(Boolean(u?.is_profile_complete));
+      } catch {
+        if (!cancelled) setProfileReady(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, user?.profileComplete, request]);
+
+  const refresh = useCallback(async () => {
+    setListLoading(true);
+    try {
+      const data = await request({ method: 'GET', url: '/trucks/mine' });
+      setTrucks(Array.isArray(data) ? data : []);
+    } catch (err) {
+      notifyError(unwrapErrorMessage(err) || t('pages.truckDetailsPage.saveFailed'));
+      setTrucks([]);
+    } finally {
+      setListLoading(false);
+    }
+  }, [request, t]);
+
+  useEffect(() => {
+    refresh();
   }, [refresh]);
 
   const onChange = (e) => setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
 
-  const startEdit = (t) => {
+  const uploadCardImage = async (file, field) => {
+    setUploadingImage(true);
+    try {
+      const url = await uploadMediaFile(file, { retries: 1 });
+      setForm((p) => ({ ...p, [field]: url }));
+    } catch (err) {
+      notifyError(unwrapErrorMessage(err) || t('pages.truckDetailsPage.uploadFailed'));
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const startEdit = (row) => {
     setForm({
-      id: t.id,
-      engineNumber: t.engineNumber || t.truckNumber || '',
-      truckType: t.truckType || 'Truck',
-      capacity: String(t.capacity ?? ''),
-      licensePlate: t.licensePlate || '',
-      truckCardFrontImage: t.truckCardFrontImage || t.truckFrontImage || '',
-      truckCardBackImage: t.truckCardBackImage || t.truckBackImage || ''
+      id: row.id,
+      engineNumber: row.engineNumber || row.truckNumber || '',
+      truckType: row.truckType || 'Truck',
+      capacity: String(row.capacity ?? ''),
+      licensePlate: row.licensePlate || '',
+      truckCardFrontImage: row.truckCardFrontImage || row.truckFrontImage || '',
+      truckCardBackImage: row.truckCardBackImage || row.truckBackImage || ''
     });
   };
 
@@ -62,42 +108,85 @@ const TruckDetails = () => {
 
   const submit = async (e) => {
     e.preventDefault();
+    if (!canSubmit) {
+      if (!profileReady) notifyError(t('pages.truckDetailsPage.profileRequired'));
+      else if (!isCarrier) notifyError(t('pages.truckDetailsPage.carrierRoleRequired'));
+      return;
+    }
+    const payload = {
+      engineNumber: form.engineNumber.trim(),
+      truckType: form.truckType.trim(),
+      capacity: Number(form.capacity || 0),
+      licensePlate: form.licensePlate.trim(),
+      truckCardFrontImage: form.truckCardFrontImage,
+      truckCardBackImage: form.truckCardBackImage
+    };
+
+    if (!payload.engineNumber || !payload.truckType || !payload.licensePlate || !payload.truckCardFrontImage || !payload.truckCardBackImage) {
+      notifyError(t('pages.truckDetailsPage.validationMissing'));
+      return;
+    }
+
+    setSaving(true);
     try {
-      const payload = {
-        engineNumber: form.engineNumber.trim(),
-        truckType: form.truckType.trim(),
-        capacity: Number(form.capacity || 0),
-        licensePlate: form.licensePlate.trim(),
-        truckCardFrontImage: form.truckCardFrontImage,
-        truckCardBackImage: form.truckCardBackImage
-      };
-
-      if (!payload.engineNumber || !payload.truckType || !payload.licensePlate || !payload.truckCardFrontImage || !payload.truckCardBackImage) {
-        notifyError(t('pages.truckDetailsPage.validationMissing'));
-        return;
-      }
-
+      let saved;
       if (editing) {
-        await request({ method: 'PUT', url: `/trucks/${form.id}`, data: payload });
+        saved = await request({ method: 'PUT', url: `/trucks/${form.id}`, data: payload });
         notifySuccess(t('pages.truckDetailsPage.truckUpdated'));
       } else {
-        await request({ method: 'POST', url: '/trucks', data: payload });
-        notifySuccess(t('pages.truckDetailsPage.truckAdded'));
+        saved = await request({ method: 'POST', url: '/trucks', data: payload });
+        notifySuccess(t('pages.truckDetailsPage.truckAddedSuccess'));
+      }
+      if (saved?.id) {
+        setTrucks((prev) => {
+          const idx = prev.findIndex((r) => String(r.id) === String(saved.id));
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = { ...next[idx], ...saved };
+            return next;
+          }
+          return [saved, ...prev];
+        });
       }
       reset();
-      await refresh();
+      const fetchList = async () => {
+        const data = await request({ method: 'GET', url: '/trucks/mine' });
+        const list = Array.isArray(data) ? data : [];
+        setTrucks(list);
+        return list;
+      };
+
+      if (!editing && saved?.id) {
+        await syncTrucksAfterCreate({ saved, fetchList, setTrucks });
+      } else {
+        await fetchList();
+      }
     } catch (err) {
       notifyError(unwrapErrorMessage(err) || t('pages.truckDetailsPage.saveFailed'));
+    } finally {
+      setSaving(false);
     }
   };
 
   return (
-    <div className={`container py-3 ${isUrdu ? 'tp-rtl' : ''}`}>
+    <div className={`container py-3 tp-truck-page ${isUrdu ? 'tp-rtl' : ''}`}>
       <h5 className="mb-3">{t('pages.truckDetailsPage.title')}</h5>
 
+      {!profileReady ? (
+        <div className="alert alert-warning small mb-3 d-flex flex-wrap align-items-center gap-2 justify-content-between">
+          <span>{t('pages.truckDetailsPage.profileRequired')}</span>
+          <Link to="/profile" className="btn btn-warning btn-sm tp-touch-target">
+            {t('profile.completeProfileCta')}
+          </Link>
+        </div>
+      ) : null}
+      {profileReady && !isCarrier ? (
+        <div className="alert alert-info small mb-3">{t('pages.truckDetailsPage.carrierRoleRequired')}</div>
+      ) : null}
+
       <div className="row g-3">
-        <div className="col-lg-5">
-          <Card className="p-3">
+        <div className="col-12 col-lg-5">
+          <Card className="p-3 tp-truck-form-card">
             <h6 className="mb-3">{editing ? t('pages.truckDetailsPage.formEdit') : t('pages.truckDetailsPage.formAdd')}</h6>
             <form onSubmit={submit}>
               <div className="mb-2">
@@ -107,25 +196,40 @@ const TruckDetails = () => {
                   className="form-control form-control-sm"
                   value={form.engineNumber}
                   onChange={onChange}
+                  disabled={!canSubmit}
                   placeholder={t('pages.truckDetailsPage.enginePlaceholder')}
                 />
               </div>
               <div className="mb-2">
                 <label className="form-label small fw-semibold">{t('pages.truckDetailsPage.typeLabel')}</label>
-                <select name="truckType" className="form-select form-select-sm" value={form.truckType} onChange={onChange}>
-                  <option>Truck</option>
-                  <option>Trailer</option>
-                  <option>Container</option>
-                  <option>Flatbed</option>
-                </select>
+                <VehicleTypeDropdown
+                  name="truckType"
+                  value={form.truckType}
+                  onChange={onChange}
+                  disabled={!canSubmit}
+                />
               </div>
               <div className="mb-2">
                 <label className="form-label small fw-semibold">{t('pages.truckDetailsPage.capacityLabel')}</label>
-                <input name="capacity" type="number" className="form-control form-control-sm" value={form.capacity} onChange={onChange} min="0" />
+                <input
+                  name="capacity"
+                  type="number"
+                  className="form-control form-control-sm"
+                  value={form.capacity}
+                  onChange={onChange}
+                  min="0"
+                  disabled={!canSubmit}
+                />
               </div>
               <div className="mb-2">
                 <label className="form-label small fw-semibold">{t('pages.truckDetailsPage.plateLabel')}</label>
-                <input name="licensePlate" className="form-control form-control-sm" value={form.licensePlate} onChange={onChange} />
+                <input
+                  name="licensePlate"
+                  className="form-control form-control-sm"
+                  value={form.licensePlate}
+                  onChange={onChange}
+                  disabled={!canSubmit}
+                />
               </div>
               <div className="mb-2">
                 <label className="form-label small fw-semibold">{t('pages.truckDetailsPage.cardFrontLabel')}</label>
@@ -134,19 +238,28 @@ const TruckDetails = () => {
                   accept="image/*"
                   capture="environment"
                   className="form-control form-control-sm"
-                  onChange={async (e) => {
+                  disabled={!canSubmit || uploadingImage}
+                  onChange={(e) => {
                     const f = e.target.files?.[0];
-                    if (!f) return;
-                    const url = await fileToDataUrl(f);
-                    setForm((p) => ({ ...p, truckCardFrontImage: url }));
+                    if (f) uploadCardImage(f, 'truckCardFrontImage');
+                    e.target.value = '';
                   }}
                 />
+                {uploadingImage && !form.truckCardFrontImage ? (
+                  <div className="mt-2 small text-muted d-flex align-items-center gap-2">
+                    <Loader size="sm" /> {t('pages.truckDetailsPage.uploading')}
+                  </div>
+                ) : null}
                 {form.truckCardFrontImage ? (
-                  <img
+                  <SafeImage
                     src={form.truckCardFrontImage}
                     alt={t('pages.truckDetailsPage.cardFrontAlt')}
-                    className="mt-2"
-                    style={{ width: '100%', maxHeight: 180, objectFit: 'contain', borderRadius: 12, border: '1px solid var(--pak-border)' }}
+                    className="mt-2 tp-img-contain-full"
+                    fallback={
+                      <div className="mt-2 small text-muted tp-image-fallback rounded border p-2 text-center">
+                        {t('profile.notOnFile')}
+                      </div>
+                    }
                   />
                 ) : null}
               </div>
@@ -157,33 +270,39 @@ const TruckDetails = () => {
                   accept="image/*"
                   capture="environment"
                   className="form-control form-control-sm"
-                  onChange={async (e) => {
+                  disabled={!canSubmit || uploadingImage}
+                  onChange={(e) => {
                     const f = e.target.files?.[0];
-                    if (!f) return;
-                    const url = await fileToDataUrl(f);
-                    setForm((p) => ({ ...p, truckCardBackImage: url }));
+                    if (f) uploadCardImage(f, 'truckCardBackImage');
+                    e.target.value = '';
                   }}
                 />
                 {form.truckCardBackImage ? (
-                  <img
+                  <SafeImage
                     src={form.truckCardBackImage}
                     alt={t('pages.truckDetailsPage.cardBackAlt')}
-                    className="mt-2"
-                    style={{ width: '100%', maxHeight: 180, objectFit: 'contain', borderRadius: 12, border: '1px solid var(--pak-border)' }}
+                    className="mt-2 tp-img-contain-full"
+                    fallback={
+                      <div className="mt-2 small text-muted tp-image-fallback rounded border p-2 text-center">
+                        {t('profile.notOnFile')}
+                      </div>
+                    }
                   />
                 ) : null}
               </div>
               <div className="d-flex gap-2 flex-wrap">
-                <Button variant="primary" type="submit" disabled={loading}>
-                  {loading ? (
+                <Button variant="primary" type="submit" className="tp-touch-target" disabled={!canSubmit}>
+                  {saving ? (
                     <Loader light size="sm" />
+                  ) : uploadingImage ? (
+                    t('pages.truckDetailsPage.uploading')
                   ) : editing ? (
                     t('pages.truckDetailsPage.saveChanges')
                   ) : (
                     t('pages.truckDetailsPage.addTruckCta')
                   )}
                 </Button>
-                <Button variant="outline-secondary" type="button" onClick={reset}>
+                <Button variant="outline-secondary" type="button" className="tp-touch-target" onClick={reset} disabled={saving}>
                   {t('pages.truckDetailsPage.reset')}
                 </Button>
               </div>
@@ -191,21 +310,21 @@ const TruckDetails = () => {
           </Card>
         </div>
 
-        <div className="col-lg-7">
+        <div className="col-12 col-lg-7">
           <Card className="p-3">
             <h6 className="mb-3">{t('pages.truckDetailsPage.myTrucks')}</h6>
-            {loading && trucks.length === 0 ? (
+            {listLoading && trucks.length === 0 ? (
               <div className="d-flex justify-content-center py-4">
                 <Loader />
               </div>
             ) : trucks.length === 0 ? (
-              <div className="text-muted small">{t('pages.truckDetailsPage.empty')}</div>
+              <div className="text-muted small tp-empty-state py-4 text-center">{t('pages.truckDetailsPage.empty')}</div>
             ) : (
-              <div className="list-group list-group-flush">
+              <div className="list-group list-group-flush tp-truck-list">
                 {trucks.map((row) => (
-                  <div key={row.id} className="list-group-item px-0">
-                    <div className="d-flex justify-content-between align-items-start gap-2">
-                      <div className="min-w-0">
+                  <div key={row.id} className="list-group-item px-0 border-0 border-bottom">
+                    <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start gap-2">
+                      <div className="min-w-0 flex-grow-1">
                         <div className="fw-semibold d-flex align-items-center gap-2 flex-wrap">
                           <span className="text-break">{row.engineNumber || row.truckNumber}</span>
                           {isTruckComplete(row) ? (
@@ -214,11 +333,16 @@ const TruckDetails = () => {
                             </span>
                           ) : null}
                         </div>
-                        <div className="small text-muted">
+                        <div className="small text-muted text-break">
                           {row.truckType} · {row.capacity || 0}t · {row.licensePlate}
                         </div>
                       </div>
-                      <Button variant="outline-primary" size="sm" className="flex-shrink-0" onClick={() => startEdit(row)}>
+                      <Button
+                        variant="outline-primary"
+                        size="sm"
+                        className="flex-shrink-0 tp-touch-target w-100 w-sm-auto"
+                        onClick={() => startEdit(row)}
+                      >
                         {t('pages.truckDetailsPage.edit')}
                       </Button>
                     </div>
@@ -234,4 +358,3 @@ const TruckDetails = () => {
 };
 
 export default TruckDetails;
-

@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import { NavLink } from 'react-router-dom';
 import { FaSignOutAlt, FaClipboardCheck } from 'react-icons/fa';
 import { useAuth } from '../../hooks/useAuth.js';
-import { AppContext } from '../../context/AppContext.jsx';
 import LogoutConfirmModal from '../ui/LogoutConfirmModal.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { getPortalContainer } from '../../utils/portalRoot.js';
@@ -15,15 +14,13 @@ const MobileDrawer = ({ open, onClose }) => {
   const { t, isUrdu } = useLanguage();
   const { user } = useAuth();
   const [showLogoutModal, setShowLogoutModal] = React.useState(false);
-  const app = React.useContext(AppContext);
-  const unreadCount = Array.isArray(app?.notifications) ? app.notifications.filter((n) => !n.read).length : 0;
   const activeRole = user?.activeRole ?? user?.roles?.[0];
 
   const dashboardPath =
     activeRole === 'carrier'
       ? '/dashboard/carrier'
       : activeRole === 'admin'
-      ? '/dashboard/admin'
+      ? '/admin/dashboard'
       : '/dashboard/shipper';
 
   const handleLogoutClick = () => {
@@ -69,7 +66,7 @@ const MobileDrawer = ({ open, onClose }) => {
             {activeRole === 'carrier' && (
               <>
                 <NavLink to="/loads" className={linkClass} onClick={onClose}>
-                  {t('nav.loads')}
+                  {t('loadsHub.navOperations')}
                 </NavLink>
                 <NavLink to="/bids/mine" className={linkClass} onClick={onClose}>
                   {t('nav.myBids')}
@@ -93,6 +90,21 @@ const MobileDrawer = ({ open, onClose }) => {
                 <NavLink to="/admin/dashboard" className={linkClass} onClick={onClose}>
                   {t('nav.adminDashboard')}
                 </NavLink>
+                <NavLink to="/admin/users" className={linkClass} onClick={onClose}>
+                  {t('nav.adminUsers')}
+                </NavLink>
+                <NavLink to="/admin/loads" className={linkClass} onClick={onClose}>
+                  {t('nav.adminLoads')}
+                </NavLink>
+                <NavLink to="/admin/bids" className={linkClass} onClick={onClose}>
+                  {t('pages.admin.bidsTitle')}
+                </NavLink>
+                <NavLink to="/admin/notifications" className={linkClass} onClick={onClose}>
+                  {t('pages.admin.notificationsTitle')}
+                </NavLink>
+                <NavLink to="/admin/otp-logs" className={linkClass} onClick={onClose}>
+                  {t('pages.admin.otpLogsTitle')}
+                </NavLink>
                 <NavLink to="/admin/roles" className={linkClass} onClick={onClose}>
                   {t('nav.roleManagement')}
                 </NavLink>
@@ -107,12 +119,6 @@ const MobileDrawer = ({ open, onClose }) => {
                 </NavLink>
               </>
             )}
-            <NavLink to="/notifications" className={linkClass} onClick={onClose}>
-              <span className="d-flex align-items-center gap-2">
-                {t('nav.notifications')}
-                {unreadCount > 0 && <span className="badge bg-danger rounded-pill">{unreadCount}</span>}
-              </span>
-            </NavLink>
             <NavLink to="/settings" className={linkClass} onClick={onClose}>
               {t('nav.settings')}
             </NavLink>

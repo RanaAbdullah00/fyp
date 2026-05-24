@@ -4,9 +4,15 @@ const { signToken } = require("../utils/jwt");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
 const { authData, authDataNoToken, loginAuthData } = require("../utils/authPayload");
 const userRepo = require("../repositories/userRepo");
-const { issueRegisterOtpForNewUser } = require("./emailOtpController");
+const { upsertPendingRegistrationAndSendOtp, issueRegisterOtpForNewUser } = require("./emailOtpController");
+const { isDevAuthRelaxEnabled, isAllowlistedDevTestEmail } = require("../utils/devAuthMode");
+const devAuthTestState = require("../services/devAuthTestState");
+const {
+  buildRegisterEmailVerification,
+  buildFailedRegisterEmailVerification
+} = require("../utils/otpDelivery");
 
-const DEMO_FORCE_ADMIN_EMAIL = "mrabdullah0456@gmail.com";
+const { isDemoAdminEmail } = require("../utils/demoAdmin");
 
 function normalizeRolesAndActiveRole(user) {
   const allowed = userRepo.ALLOWED_ROLES;
@@ -32,45 +38,6 @@ function validationErrorResponse(req, res) {
     "VALIDATION_ERROR",
     { errors: details }
   );
-}
-
-/** Maps OTP delivery outcome to API fields (backward compatible: optional deliveryReason). */
-function buildRegisterEmailVerification(otpPack) {
-  const delivered = Boolean(otpPack?.delivery?.delivered);
-  const reason = otpPack?.delivery?.reason || null;
-  const isDev = process.env.NODE_ENV !== "production";
-  let deliveryHint = null;
-  if (!delivered) {
-    if (isDev) {
-      deliveryHint =
-        "Development: OTP is printed in the server console if email could not be sent.";
-    } else if (reason === "smtp_not_configured") {
-      deliveryHint =
-        "Email is not configured on the server (SMTP). Your account was created; contact support or try again after the server is configured.";
-    } else if (reason === "mail_from_missing") {
-      deliveryHint =
-        "Email sender (SMTP_FROM or MAIL_FROM) is not configured on the server. Your account was created; contact support.";
-    } else if (reason === "authentication_failed") {
-      deliveryHint =
-        "SMTP login failed (wrong SMTP user/key). For Brevo use the SMTP password from SMTP & API, not the REST API key.";
-    } else if (reason === "sender_not_verified") {
-      deliveryHint =
-        "The From address is not verified with your email provider. In Brevo: Senders & IP → verify sender/domain; SMTP_FROM must match.";
-    } else if (reason === "rate_limited") {
-      deliveryHint =
-        "Email was temporarily blocked by rate limits. Retry in a few minutes or check Brevo quotas.";
-    } else {
-      deliveryHint =
-        "We could not deliver the verification email (SMTP error). Try resend in a moment or contact support if it continues.";
-    }
-  }
-  return {
-    pending: true,
-    emailSent: delivered,
-    devOtp: otpPack?.devOtp || undefined,
-    deliveryHint,
-    deliveryReason: reason || undefined
-  };
 }
 
 async function register(req, res) {
@@ -117,8 +84,34 @@ async function register(req, res) {
     }
 
     const existing = await userRepo.findByEmail(normalizedEmail);
+    let row = await userRepo.findRowByEmailWithPassword(normalizedEmail);
+    let passwordOk = false;
+    if (row?.password_hash) {
+      try {
+        passwordOk = await bcrypt.compare(String(password), row.password_hash);
+      } catch {
+        passwordOk = false;
+      }
+    }
+
+    /*
+     * DEV_MODE + DEV_AUTH_TEST_EMAILS (non-production only): allow "re-registering" the same
+     * allowlisted mailbox with a new password for iterative OTP testing. Clears OTP/pending state,
+     * updates password hash, sets verified=false — user row and FK-related data stay intact.
+     * Reversible: turn off DEV_MODE or remove the email from DEV_AUTH_TEST_EMAILS.
+     */
+    if (existing && !passwordOk && isDevAuthRelaxEnabled() && isAllowlistedDevTestEmail(normalizedEmail)) {
+      await devAuthTestState.clearOtpAndPendingForEmail(normalizedEmail);
+      const nextHash = await bcrypt.hash(String(password), 10);
+      await userRepo.updatePasswordHashByEmail(normalizedEmail, nextHash);
+      await userRepo.setVerifiedByEmail(normalizedEmail, false);
+      row = await userRepo.findRowByEmailWithPassword(normalizedEmail);
+      passwordOk = row?.password_hash
+        ? await bcrypt.compare(String(password), row.password_hash).catch(() => false)
+        : false;
+    }
+
     if (existing) {
-      const row = await userRepo.findRowByEmailWithPassword(normalizedEmail);
       if (!row?.password_hash) {
         return sendError(
           res,
@@ -128,8 +121,8 @@ async function register(req, res) {
           "EMAIL_ALREADY_EXISTS"
         );
       }
-      const passwordOk = await bcrypt.compare(String(password), row.password_hash);
-      if (!passwordOk) {
+      const passwordOkFinal = passwordOk;
+      if (!passwordOkFinal) {
         return sendError(
           res,
           401,
@@ -203,14 +196,11 @@ async function register(req, res) {
             otpErr?.message || otpErr,
             isProd ? "" : otpErr?.stack || ""
           );
-          emailVerification = {
-            pending: true,
-            emailSent: false,
-            deliveryHint: isProd
+          emailVerification = buildFailedRegisterEmailVerification(
+            isProd
               ? "Verification could not be started. Try resend after signing in, or contact support."
-              : `Verification email could not be queued: ${otpErr?.message || "unknown error"}`,
-            deliveryReason: "exception"
-          };
+              : `Verification email could not be queued: ${otpErr?.message || "unknown error"}`
+          );
         }
         const base = authDataNoToken(finalUser);
         return sendSuccess(
@@ -226,58 +216,38 @@ async function register(req, res) {
       return sendSuccess(res, 200, { ...base, registrationKind: hadRole ? "existing" : "merged" }, msg);
     }
 
-    const cnicUser = await userRepo.findByCnicNumber(normalizedCnic);
-    if (cnicUser && cnicUser.email !== normalizedEmail) {
-      return sendError(
-        res,
-        409,
-        "This CNIC is already registered with another email",
-        { field: "CNIC" },
-        "EMAIL_ALREADY_EXISTS"
-      );
-    }
-
-    const phoneOwner = await userRepo.findPhoneOwner(normalizedPhone);
-    if (phoneOwner) {
-      return sendError(
-        res,
-        409,
-        "Phone number is already registered",
-        { field: "phone" },
-        "EMAIL_ALREADY_EXISTS"
-      );
-    }
-
     const passwordHash = await bcrypt.hash(String(password), 10);
-    let user = await userRepo.createUser({
-      email: normalizedEmail,
-      passwordHash,
-      roles: [normalizedRole],
-      activeRole: normalizedRole,
-      phone: normalizedPhone,
-      cnicNumber: normalizedCnic,
-      fullName: fullName || null
-    });
-
-    const base = authDataNoToken(user);
     let emailVerification = { pending: true, emailSent: false };
     try {
-      const otpPack = await issueRegisterOtpForNewUser(normalizedEmail);
+      const otpPack = await upsertPendingRegistrationAndSendOtp({
+        email: normalizedEmail,
+        phone: normalizedPhone,
+        cnicNumber: normalizedCnic,
+        fullName: fullName || null,
+        passwordHash,
+        role: normalizedRole
+      });
       emailVerification = buildRegisterEmailVerification(otpPack);
     } catch (otpErr) {
       const isProd = process.env.NODE_ENV === "production";
       // eslint-disable-next-line no-console
-      console.error("[auth.register] email OTP issue:", otpErr?.message || otpErr, isProd ? "" : otpErr?.stack || "");
-      emailVerification = {
-        pending: true,
-        emailSent: false,
-        deliveryHint: isProd
-          ? "Verification could not be started. Try resend after signing in, or contact support."
-          : `Verification email could not be queued: ${otpErr?.message || "unknown error"}`,
-        deliveryReason: "exception"
-      };
+      console.error("[auth.register] pending signup OTP issue:", otpErr?.message || otpErr, isProd ? "" : otpErr?.stack || "");
+      emailVerification = buildFailedRegisterEmailVerification(
+        isProd
+          ? "Verification could not be started. Try again shortly or contact support."
+          : `Verification email could not be queued: ${otpErr?.message || "unknown error"}`
+      );
     }
-    return sendSuccess(res, 201, { ...base, registrationKind: "new", emailVerification }, "Account created");
+    return sendSuccess(
+      res,
+      200,
+      {
+        registrationKind: "pending",
+        email: normalizedEmail,
+        emailVerification
+      },
+      "Verification code sent"
+    );
   } catch (err) {
     if (err && err.code === "23505") {
       return sendError(
@@ -337,7 +307,7 @@ async function login(req, res) {
       return sendError(res, 401, "Invalid credentials", null, "INVALID_CREDENTIALS");
     }
 
-    if (!row.verified && normalizedEmail !== DEMO_FORCE_ADMIN_EMAIL) {
+    if (!row.verified && !isDemoAdminEmail(normalizedEmail)) {
       return sendError(
         res,
         403,
@@ -350,8 +320,8 @@ async function login(req, res) {
     let authUser = await userRepo.findByEmail(normalizedEmail);
     if (!authUser) return sendError(res, 401, "Invalid credentials", null, "INVALID_CREDENTIALS");
 
-    if (normalizedEmail === DEMO_FORCE_ADMIN_EMAIL) {
-      // Demo override handled at seed time; keep for compatibility.
+    if (isDemoAdminEmail(normalizedEmail)) {
+      // Demo account may skip role-hint normalization when demo mode is enabled.
     } else {
       const normalized = normalizeRolesAndActiveRole(authUser);
       if (!normalized.ok) {
@@ -394,12 +364,19 @@ async function login(req, res) {
 }
 
 async function profile(req, res) {
-  const user = await userRepo.findById(req.auth.userId);
-  if (!user) return sendError(res, 401, "Unauthorized");
-  return sendSuccess(res, 200, authDataNoToken(user), "OK");
+  try {
+    const user = await userRepo.findById(req.auth.userId);
+    if (!user) return sendError(res, 401, "Unauthorized");
+    return sendSuccess(res, 200, authDataNoToken(user), "OK");
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[auth.profile]", err?.message || err);
+    return sendError(res, 500, "Could not load profile", null, "SERVER_ERROR");
+  }
 }
 
 async function updateActiveRole(req, res) {
+  try {
   const { activeRole } = req.body || {};
   const allowed = userRepo.ALLOWED_ROLES;
   const next = String(activeRole || "").trim().toLowerCase();
@@ -428,6 +405,11 @@ async function updateActiveRole(req, res) {
 
   const token = signToken(updated);
   return sendSuccess(res, 200, authData(updated, token), "Role updated");
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[auth.updateActiveRole]", err?.message || err);
+    return sendError(res, 500, "Role update failed", null, "SERVER_ERROR");
+  }
 }
 
 async function addRoleToAccount(req, res) {

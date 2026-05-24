@@ -7,12 +7,12 @@ import AuthHeaderActions from '../../components/auth/AuthHeaderActions.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { useAuth } from '../../hooks/useAuth.js';
 import { useAuthViewportLock } from '../../hooks/useAuthViewportLock.js';
-import { resetPasswordWithOtpApi } from '../../services/authService.js';
-import { unwrapResponseData } from '../../utils/unwrapApi.js';
-import { formatUserError } from '../../utils/userErrors.js';
+import { resetPasswordWithOtpApi, fetchProfileApi } from '../../services/authService.js';
+import { safeUnwrapAuthResponse, blockNativeFormSubmit, safeDashboardPath } from '../../utils/authApiSafe.js';
 import { notifyError, notifySuccess } from '../../components/ui/ToastProvider.jsx';
-import { dashboardPathForRole } from '../../utils/dashboardPath.js';
-import { FaLock } from 'react-icons/fa';
+import { notifyAuthError } from '../../utils/notifySystem.js';
+import PasswordField from '../../components/ui/PasswordField.jsx';
+import { getDeliveryHint } from '../../utils/otpDelivery.js';
 
 const ResetPassword = () => {
   const navigate = useNavigate();
@@ -26,6 +26,13 @@ const ResetPassword = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const deliveryHint = useMemo(
+    () =>
+      location.state?.emailDelivered === false
+        ? getDeliveryHint(location.state, '')
+        : location.state?.deliveryHint || null,
+    [location.state]
+  );
 
   useEffect(() => {
     if (!email) {
@@ -56,15 +63,23 @@ const ResetPassword = () => {
         password,
         confirmPassword
       });
-      const payload = unwrapResponseData(res) || {};
+      const payload = safeUnwrapAuthResponse(res);
       const { token, user, currentRole } = payload;
       if (token) localStorage.setItem('transpak_token', token);
-      if (user) login(payload);
+      let session = payload;
+      try {
+        const profRes = await fetchProfileApi();
+        const prof = safeUnwrapAuthResponse(profRes);
+        if (prof?.user) session = prof;
+      } catch {
+        /* use reset payload */
+      }
+      if (session?.user) login(session);
       notifySuccess(t('auth.welcomeBack'));
-      const role = currentRole || user?.activeRole || user?.roles?.[0];
-      navigate(dashboardPathForRole(role), { replace: true });
+      const role = session?.user?.activeRole ?? currentRole ?? user?.activeRole ?? user?.roles?.[0];
+      navigate(safeDashboardPath(role), { replace: true });
     } catch (err) {
-      notifyError(formatUserError(err, t, { fallback: t('errors.generic') }));
+      notifyAuthError(err, t, 'otp');
     } finally {
       setLoading(false);
     }
@@ -93,7 +108,15 @@ const ResetPassword = () => {
             <p className="small text-body-secondary mb-3">
               <strong className="text-body">{email}</strong>
             </p>
-            <form onSubmit={handleSubmit} className="tp-auth-register-form">
+            {deliveryHint ? (
+              <p
+                className="small text-warning-emphasis mb-3 border-start border-warning border-3 ps-2"
+                role="status"
+              >
+                {deliveryHint}
+              </p>
+            ) : null}
+            <form action="#" method="post" noValidate onSubmit={handleSubmit} className="tp-auth-register-form">
               <div className="mb-2">
                 <label className="form-label small">{t('auth.otpCodeLabel')}</label>
                 <input
@@ -108,35 +131,25 @@ const ResetPassword = () => {
               </div>
               <div className="mb-2">
                 <label className="form-label small">{t('auth.newPassword')}</label>
-                <div className="input-group input-group-sm">
-                  <span className="input-group-text tp-input-group-addon">
-                    <FaLock className="tp-input-icon" />
-                  </span>
-                  <input
-                    type="password"
-                    className={`form-control rounded-3 ${isUrdu ? 'text-end' : ''}`}
-                    placeholder={t('auth.passwordPlaceholder')}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    minLength={8}
-                  />
-                </div>
+                <PasswordField
+                  name="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={t('auth.passwordPlaceholder')}
+                  isUrdu={isUrdu}
+                  autoComplete="new-password"
+                />
               </div>
               <div className="mb-3">
                 <label className="form-label small">{t('auth.confirmPassword')}</label>
-                <div className="input-group input-group-sm">
-                  <span className="input-group-text tp-input-group-addon">
-                    <FaLock className="tp-input-icon" />
-                  </span>
-                  <input
-                    type="password"
-                    className={`form-control rounded-3 ${isUrdu ? 'text-end' : ''}`}
-                    placeholder={t('auth.reenterPasswordPlaceholder')}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    minLength={8}
-                  />
-                </div>
+                <PasswordField
+                  name="confirmPassword"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder={t('auth.reenterPasswordPlaceholder')}
+                  isUrdu={isUrdu}
+                  autoComplete="new-password"
+                />
               </div>
               <Button
                 variant="primary"

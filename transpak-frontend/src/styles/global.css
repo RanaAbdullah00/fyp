@@ -1140,6 +1140,74 @@ html[dir='rtl'] .sidebar-fixed {
   color: var(--pak-primary);
 }
 
+/* TP mark — italic T + green P (navbar, favicon, auth) */
+.tp-brand-mark {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.02em;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.tp-brand-mark--compact {
+  font-size: 1.15rem;
+}
+
+.tp-brand-mark__t {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+  font-weight: 800;
+  color: #0a0a0a;
+}
+
+body.dark-theme .tp-brand-mark__t {
+  color: #f8fafc;
+}
+
+.tp-brand-mark__p {
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-style: normal;
+  font-weight: 800;
+  color: var(--pak-primary, #15803d);
+}
+
+body.dark-theme .tp-brand-mark__p {
+  color: #4ade80;
+}
+
+.tp-brand-logo--mark {
+  gap: 0.55rem !important;
+}
+
+.tp-brand-logo--mark .tp-brand-mark {
+  font-size: 1.25rem;
+}
+
+/* Navbar notification dropdown */
+.tp-notif-dropdown__panel {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  z-index: 1080;
+  width: min(22rem, calc(100vw - 1.5rem));
+  max-height: min(70vh, 28rem);
+  background: var(--pak-card-bg, #fff);
+  border-color: var(--pak-border) !important;
+  display: flex;
+  flex-direction: column;
+}
+
+.tp-notif-dropdown__scroll {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.tp-fare-negotiate .form-range {
+  accent-color: var(--pak-primary, #15803d);
+}
+
 /* Brand logo — TRANS (contrast) + PAK (green) + multimodal icons */
 .tp-brand-logo {
   display: inline-flex;
@@ -4416,6 +4484,23 @@ body.dark-theme .tp-landing-details.tp-landing-details--elevated {
 
 body.dark-theme .tp-landing-details.tp-landing-details--elevated[open] {
   box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+}
+
+.tp-landing-trust__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--pak-primary);
+  flex-shrink: 0;
+}
+
+.tp-landing-live-metric {
+  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.05);
+}
+
+.tp-landing-cta-band__inner {
+  background: linear-gradient(135deg, #1d4ed8 0%, #059669 55%, #0f172a 100%);
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.15);
 }
 
 .tp-landing-footer {

@@ -39,10 +39,10 @@ const BidManagement = () => {
   const handleReject = async (bid) => {
     try {
       await request({ method: 'PUT', url: `/bids/${bid.id}/reject` });
-      notifySuccess('Bid rejected.');
+      notifySuccess(t('pages.bids.bidRejected'));
       fetchBidsData();
     } catch (err) {
-      notifyError(err?.response?.data?.error || 'Reject failed');
+      notifyError(formatUserError(err, t, { fallback: t('pages.bids.rejectFailed') }));
     }
   };
 
@@ -61,7 +61,10 @@ const BidManagement = () => {
   }, [fetchBidsData]);
 
   useEffect(() => {
-    const interval = setInterval(fetchBidsData, 8000);
+    const tick = () => {
+      if (document.visibilityState === 'visible') fetchBidsData();
+    };
+    const interval = setInterval(tick, 25000);
     return () => clearInterval(interval);
   }, [fetchBidsData]);
 

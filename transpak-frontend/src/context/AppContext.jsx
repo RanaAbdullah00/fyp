@@ -2,10 +2,26 @@ import React, { createContext, useCallback, useEffect, useMemo, useRef, useState
 import { createSocketClient } from '../services/socket.js';
 import { normalizeNotification } from '../adapters/normalize.js';
 import { isRenderableClientNotification, sanitizeNotificationRoleType } from '../utils/notificationsFilter.js';
+import { routeRealtimeNotification } from '../utils/notifySystem.js';
 import api from '../services/api.js';
 import { useAuth } from '../hooks/useAuth.js';
 
 export const AppContext = createContext(null);
+
+function mapNotificationRow(r) {
+  const title = r.title != null && String(r.title).trim() !== '' ? String(r.title).trim() : null;
+  const type = r.type != null && String(r.type).trim() !== '' ? String(r.type).trim() : title;
+  return {
+    id: r.id || r._id,
+    senderId: r.senderId ?? null,
+    type,
+    title,
+    message: r.message || title || '',
+    roleType: sanitizeNotificationRoleType(r.roleType),
+    read: Boolean(r.read || r.isRead),
+    createdAt: r.createdAt
+  };
+}
 
 export const AppProvider = ({ children }) => {
   const { user } = useAuth();
@@ -14,6 +30,7 @@ export const AppProvider = ({ children }) => {
   const chatSeenHandlers = useRef(new Set());
   const trackingHandlers = useRef(new Set());
   const lastTrackingSig = useRef({ sig: '', t: 0 });
+  const lastTrackingTsByRef = useRef(new Map());
   const socketRef = useRef(null);
   const addNotificationRef = useRef(null);
 
@@ -32,7 +49,7 @@ export const AppProvider = ({ children }) => {
     return () => trackingHandlers.current.delete(fn);
   }, []);
 
-  const addNotification = useCallback((notification) => {
+  const addNotification = useCallback((notification, { showToast = false } = {}) => {
     if (!isRenderableClientNotification(notification)) return;
     const base = normalizeNotification(notification) || notification;
     const normalized = {
@@ -56,9 +73,10 @@ export const AppProvider = ({ children }) => {
       if (dup) return prev;
       return [{ id: nid ?? `local-${Date.now()}`, read: Boolean(normalized.read), ...normalized }, ...prev];
     });
+    if (showToast) routeRealtimeNotification(normalized);
   }, []);
 
-  addNotificationRef.current = addNotification;
+  addNotificationRef.current = (n) => addNotification(n, { showToast: true });
 
   const markNotificationRead = useCallback((id) => {
     setNotifications((prev) =>
@@ -79,20 +97,11 @@ export const AppProvider = ({ children }) => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await api.get('/notifications');
+        const res = await api.get('/notifications', { skipGlobalErrorToast: true });
         if (cancelled) return;
         const rows = res?.data;
         if (!Array.isArray(rows)) return;
-        const mapped = rows.map((r) => ({
-          id: r.id || r._id,
-          senderId: r.senderId ?? null,
-          type: r.type != null && String(r.type).trim() !== '' ? String(r.type).trim() : null,
-          message: r.message || r.title || '',
-          roleType: sanitizeNotificationRoleType(r.roleType),
-          read: Boolean(r.read || r.isRead),
-          createdAt: r.createdAt
-        }));
-        setNotifications(mapped);
+        setNotifications(rows.map(mapNotificationRow));
       } catch {
         // keep empty; socket may still deliver
       }
@@ -101,15 +110,59 @@ export const AppProvider = ({ children }) => {
     return () => {
       cancelled = true;
     };
-  }, [user?.id]);
+  }, [user?.id, user?.activeRole]);
+
+  const refetchNotifications = useCallback(async () => {
+    const token = localStorage.getItem('transpak_token');
+    if (!token) return;
+    try {
+      const res = await api.get('/notifications', { skipGlobalErrorToast: true });
+      const rows = res?.data;
+      if (!Array.isArray(rows)) return;
+      setNotifications(rows.map(mapNotificationRow));
+    } catch {
+      /* keep current */
+    }
+  }, []);
+
+  useEffect(() => {
+    const onRefresh = () => refetchNotifications();
+    window.addEventListener('tp:realtime-refresh', onRefresh);
+    return () => window.removeEventListener('tp:realtime-refresh', onRefresh);
+  }, [refetchNotifications]);
+
+  useEffect(() => {
+    const onRoleSwitch = () => {
+      setNotifications([]);
+      refetchNotifications();
+    };
+    window.addEventListener('tp:role-switched', onRoleSwitch);
+    return () => window.removeEventListener('tp:role-switched', onRoleSwitch);
+  }, [refetchNotifications]);
 
   useEffect(() => {
     const token = localStorage.getItem('transpak_token');
     const client = createSocketClient({
       token: token || undefined,
-      onNotification: (n) => addNotificationRef.current?.(n),
+      onReconnect: refetchNotifications,
+      onNotification: (n) => {
+        if (n?.items && Array.isArray(n.items)) {
+          n.items.forEach((item) => addNotificationRef.current?.(item));
+          return;
+        }
+        addNotificationRef.current?.(n);
+      },
       onTracking: (p) => {
-        const sig = `${p?.refKey}|${p?.tracking?.status}|${JSON.stringify(p?.tracking?.currentLocation ?? p?.tracking?.location)}|${(p?.history || []).length}`;
+        const refs = [p?.refKey, p?.loadId]
+          .map((v) => String(v ?? '').trim())
+          .filter(Boolean);
+        const ts = Number(p?.ts);
+        if (refs.length && Number.isFinite(ts)) {
+          const lastTs = Math.max(...refs.map((r) => lastTrackingTsByRef.current.get(r) || 0));
+          if (ts < lastTs) return;
+          refs.forEach((r) => lastTrackingTsByRef.current.set(r, ts));
+        }
+        const sig = `${refs.join('|')}|${p?.tracking?.status}|${ts}|${JSON.stringify(p?.tracking?.currentLocation ?? p?.tracking?.location)}|${(p?.history || []).length}`;
         const now = Date.now();
         if (sig && lastTrackingSig.current.sig === sig && now - lastTrackingSig.current.t < 450) {
           return;
@@ -147,7 +200,7 @@ export const AppProvider = ({ children }) => {
       client.disconnect();
       socketRef.current = null;
     };
-  }, [user?.id]);
+  }, [user?.id, user?.activeRole, refetchNotifications]);
 
   const getSocket = useCallback(() => socketRef.current, []);
 
@@ -159,6 +212,7 @@ export const AppProvider = ({ children }) => {
       registerChatMessageHandler,
       registerChatSeenHandler,
       registerTrackingHandler,
+      refetchNotifications,
       getSocket
     }),
     [
@@ -168,6 +222,7 @@ export const AppProvider = ({ children }) => {
       registerChatMessageHandler,
       registerChatSeenHandler,
       registerTrackingHandler,
+      refetchNotifications,
       getSocket
     ]
   );

@@ -1,8 +1,16 @@
+const path = require("path");
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 
+const { version: APP_VERSION } = require(path.join(__dirname, "..", "package.json"));
+const BUILD_ID = String(process.env.RENDER_GIT_COMMIT || process.env.BUILD_ID || "local").slice(0, 12);
+
+const { isDatabaseUrlConfigured } = require("../db/pool");
+
 const { globalApiLimiter } = require("../middleware/apiRateLimit");
+const { deployHeaders } = require("../middleware/deployHeaders");
+const { globalErrorMiddleware } = require("../utils/globalErrorHandler");
 
 const authRoutes = require("../routes/authRoutes");
 const profileRoutes = require("../routes/profileRoutes");
@@ -19,47 +27,120 @@ const disputeRoutes = require("../routes/disputeRoutes");
 const translationRoutes = require("../routes/translationRoutes");
 const uploadRoutes = require("../routes/uploadRoutes");
 
+function parseCorsOriginsFromEnv() {
+  const raw = [
+    process.env.CORS_ORIGIN,
+    process.env.FRONTEND_URL,
+    process.env.VITE_APP_ORIGIN,
+    process.env.CORS_EXTRA_ORIGINS
+  ]
+    .filter(Boolean)
+    .join(",");
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((o) => {
+      try {
+        return new URL(o).origin;
+      } catch {
+        return o.replace(/\/$/, "");
+      }
+    });
+}
+
+function isAllowedCorsOrigin(origin, allowedOriginsList) {
+  if (!origin) return true;
+  return allowedOriginsList.includes(origin);
+}
+
+function createCorsOriginCallback(allowedOriginsList) {
+  return (origin, callback) => {
+    if (isAllowedCorsOrigin(origin, allowedOriginsList)) {
+      return callback(null, true);
+    }
+    // eslint-disable-next-line no-console
+    console.warn("[cors] blocked origin:", origin || "(none)", "allowed:", allowedOriginsList.length);
+    return callback(null, false);
+  };
+}
+
 function createApp({ uploadsDir, dbState = { ready: true, error: null } }) {
   const app = express();
 
-  // If you deploy behind a proxy (Render/Heroku/Nginx), enable this so rate limiting & IPs work correctly.
   app.set("trust proxy", 1);
+  app.use(deployHeaders);
 
   app.use(
     helmet({
       crossOriginResourcePolicy: { policy: "cross-origin" }
     })
   );
-  app.use(express.json({ limit: "10kb" }));
+  const jsonLimit = process.env.JSON_BODY_LIMIT || "5mb";
+  app.use(express.json({ limit: jsonLimit }));
   app.use(express.urlencoded({ extended: false }));
 
   if (uploadsDir) {
     app.use("/uploads", express.static(uploadsDir, { fallthrough: false }));
   }
 
-  const defaultDevOrigins = [
-    "http://localhost:5173",
-    "http://localhost:5174",
-    "http://127.0.0.1:5173",
-    "http://127.0.0.1:5174"
-  ];
-  const envOrigins = (process.env.CORS_ORIGIN || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const allowedOrigins = envOrigins.length > 0 ? [...new Set([...defaultDevOrigins, ...envOrigins])] : null;
+  const isProd = process.env.NODE_ENV === "production";
+  const envOrigins = parseCorsOriginsFromEnv();
+  const defaultLocalOrigins = isProd
+    ? []
+    : [
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:5175",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
+        "http://127.0.0.1:5175"
+      ];
+  const allowedOriginsList = [...new Set([...defaultLocalOrigins, ...envOrigins])];
+  const allowReflectAnyOrigin = !isProd && allowedOriginsList.length === 0;
+
+  if (isProd && allowedOriginsList.length === 0) {
+    console.warn(
+      "[cors] NODE_ENV=production but CORS_ORIGIN / FRONTEND_URL / VITE_APP_ORIGIN / CORS_EXTRA_ORIGINS are empty — browser clients will be rejected unless Origin is absent."
+    );
+  }
+
+  const corsOriginCheck =
+    allowReflectAnyOrigin && !isProd
+      ? (origin, callback) => callback(null, true)
+      : createCorsOriginCallback(allowedOriginsList);
 
   app.use(
     cors({
-      origin: (origin, callback) => {
-        if (!origin) return callback(null, true);
-        if (!allowedOrigins) return callback(null, true);
-        if (allowedOrigins.includes(origin)) return callback(null, true);
-        return callback(null, false);
-      },
-      credentials: true
+      origin: corsOriginCheck,
+      credentials: true,
+      methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
+      allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+      exposedHeaders: ["X-TransPak-Version", "X-TransPak-Build"]
     })
   );
+
+  app.get("/", (req, res) => {
+    res.status(200).json({
+      ok: true,
+      service: "transpak-backend",
+      health: "/health",
+      apiHealth: "/api/health"
+    });
+  });
+
+  app.get("/health", (req, res) => {
+    res.status(200).json({
+      ok: true,
+      service: "transpak-backend",
+      version: APP_VERSION,
+      build: BUILD_ID,
+      commit: BUILD_ID,
+      uptime: process.uptime(),
+      db: dbState?.ready ? "ready" : "unavailable",
+      databaseUrlConfigured: isDatabaseUrlConfigured()
+    });
+  });
 
   app.use("/api", globalApiLimiter);
 
@@ -67,29 +148,53 @@ function createApp({ uploadsDir, dbState = { ready: true, error: null } }) {
     res.json({
       success: true,
       message: "ok",
-      data: { status: "ok", db: dbState?.ready ? "ready" : "unavailable" }
+      data: {
+        status: "ok",
+        version: APP_VERSION,
+        build: BUILD_ID,
+        commit: BUILD_ID,
+        uptime: process.uptime(),
+        db: dbState?.ready ? "ready" : "unavailable"
+      }
     })
   );
 
-  // Degraded-mode gate: if DB is down, return a consistent 503 instead of connection resets.
   app.use("/api", (req, res, next) => {
     if (req.path === "/health") return next();
     if (dbState?.ready) return next();
+    const lastErr = dbState?.error;
+    const isProd = process.env.NODE_ENV === "production";
+    if (!isProd && lastErr) {
+      // eslint-disable-next-line no-console
+      console.error("[db] request blocked (DB not ready):", req.method, req.originalUrl, lastErr?.message || lastErr);
+    }
     return res.status(503).json({
       success: false,
-      message: "Database unavailable. Start the backend database and retry.",
-      data: null
+      message: "Database unavailable. Set DATABASE_URL on Render (Supabase Session pooler URI) and run: npm run db:migrate:otp",
+      code: "DATABASE_UNAVAILABLE",
+      data: {
+        databaseUrlConfigured: isDatabaseUrlConfigured(),
+        hint: "transpak-backend: npm run db:migrate:otp",
+        ...(isProd ? {} : { lastError: lastErr?.message || String(lastErr || "") })
+      }
     });
   });
 
+  app.use("/api/public", require("../routes/publicRoutes"));
   app.use("/api/auth", authRoutes);
   app.use("/api/profile", profileRoutes);
   app.use("/api/shipments", shipmentRoutes);
   app.use("/api/loads", loadRoutes);
   app.use("/api/bids", bidRoutes);
+  app.use("/api/fare", require("../routes/fareRoutes"));
+  app.use("/api/carrier-space", require("../routes/carrierSpaceRoutes"));
+  app.use("/api/carrier-space", require("../routes/spaceBookingRoutes"));
+  app.use("/api/operations", require("../routes/operationsRoutes"));
   app.use("/api/admin", adminRoutes);
   app.use("/api/reviews", reviewRoutes);
+  app.use("/api/ratings", reviewRoutes);
   app.use("/api/notifications", notificationRoutes);
+  app.use("/api/feedback", require("../routes/feedbackRoutes"));
   app.use("/api/chat", chatRoutes);
   app.use("/api/trucks", truckRoutes);
   app.use("/api/demo-video", demoVideoRoutes);
@@ -103,19 +208,22 @@ function createApp({ uploadsDir, dbState = { ready: true, error: null } }) {
   }
 
   app.use((req, res) => {
-    res.status(404).json({ success: false, message: "Route not found", data: null });
+    // eslint-disable-next-line no-console
+    console.warn("[api] 404", req.method, req.originalUrl);
+    res.status(404).json({
+      success: false,
+      message: "Route not found",
+      code: "NOT_FOUND",
+      data: { method: req.method, path: req.originalUrl }
+    });
   });
 
-  // eslint-disable-next-line no-unused-vars
-  app.use((err, req, res, next) => {
-    const status = err.statusCode || 500;
-    const isProd = process.env.NODE_ENV === "production";
-    const safeMessage = isProd && status >= 500 ? "Server error" : err.message || "Server error";
-    res.status(status).json({ success: false, message: safeMessage, data: null });
-  });
+  app.use(globalErrorMiddleware);
 
-  return { app, socketCorsOrigin: allowedOrigins === null ? true : allowedOrigins };
+  const socketCorsOrigin =
+    allowReflectAnyOrigin && !isProd ? true : createCorsOriginCallback(allowedOriginsList);
+
+  return { app, socketCorsOrigin };
 }
 
 module.exports = { createApp };
-
