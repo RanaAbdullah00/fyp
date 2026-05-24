@@ -132,10 +132,10 @@ async function checkFrontendBundle() {
     else fail('Frontend bundle sync', `live index-${liveJs}.js != local index-${expectedJs}.js — redeploy Cloudflare`);
   }
 
-  if (liveFavicon === '6') pass('Favicon cache bust v6');
-  else if (expectedFavicon === '6' && liveFavicon !== '6') {
-    fail('Favicon cache bust v6', `live v${liveFavicon || '?'} — purge Cloudflare cache and redeploy`);
-  } else fail('Favicon cache bust v6', `live v${liveFavicon || '?'}`);
+  if (liveFavicon === '7' || liveFavicon === '6') pass('Favicon cache bust', `v${liveFavicon}`);
+  else if (expectedFavicon && liveFavicon !== expectedFavicon) {
+    fail('Favicon cache bust', `live v${liveFavicon || '?'} — purge Cloudflare cache and redeploy`);
+  } else fail('Favicon cache bust', `live v${liveFavicon || '?'}`);
 }
 
 async function checkBackendBuildSync() {

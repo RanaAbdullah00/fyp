@@ -788,6 +788,10 @@ export const translations = {
         fareAdjust: 'Adjust your offer',
         fareMinLabel: 'Minimum',
         fareMaxLabel: 'Max',
+        summaryDistance: 'Distance',
+        summaryFare: 'Recommended',
+        summaryEta: 'Delivery',
+        summaryEtaValue: '~{{hours}}h ({{minutes}} min)',
         submitPost: 'Post load',
         submitSave: 'Save changes'
       },

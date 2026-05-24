@@ -12,7 +12,7 @@
     "build": "node scripts/verify-upload-deps.js && node --check server.js && node --check src/server.js && node --check src/app.js",
     "test": "node --test",
     "seed": "node scripts/seedUsers.js",
-    "seed:admin": "node scripts/seedUsers.js",
+    "seed:demo-admin": "node scripts/seedDemoAdmin.js",
     "db:migrate:otp": "node scripts/applyOtpMigrations.js",
     "db:migrate": "node -e \"require('./db/migrate').runMigrations().then(()=>process.exit(0)).catch(e=>{console.error(e.message||e);process.exit(1)})\"",
     "dev:reset-test-auth": "node scripts/devResetTestAuth.js",

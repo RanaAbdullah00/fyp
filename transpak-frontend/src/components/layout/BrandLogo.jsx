@@ -1,29 +1,35 @@
 import React from 'react';
 
-/** TransPak TP mark — italic T (contrast) + P (green). Used site-wide. */
-export const TpMark = ({ compact = false, className = '' }) => (
+/**
+ * TransPak TP mark — rounded container, italic black T, green P.
+ * TransPAK Digital Logistics System
+ */
+export const TpMark = ({ compact = false, className = '', showTagline = false }) => (
   <span
-    className={`tp-brand-mark ${compact ? 'tp-brand-mark--compact' : ''} ${className}`.trim()}
-    aria-hidden="true"
+    className={`tp-brand-mark-wrap ${compact ? 'tp-brand-mark-wrap--compact' : ''} ${className}`.trim()}
+    aria-hidden={!showTagline}
   >
-    <span className="tp-brand-mark__t">T</span>
-    <span className="tp-brand-mark__p">P</span>
+    <span className={`tp-brand-mark ${compact ? 'tp-brand-mark--compact' : ''}`}>
+      <span className="tp-brand-mark__t">T</span>
+      <span className="tp-brand-mark__p">P</span>
+    </span>
+    {showTagline ? (
+      <span className="tp-brand-mark__tagline small text-muted d-block">Digital Logistics</span>
+    ) : null}
   </span>
 );
 
-/**
- * TransPak branding — consistent TP mark + optional wordmark.
- */
 const BrandLogo = ({ className = '', onClick, title = 'TransPak', variant = 'full' }) => {
   const isMark = variant === 'mark';
   const isAuth = variant === 'auth';
+  const compact = isMark || isAuth;
 
-  const wordmark = (
+  const wordmark = !isMark ? (
     <span className={`tp-brand-logo__wordmark ${isAuth ? 'tp-brand-logo__wordmark--auth' : ''}`}>
       <span className="tp-brand-logo__trans">TRANS</span>
       <span className="tp-brand-logo__pak">PAK</span>
     </span>
-  );
+  ) : null;
 
   return (
     <div
@@ -46,10 +52,12 @@ const BrandLogo = ({ className = '', onClick, title = 'TransPak', variant = 'ful
       tabIndex={onClick ? 0 : undefined}
       aria-label={title}
     >
-      <TpMark compact={isMark || isAuth} />
-      {isMark ? null : wordmark}
+      <TpMark compact={compact} />
+      {wordmark}
       {!isMark && !isAuth ? <span className="tp-brand-logo__rule" aria-hidden="true" /> : null}
-      {isAuth ? <span className="tp-brand-logo__rule tp-brand-logo__rule--vertical d-none d-sm-inline" aria-hidden="true" /> : null}
+      {isAuth ? (
+        <span className="tp-brand-logo__rule tp-brand-logo__rule--vertical d-none d-sm-inline" aria-hidden="true" />
+      ) : null}
     </div>
   );
 };

@@ -1140,18 +1140,53 @@ html[dir='rtl'] .sidebar-fixed {
   color: var(--pak-primary);
 }
 
-/* TP mark — italic T + green P (navbar, favicon, auth) */
+/* TP mark — rounded box, italic T + green P */
+.tp-brand-mark-wrap {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.tp-brand-mark-wrap--compact .tp-brand-mark {
+  min-width: 2.35rem;
+  min-height: 2.35rem;
+  padding: 0.28rem 0.42rem;
+  font-size: 1.05rem;
+}
+
 .tp-brand-mark {
   display: inline-flex;
-  align-items: baseline;
-  gap: 0.02em;
+  align-items: center;
+  justify-content: center;
+  gap: 0.04em;
   font-weight: 800;
   line-height: 1;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.05em;
+  padding: 0.35rem 0.5rem;
+  min-width: 2.65rem;
+  min-height: 2.65rem;
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--pak-card-bg, #fff) 88%, #f1f5f9);
+  border: 1px solid color-mix(in srgb, var(--pak-border, #e2e8f0) 90%, transparent);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--pak-primary, #15803d) 8%, transparent);
+}
+
+body.dark-theme .tp-brand-mark {
+  background: color-mix(in srgb, var(--tp-bg, #0f172a) 75%, #1e293b);
+  border-color: color-mix(in srgb, var(--pak-primary) 35%, transparent);
+  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.35);
 }
 
 .tp-brand-mark--compact {
   font-size: 1.15rem;
+}
+
+.tp-brand-mark__tagline {
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.1;
 }
 
 .tp-brand-mark__t {
@@ -1180,8 +1215,8 @@ body.dark-theme .tp-brand-mark__p {
   gap: 0.55rem !important;
 }
 
-.tp-brand-logo--mark .tp-brand-mark {
-  font-size: 1.25rem;
+.tp-brand-logo--mark .tp-brand-mark-wrap {
+  flex-shrink: 0;
 }
 
 /* Navbar notification dropdown */
@@ -1208,7 +1243,21 @@ body.dark-theme .tp-brand-mark__p {
   accent-color: var(--pak-primary, #15803d);
 }
 
-/* Brand logo — TRANS (contrast) + PAK (green) + multimodal icons */
+.tp-route-summary {
+  background: color-mix(in srgb, var(--pak-primary, #15803d) 6%, var(--pak-card-bg, #fff));
+  border: 1px solid color-mix(in srgb, var(--pak-primary) 22%, var(--pak-border));
+}
+
+.tp-route-summary__label {
+  font-size: 0.65rem;
+  letter-spacing: 0.05em;
+}
+
+body.dark-theme .tp-route-summary {
+  background: color-mix(in srgb, var(--pak-primary) 12%, var(--tp-bg, #0f172a));
+}
+
+/* Brand logo — TRANS (contrast) + PAK (green) */
 .tp-brand-logo {
   display: inline-flex;
   flex-direction: column;

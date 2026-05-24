@@ -141,29 +141,44 @@ const PostLoadForm = ({ onSubmit, initialValues = null, submitLabel = null }) =>
         </div>
       </div>
       {showFareEstimate ? (
-        <div className="tp-fare-hint mt-2 mb-0" role="status">
+        <div className="tp-route-summary mt-2 mb-2 p-3 rounded-3" role="status">
           {fareLoading ? (
-            <p className="mb-0">{t('pages.postLoadForm.fareCalculating')}</p>
+            <p className="mb-0 small text-muted">{t('pages.postLoadForm.fareCalculating')}</p>
           ) : estimate ? (
-            <>
-              <p className="mb-0">
-                {t('pages.postLoadForm.fareHint', {
-                  km: estimate.distanceKm,
-                  fare: Number(minFare || 0).toLocaleString()
-                })}
-              </p>
-              {estimate.estimatedTravelHours != null ? (
-                <p className="mb-0 small text-muted">
-                  {t('pages.postLoadForm.fareTravelHint', {
-                    hours: estimate.estimatedTravelHours,
-                    minutes: estimate.estimatedTravelMinutes ?? Math.round(estimate.estimatedTravelHours * 60)
-                  })}
-                </p>
-              ) : null}
-            </>
+            <div className="row g-2 small">
+              <div className="col-4">
+                <div className="text-muted text-uppercase tp-route-summary__label">
+                  {t('pages.postLoadForm.summaryDistance')}
+                </div>
+                <div className="fw-semibold">{estimate.distanceKm} km</div>
+              </div>
+              <div className="col-4">
+                <div className="text-muted text-uppercase tp-route-summary__label">
+                  {t('pages.postLoadForm.summaryFare')}
+                </div>
+                <div className="fw-semibold text-success">
+                  PKR {Number(minFare || 0).toLocaleString()}
+                </div>
+              </div>
+              <div className="col-4">
+                <div className="text-muted text-uppercase tp-route-summary__label">
+                  {t('pages.postLoadForm.summaryEta')}
+                </div>
+                <div className="fw-semibold">
+                  {estimate.estimatedTravelHours != null
+                    ? t('pages.postLoadForm.summaryEtaValue', {
+                        hours: estimate.estimatedTravelHours,
+                        minutes:
+                          estimate.estimatedTravelMinutes ??
+                          Math.round(estimate.estimatedTravelHours * 60)
+                      })
+                    : '—'}
+                </div>
+              </div>
+            </div>
           ) : null}
           {fareTooLow ? (
-            <p className="mb-0 small text-danger mt-1">
+            <p className="mb-0 small text-danger mt-2">
               {t('pages.postLoadForm.fareBelowMinimum', { fare: Math.ceil(minFare).toLocaleString() })}
             </p>
           ) : null}

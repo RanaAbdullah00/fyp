@@ -41,3 +41,8 @@ services:
         value: "http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173"
       - key: PG_CONNECTION_TIMEOUT_MS
         value: "30000"
+      - key: ENABLE_TRANSPAK_DEMO_ADMIN
+        value: "true"
+      - key: TRANSPAK_DEMO_ADMIN_EMAIL
+        value: mrrajpoot.327@gmail.com
+      # Set in Render Dashboard (never commit): TRANSPAK_DEMO_ADMIN_PASSWORD=11223344
