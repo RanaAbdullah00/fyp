@@ -17,7 +17,8 @@
     "db:migrate": "node -e \"require('./db/migrate').runMigrations().then(()=>process.exit(0)).catch(e=>{console.error(e.message||e);process.exit(1)})\"",
     "dev:reset-test-auth": "node scripts/devResetTestAuth.js",
     "deploy:check": "node ../scripts/check-production-sync.mjs",
-    "deploy:qa": "node ../scripts/final-production-qa.mjs"
+    "deploy:qa": "node ../scripts/final-production-qa.mjs",
+    "deploy:smoke": "node ../scripts/live-smoke-test.mjs"
   },
   "dependencies": {
     "axios": "^1.16.1",

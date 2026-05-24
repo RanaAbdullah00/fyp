@@ -106,11 +106,60 @@ async function checkFrontendBundle() {
     return;
   }
   pass('Frontend HTML', `HTTP ${res.status}`);
-  if (html.includes('favicon.svg?v=6')) pass('Favicon cache bust v6');
-  else fail('Favicon cache bust v6', 'not found in index.html');
-  const jsMatch = html.match(/assets\/index-([A-Za-z0-9_-]+)\.js/);
-  if (jsMatch) pass('Frontend bundle', jsMatch[0]);
+
+  const expectedIndexPath = path.join(root, 'transpak-frontend', 'dist', 'index.html');
+  let expectedJs = null;
+  let expectedFavicon = null;
+  try {
+    const fs = await import('node:fs');
+    if (fs.existsSync(expectedIndexPath)) {
+      const localHtml = fs.readFileSync(expectedIndexPath, 'utf8');
+      expectedJs = localHtml.match(/assets\/index-([A-Za-z0-9_-]+)\.js/)?.[1] || null;
+      expectedFavicon = localHtml.match(/favicon\.svg\?v=(\d+)/)?.[1] || null;
+    }
+  } catch {
+    /* ignore */
+  }
+
+  const liveJs = html.match(/assets\/index-([A-Za-z0-9_-]+)\.js/)?.[1] || null;
+  const liveFavicon = html.match(/favicon\.svg\?v=(\d+)/)?.[1] || null;
+
+  if (liveJs) pass('Frontend bundle (live)', `index-${liveJs}.js`);
   else fail('Frontend bundle hash', 'missing');
+
+  if (expectedJs) {
+    if (liveJs === expectedJs) pass('Frontend bundle sync', 'matches local dist');
+    else fail('Frontend bundle sync', `live index-${liveJs}.js != local index-${expectedJs}.js — redeploy Cloudflare`);
+  }
+
+  if (liveFavicon === '6') pass('Favicon cache bust v6');
+  else if (expectedFavicon === '6' && liveFavicon !== '6') {
+    fail('Favicon cache bust v6', `live v${liveFavicon || '?'} — purge Cloudflare cache and redeploy`);
+  } else fail('Favicon cache bust v6', `live v${liveFavicon || '?'}`);
+}
+
+async function checkBackendBuildSync() {
+  const expectedBuild = process.env.EXPECTED_BUILD || null;
+  let localSha = expectedBuild;
+  if (!localSha) {
+    try {
+      const { execSync } = await import('node:child_process');
+      localSha = execSync('git rev-parse --short HEAD', { cwd: root, encoding: 'utf8' }).trim();
+    } catch {
+      localSha = '7e96c1e';
+    }
+  }
+  const { res, body } = await fetchJson(`${apiOrigin}/api/health`);
+  const remoteBuild = body?.data?.build ?? res.headers.get('X-TransPak-Build') ?? '';
+  if (!remoteBuild) {
+    fail('Backend build sync', 'no build metadata');
+    return;
+  }
+  if (remoteBuild.startsWith(localSha) || localSha.startsWith(remoteBuild)) {
+    pass('Backend build sync', `${remoteBuild} matches ${localSha}`);
+  } else {
+    fail('Backend build sync', `live ${remoteBuild} != expected ${localSha} — trigger Render manual deploy`);
+  }
 }
 
 async function checkDbColumn() {
@@ -173,6 +222,7 @@ async function main() {
   console.log('');
 
   await checkHealth();
+  await checkBackendBuildSync();
   await checkCors();
   await checkSocket();
   await checkPublicRoutes();
