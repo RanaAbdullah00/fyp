@@ -118,7 +118,9 @@ async function main() {
   else fail('Shipments completed route', String(completed.res.status));
 
   const roles = wantsRoles(user);
-  if (roles.includes('shipper') && roles.includes('carrier')) {
+  const hasBoth = roles.includes('shipper') && roles.includes('carrier');
+  const commercialActive = user.activeRole === 'shipper' || user.activeRole === 'carrier';
+  if (hasBoth && commercialActive) {
     const sw = await jsonFetch(`${apiOrigin}/api/auth/active-role`, {
       method: 'PATCH',
       headers: auth,
@@ -128,7 +130,7 @@ async function main() {
     if (sw.res.ok && newToken) pass('Role switch API');
     else fail('Role switch API', `${sw.res.status} ${sw.body?.message || ''}`);
   } else {
-    pass('Role switch API', 'skipped (admin-only account)');
+    pass('Role switch API', hasBoth ? 'skipped (admin active role on demo account)' : 'skipped (single-role account)');
   }
 
   // Upload route auth gate
