@@ -1,0 +1,15 @@
+{
+  "name": "transpak",
+  "private": true,
+  "description": "TransPak monorepo — run npm scripts from repo root or from transpak-backend / transpak-frontend",
+  "scripts": {
+    "verify:production": "npm run verify:production --prefix transpak-backend",
+    "audit:production-db": "npm run audit:production-db --prefix transpak-backend",
+    "predeploy:check": "npm run predeploy:check --prefix transpak-backend",
+    "db:migrate": "npm run db:migrate --prefix transpak-backend",
+    "backend:dev": "npm run dev --prefix transpak-backend",
+    "backend:start": "npm run start --prefix transpak-backend",
+    "frontend:dev": "npm run dev --prefix transpak-frontend",
+    "frontend:build": "npm run build --prefix transpak-frontend"
+  }
+}
