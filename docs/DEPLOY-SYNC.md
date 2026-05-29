@@ -1,39 +1,49 @@
-# Production deploy sync (Render + Cloudflare)
+# Production deploy sync (TransPak)
 
-## Target commit
+## Root cause of CODE_DRIFT (documented)
 
-After pushing to `main`, production must report the same commit as local:
+TransPak uses **three Git remotes**:
 
-```bash
-git rev-parse --short=12 HEAD
-npm run verify:production
-```
+| Repo | Remote | Used by |
+|------|--------|---------|
+| `fyp` (monorepo) | `github.com/RanaAbdullah00/fyp` | Local dev, CI |
+| `transpak-backend` (nested `.git`) | `github.com/RanaAbdullah00/transpak-backend` | **Render** |
+| `transpak-frontend` (nested `.git`) | `github.com/RanaAbdullah00/transpak-frontend` | **Cloudflare Pages** |
 
-## Render (backend)
+Pushing only to `fyp/main` does **not** update Render until you sync the deploy repos.
 
-1. Dashboard → **transpak-backend** → **Settings** → confirm **Root Directory** = `transpak-backend` (monorepo) or `.` if backend-only repo.
-2. **Branch** = `main`, **Auto-Deploy** = On.
-3. **Manual Deploy** → **Clear build cache** → Deploy.
-4. Logs must show: `[build] stamp written … 60db455…` and `[deploy] commit=60db455…`.
-5. Health: `GET https://transpak-backend-1.onrender.com/api/health` → `commit` matches git.
-
-## Cloudflare Pages (frontend)
-
-1. Project → **Deployments** → **Retry deployment** on latest `main` (or trigger new build).
-2. Build env: `VITE_API_URL=https://transpak-backend-1.onrender.com`
-3. Optional: `VITE_APP_BUILD_ID` from CI commit SHA (Vite sets from `CF_PAGES_COMMIT_SHA` when present).
-
-## Verify locally
+## Sync deploy repos (after monorepo changes)
 
 ```bash
-npm run verify:production
-npm run wait:production
+node scripts/sync-deploy-repos.mjs
 ```
 
-`wait:production` polls until remote commit matches `60db455` (or pass another short SHA).
+Or manually:
 
-## If CODE_DRIFT persists
+```bash
+cd transpak-backend && git add -A && git commit -m "sync" && git push origin main
+cd transpak-frontend && git add -A && git commit -m "sync" && git push origin main
+```
 
-- Render did not rebuild from latest `main` (redeploy + clear cache).
-- Wrong GitHub repo/branch connected in Render.
-- Multiple Render services — ensure the URL in `VITE_API_URL` is the service you updated.
+## Verify
+
+```bash
+npm run verify:production   # compares transpak-backend HEAD vs Render /api/health
+npm run wait:production     # polls until commitMatch
+```
+
+## Render settings (confirm once)
+
+- **Repository:** `RanaAbdullah00/transpak-backend` (or monorepo with root `transpak-backend`)
+- **Branch:** `main`
+- **Auto-Deploy:** On
+- Manual deploy: **Clear build cache & deploy**
+
+## Cloudflare Pages
+
+- **Repository:** `RanaAbdullah00/transpak-frontend`
+- **Build env:** `VITE_API_URL=https://transpak-backend-1.onrender.com`
+
+## Optional: single monorepo deploy
+
+Point Render at `fyp` with **Root Directory** `transpak-backend` and remove nested `.git` folders to avoid drift.

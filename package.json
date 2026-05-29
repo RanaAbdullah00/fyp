@@ -4,7 +4,8 @@
   "description": "TransPak monorepo — run npm scripts from repo root or from transpak-backend / transpak-frontend",
   "scripts": {
     "verify:production": "npm run verify:production --prefix transpak-backend",
-    "wait:production": "node scripts/wait-production-sync.mjs 60db455",
+    "wait:production": "node scripts/wait-production-sync.mjs",
+  "sync:deploy-repos": "node scripts/sync-deploy-repos.mjs",
     "audit:production-db": "npm run audit:production-db --prefix transpak-backend",
     "predeploy:check": "npm run predeploy:check --prefix transpak-backend",
     "db:migrate": "npm run db:migrate --prefix transpak-backend",
