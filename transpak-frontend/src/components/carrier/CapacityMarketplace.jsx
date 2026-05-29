@@ -10,6 +10,7 @@ import { formatUserError } from '../../utils/userErrors.js';
 import { emitRealtimeRefresh } from '../../utils/spaceFlow.js';
 import { getVehicleTypeLabel } from '../../data/vehicleTypes.js';
 import VehicleTypeDropdown from '../loadboard/VehicleTypeDropdown.jsx';
+import CitySelect from '../ui/CitySearchSelect.jsx';
 import SpaceSentRequestsPanel from './SpaceSentRequestsPanel.jsx';
 
 const DEFAULT_FILTERS = {
@@ -112,16 +113,16 @@ const CapacityMarketplace = () => {
       <div className="tp-filter-card mb-2">
         <div className="row g-2">
           <div className="col-6 col-md-3">
-            <input
-              className="form-control form-control-sm rounded-3"
+            <CitySelect
+              name="origin"
               placeholder={t('loadsHub.filterOrigin')}
               value={filters.origin}
               onChange={(e) => setField('origin', e.target.value)}
             />
           </div>
           <div className="col-6 col-md-3">
-            <input
-              className="form-control form-control-sm rounded-3"
+            <CitySelect
+              name="destination"
               placeholder={t('loadsHub.filterDestination')}
               value={filters.destination}
               onChange={(e) => setField('destination', e.target.value)}

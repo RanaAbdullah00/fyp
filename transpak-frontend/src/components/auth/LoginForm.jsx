@@ -4,13 +4,14 @@ import Button from '../ui/Button.jsx';
 import Loader from '../ui/Loader.jsx';
 import RoleSelector from './RoleSelector.jsx';
 import { useAuth } from '../../hooks/useAuth.js';
-import { loginApi, fetchProfileApi } from '../../services/authService.js';
+import { loginApi, fetchProfileApi, patchActiveRoleApi } from '../../services/authService.js';
 import PasswordField from '../ui/PasswordField.jsx';
 import { notifySuccess } from '../ui/ToastProvider.jsx';
 import { notifyAuthError, notifyUserError } from '../../utils/notifySystem.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { unwrapErrorCode } from '../../utils/unwrapApi.js';
 import { safeUnwrapAuthResponse, blockNativeFormSubmit, safeDashboardPath } from '../../utils/authApiSafe.js';
+import { applyDemoAdminSession } from '../../utils/authSession.js';
 import { FaEnvelope } from 'react-icons/fa';
 
 const DEMO_ADMIN_EMAIL = String(import.meta.env.VITE_DEMO_ADMIN_EMAIL || '')
@@ -68,18 +69,45 @@ const LoginForm = () => {
       });
       const payload = safeUnwrapAuthResponse(res);
       const { token, user, currentRole } = payload;
-      if (token) localStorage.setItem('transpak_token', token);
+      if (token) {
+        const { setAuthToken } = await import('../../utils/authSession.js');
+        setAuthToken(token);
+      }
       let session = payload;
       try {
         const profRes = await fetchProfileApi();
         const prof = safeUnwrapAuthResponse(profRes);
-        if (prof?.user) session = prof;
+        if (prof?.user) {
+          session = {
+            ...prof,
+            token: prof.token || payload.token,
+            user: { ...prof.user, activeRole: prof.user.activeRole || payload.user?.activeRole }
+          };
+        }
       } catch {
         /* use login payload */
       }
-      if (session?.user) login(session);
+      if (isDemoAdmin && session?.user?.activeRole !== 'admin') {
+        try {
+          const syncRes = await patchActiveRoleApi('admin');
+          const synced = safeUnwrapAuthResponse(syncRes);
+          if (synced?.token) {
+            const { setAuthToken } = await import('../../utils/authTokenStorage.js');
+            setAuthToken(synced.token);
+          }
+          if (synced?.user) session = { ...synced, token: synced.token || session.token };
+        } catch {
+          /* keep login session */
+        }
+      }
+      const sessionToStore = applyDemoAdminSession(session, emailNorm);
+      if (sessionToStore?.user) login(sessionToStore);
       notifySuccess(t('auth.welcomeBack'));
-      const activeRole = session?.user?.activeRole ?? session?.currentRole ?? user?.activeRole ?? currentRole;
+      const activeRole =
+        sessionToStore?.user?.activeRole ??
+        sessionToStore?.currentRole ??
+        user?.activeRole ??
+        currentRole;
       navigate(safeDashboardPath(activeRole), { replace: true });
     } catch (err) {
       const code = unwrapErrorCode(err);

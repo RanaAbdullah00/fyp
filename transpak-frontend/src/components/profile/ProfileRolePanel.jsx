@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth.js';
 import { useApi } from '../../hooks/useApi.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { dashboardPathForRole } from '../../utils/dashboardPath.js';
+import { resolveCommercialSwitchTarget } from '../../utils/roleSwitch.js';
+import { canAccessAdminRoutes } from '../../utils/authSession.js';
+import { resolveAdminShell } from '../../utils/rbac.js';
 import { useReceivedRatingSummary } from '../../hooks/useReceivedRatingSummary.js';
 import { notifyError } from '../ui/ToastProvider.jsx';
 import { formatUserError } from '../../utils/userErrors.js';
@@ -12,10 +15,14 @@ import { formatUserError } from '../../utils/userErrors.js';
  * Profile “trust center” role summary: active role, role chips, lightweight stats (existing APIs only).
  */
 const ProfileRolePanel = () => {
-  const { user, setActiveRole } = useAuth();
+  const { user, setActiveRole, roleSwitching } = useAuth();
   const { request } = useApi();
   const { t } = useLanguage();
   const navigate = useNavigate();
+  const location = useLocation();
+  const hideForAdmin =
+    resolveAdminShell(user, location.pathname) ||
+    (canAccessAdminRoutes(user) && user?.activeRole === 'admin');
   const uid = user?.id || user?._id;
   const { avg, count } = useReceivedRatingSummary(uid);
 
@@ -44,7 +51,7 @@ const ProfileRolePanel = () => {
     return () => {
       cancelled = true;
     };
-  }, [request, t]);
+  }, [request, t, user?.activeRole]);
 
   const roleLabel = (r) => {
     if (r === 'shipper') return t('auth.shipper');
@@ -53,15 +60,14 @@ const ProfileRolePanel = () => {
     return r || t('common.emDash');
   };
 
-  const handleSwitchRole = async () => {
-    if (!hasBothCommercial || !activeRole) return;
-    const target = activeRole === 'shipper' ? 'carrier' : activeRole === 'carrier' ? 'shipper' : null;
-    if (!target || !roles.includes(target)) return;
+  const handleSwitchRole = async (targetRole) => {
+    const target = targetRole || resolveCommercialSwitchTarget(user);
+    if (!target || roleSwitching) return;
     try {
       await setActiveRole(target);
       navigate(dashboardPathForRole(target), { replace: true });
-    } catch {
-      /* toast handled elsewhere if needed */
+    } catch (err) {
+      notifyError(formatUserError(err, t, { fallback: t('errors.generic') }));
     }
   };
 
@@ -149,6 +155,8 @@ const ProfileRolePanel = () => {
     return <p className="small tp-secondary-text mb-0">{t('profile.activityNoCommercialHint')}</p>;
   };
 
+  if (hideForAdmin) return null;
+
   return (
     <div className="d-flex flex-column gap-3 tp-profile-role-panel">
       <div className="tp-profile-section rounded-4 p-3 border shadow-sm">
@@ -164,21 +172,25 @@ const ProfileRolePanel = () => {
         <div className="small tp-secondary-text mb-1">{t('profile.rolesOnAccount')}</div>
         <div className="d-flex flex-wrap gap-2">
           {roles.map((r) => (
-            <span
+            <button
               key={r}
-              className={`badge rounded-pill px-2 py-1 tp-profile-role-chip ${
+              type="button"
+              className={`badge rounded-pill px-2 py-1 tp-profile-role-chip border-0 ${
                 r === activeRole ? 'tp-profile-role-chip--active' : 'tp-profile-role-chip--idle'
               }`}
+              disabled={roleSwitching || r === activeRole}
+              onClick={() => handleSwitchRole(r)}
             >
               {roleLabel(r)}
-            </span>
+            </button>
           ))}
         </div>
-        {hasBothCommercial ? (
+        {roles.length > 1 ? (
           <button
             type="button"
             className="btn btn-outline-primary btn-sm rounded-pill mt-3 w-100"
-            onClick={handleSwitchRole}
+            onClick={() => handleSwitchRole()}
+            disabled={roleSwitching || !resolveCommercialSwitchTarget(user)}
           >
             {t('profile.switchRoleVisualCta')}
           </button>

@@ -24,6 +24,8 @@ const ShipperDashboard = () => {
 
   useEffect(() => {
     let cancelled = false;
+    setLoadingLoads(true);
+    setMineLoads([]);
     (async () => {
       try {
         const data = await request({ url: '/loads/mine', skipGlobalErrorToast: true });
@@ -37,7 +39,7 @@ const ShipperDashboard = () => {
     return () => {
       cancelled = true;
     };
-  }, [request]);
+  }, [request, user?.activeRole]);
 
   const earnings = useMemo(
     () =>

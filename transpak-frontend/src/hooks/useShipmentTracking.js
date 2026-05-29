@@ -7,7 +7,7 @@ import { useTrackingSocket } from './useTrackingSocket.js';
 import { useLanguage } from './useLanguage.js';
 import { mergeTrackingPayload, matchesTrackingPayload } from '../utils/trackingMerge.js';
 
-const SHIPPER_POLL_MS = 60000;
+const TRACK_POLL_MS = Number(import.meta.env.VITE_TRACK_POLL_MS || 8000);
 
 /**
  * Shared REST + socket tracking for dashboards and tracking page.
@@ -58,6 +58,22 @@ export function useShipmentTracking({ trackRef, shareLive = false, enabled = tru
   }, [enabled, localRef, t]);
 
   useEffect(() => {
+    const reset = () => {
+      fetchGenerationRef.current += 1;
+      setPayload(null);
+      setError('');
+      setLoading(false);
+      lastPostedRef.current = 0;
+    };
+    window.addEventListener('tp:role-switched', reset);
+    window.addEventListener('tp:session-cleared', reset);
+    return () => {
+      window.removeEventListener('tp:role-switched', reset);
+      window.removeEventListener('tp:session-cleared', reset);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!enabled || !localRef) {
       setPayload(null);
       setError('');
@@ -75,12 +91,12 @@ export function useShipmentTracking({ trackRef, shareLive = false, enabled = tru
   }, [fetchTrack, enabled, localRef]);
 
   useEffect(() => {
-    if (!enabled || !localRef || shareLive) return undefined;
+    if (!enabled || !localRef) return undefined;
     const id = setInterval(() => {
       fetchTrack({ silent: true });
-    }, SHIPPER_POLL_MS);
+    }, TRACK_POLL_MS);
     return () => clearInterval(id);
-  }, [enabled, localRef, shareLive, fetchTrack]);
+  }, [enabled, localRef, fetchTrack]);
 
   const applyUpdate = useCallback(
     (incoming) => {

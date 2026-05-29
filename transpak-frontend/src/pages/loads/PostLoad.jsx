@@ -1,65 +1,105 @@
 import React, { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import PostLoadForm from '../../components/loadboard/PostLoadForm.jsx';
 import Loader from '../../components/ui/Loader.jsx';
+import Button from '../../components/ui/Button.jsx';
 import { useAuth } from '../../hooks/useAuth.js';
 import { useApi } from '../../hooks/useApi.js';
 import { AppContext } from '../../context/AppContext.jsx';
 import { notifySuccess } from '../../components/ui/ToastProvider.jsx';
-import { notifyProfileIncomplete } from '../../utils/notifySystem.js';
+import { notifyApiError } from '../../utils/notifySystem.js';
+import { logApiSuccess, logApiFailure } from '../../utils/apiDevLog.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
+import { shouldUseAdminShell } from '../../utils/rbac.js';
 
-// Screen for shippers to post new loads.
 const PostLoad = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { request } = useApi();
+  const { request, loading } = useApi();
   const { t } = useLanguage();
   const appContext = React.useContext(AppContext);
   const addNotification = appContext?.addNotification || (() => {});
 
   useEffect(() => {
-    if (user && user.profileComplete === false) {
-      notifyProfileIncomplete(t);
-      navigate('/profile', { replace: true });
+    if (shouldUseAdminShell(user)) {
+      navigate('/admin/dashboard', { replace: true });
     }
-  }, [user, navigate, t]);
+  }, [user, navigate]);
+
+  const profileBlocked = user && user.profileComplete === false && !shouldUseAdminShell(user);
+  const [formKey, setFormKey] = React.useState(0);
+  const [posting, setPosting] = React.useState(false);
 
   const handleSubmit = async (payload) => {
+    if (posting) return;
+    setPosting(true);
+    const body = {
+      cargo: payload.cargo,
+      origin: payload.origin,
+      destination: payload.destination,
+      weight: Number(payload.weight),
+      vehicleType: payload.vehicleType,
+      expectedPrice: Number(payload.expectedPrice),
+      pickupDate: payload.pickupDate,
+      deadlineMinutes: Number(payload.deadlineMinutes || (Number(payload.deadlineHours || 6) * 60)),
+      deadlineHours: Number(payload.deadlineHours || 6),
+      distanceKm: payload.distanceKm
+    };
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.info('[post-load] submit', body);
+    }
     try {
       const loadData = await request({
         url: '/loads/create',
         method: 'POST',
-        data: {
-          cargo: payload.cargo,
-          origin: payload.origin,
-          destination: payload.destination,
-          weight: Number(payload.weight),
-          vehicleType: payload.vehicleType,
-          expectedPrice: Number(payload.expectedPrice),
-          pickupDate: payload.pickupDate,
-          deadlineMinutes: Number(payload.deadlineMinutes || (Number(payload.deadlineHours || 6) * 60)),
-          deadlineHours: Number(payload.deadlineHours || 6),
-          distanceKm: payload.distanceKm
-        }
+        data: body,
+        skipGlobalErrorToast: true
       });
+      logApiSuccess({ method: 'POST', url: '/loads/create', data: body }, loadData);
       const code = loadData?.code || `L-${Date.now()}`;
       notifySuccess(t('pages.loads.postLoadSuccess', { code }));
       addNotification({
         type: 'load',
         message: t('pages.loads.postLoadNotify', { code })
       });
-      navigate('/loads/manage');
+      setFormKey((k) => k + 1);
+      navigate('/loads/manage', { replace: true });
     } catch (error) {
-      /* useApi → notifyApiError */
+      logApiFailure(error, { method: 'POST', url: '/loads/create', data: body });
+      notifyApiError(error);
+    } finally {
+      setPosting(false);
     }
   };
 
-  if (user && user.profileComplete === false) {
+  if (shouldUseAdminShell(user)) {
     return (
       <div className="container py-5 text-center">
         <Loader />
-        <p className="mt-3 text-muted">{t('common.redirectingProfile')}</p>
+      </div>
+    );
+  }
+
+  if (profileBlocked) {
+    return (
+      <div className="container py-4">
+        <div className="alert alert-warning border-0 shadow-sm rounded-3" role="alert">
+          <h6 className="alert-heading fw-semibold mb-2">{t('pages.loads.profileRequiredTitle')}</h6>
+          <p className="small mb-3">{t('pages.loads.profileRequiredBody')}</p>
+          <div className="d-flex flex-wrap gap-2">
+            <Link to="/profile">
+              <Button variant="primary" className="btn-sm rounded-lg">
+                {t('pages.loads.completeProfileCta')}
+              </Button>
+            </Link>
+            <Link to="/dashboard/shipper">
+              <Button variant="outline-secondary" className="btn-sm rounded-lg">
+                {t('common.dashboard')}
+              </Button>
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }
@@ -67,10 +107,14 @@ const PostLoad = () => {
   return (
     <div className="container py-3">
       <h5 className="mb-3">{t('pages.loads.postLoadScreenTitle')}</h5>
-      <PostLoadForm onSubmit={handleSubmit} submitLabel={t('pages.loads.postLoadCta')} />
+      <PostLoadForm
+        key={formKey}
+        onSubmit={handleSubmit}
+        submitLabel={t('pages.loads.postLoadCta')}
+        submitting={posting || loading}
+      />
     </div>
   );
 };
 
 export default PostLoad;
-

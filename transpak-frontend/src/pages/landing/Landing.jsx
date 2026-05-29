@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import BrandLogo from '../../components/layout/BrandLogo.jsx';
 import LanguageToggle from '../../components/ui/LanguageToggle.jsx';
+import DemoVideoWatchButton from '../../components/demo/DemoVideoWatchButton.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
-import { resolveViteApiOrigin } from '../../config/apiConfig.js';
+import { getApiUrl } from '../../config/apiConfig.js';
 
 const Section = ({ id, className = '', children }) => (
   <section id={id} className={`tp-landing-section ${className}`.trim()}>
@@ -17,11 +18,9 @@ const Landing = () => {
 
   useEffect(() => {
     let cancelled = false;
-    const origin = resolveViteApiOrigin();
-    if (!origin) return undefined;
     (async () => {
       try {
-        const res = await fetch(`${origin}/api/public/stats`, { credentials: 'omit' });
+        const res = await fetch(getApiUrl('/public/stats'), { credentials: 'omit' });
         const json = await res.json();
         const data = json?.data ?? json;
         if (!cancelled && data && typeof data === 'object') setFreightStats(data);
@@ -73,6 +72,7 @@ const Landing = () => {
               {t('pages.landing.navFaq')}
             </a>
             <LanguageToggle className="btn btn-sm btn-outline-secondary rounded-pill" />
+            <DemoVideoWatchButton variant="compact" className="btn-sm" />
             <Link to="/login" className="btn btn-sm btn-outline-primary rounded-pill">
               {t('pages.landing.navSignIn')}
             </Link>

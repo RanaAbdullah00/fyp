@@ -13,7 +13,7 @@ import { lockOverlayScroll } from '../../utils/overlayScrollLock.js';
 const RoleSelection = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, setActiveRole } = useAuth();
+  const { user, setActiveRole, roleSwitching } = useAuth();
   const { t } = useLanguage();
 
   const roles = useMemo(() => {
@@ -100,7 +100,7 @@ const RoleSelection = () => {
   if (!dualRole) return null;
 
   const handleSwitch = async () => {
-    if (!targetRole) return;
+    if (!targetRole || roleSwitching) return;
     setSwitching(true);
     try {
       if (roles.includes(targetRole)) {

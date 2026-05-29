@@ -1,94 +1,93 @@
-import React, { createContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useRef } from 'react';
 import { fetchProfileApi, patchActiveRoleApi } from '../services/authService.js';
 import { safeUnwrapAuthResponse } from '../utils/authApiSafe.js';
+import { emitRoleSwitchComplete, getUserRoles } from '../utils/roleSwitch.js';
+import {
+  applyAuthSessionFromApi,
+  clearAuthStorage,
+  mergeAuthUser,
+  setAuthToken
+} from '../utils/authSession.js';
+import { refreshAuthSessionFromServer } from '../utils/authRefresh.js';
+import { clearEntireSession, prepareWorkspaceSwitch } from '../utils/sessionCleanup.js';
+import { getAuthToken } from '../utils/authTokenStorage.js';
 
 export const AuthContext = createContext(null);
-
-function mergeSession(apiData) {
-  if (!apiData || typeof apiData !== 'object') return null;
-  const user = apiData.user || apiData;
-  if (!user || typeof user !== 'object') return null;
-  const id = user.id || (user._id != null ? String(user._id) : null);
-  const currentRole = apiData.currentRole ?? user.activeRole;
-  const roles =
-    Array.isArray(user.roles) && user.roles.length
-      ? user.roles
-      : [user.activeRole].filter(Boolean);
-  const next = {
-    ...user,
-    id,
-    roles,
-    activeRole: currentRole,
-    profileImage: user.profileImage || user.profile_image || '',
-    fullName: user.fullName || user.full_name || '',
-    profileComplete: Boolean(
-      user.profileComplete ?? user.isProfileComplete ?? user.is_profile_complete
-    ),
-    verified: Boolean(user.verified)
-  };
-  next.name = next.fullName || user.name || user.email || 'User';
-  delete next.role;
-  const hasShipper = roles.includes('shipper');
-  const hasCarrier = roles.includes('carrier');
-  next.hasShipper = Boolean(apiData.roles?.hasShipper ?? hasShipper);
-  next.hasCarrier = Boolean(apiData.roles?.hasCarrier ?? hasCarrier);
-  return next;
-}
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [roleSwitching, setRoleSwitching] = useState(false);
+  const [sessionVersion, setSessionVersion] = useState(0);
+  const userRef = useRef(null);
+  const switchLockRef = useRef(false);
+
+  userRef.current = user;
 
   const logout = useCallback(() => {
+    const uid = userRef.current?.id;
+    clearEntireSession({ userId: uid });
     setUser(null);
-    localStorage.removeItem('transpak_user');
-    localStorage.removeItem('transpak_token');
+    setSessionVersion((v) => v + 1);
   }, []);
 
-  const login = useCallback((apiData) => {
-    const normalized = mergeSession(apiData);
+  const login = useCallback((apiData, { clearPrevious = true } = {}) => {
+    if (clearPrevious) {
+      clearEntireSession({ userId: userRef.current?.id });
+    }
+    const { user: normalized } = applyAuthSessionFromApi(apiData);
     if (!normalized) return;
     setUser(normalized);
-    localStorage.setItem('transpak_user', JSON.stringify(normalized));
+    setSessionVersion((v) => v + 1);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tp:session-established', { detail: { userId: normalized.id } }));
+    }
+  }, []);
+
+  const refreshSession = useCallback(async () => {
+    const result = await refreshAuthSessionFromServer();
+    if (result?.user) {
+      setUser(result.user);
+      setSessionVersion((v) => v + 1);
+    }
+    return result;
   }, []);
 
   useEffect(() => {
     let cancelled = false;
-    const token = localStorage.getItem('transpak_token');
-    const storedUser = localStorage.getItem('transpak_user');
+    const token = getAuthToken();
+
+    if (!token) {
+      clearAuthStorage();
+      setUser(null);
+      setLoading(false);
+      return undefined;
+    }
 
     (async () => {
-      if (storedUser) {
-        try {
-          const parsed = JSON.parse(storedUser);
-          const { role: _legacyRole, ...rest } = parsed;
-          const roles =
-            Array.isArray(rest.roles) && rest.roles.length
-              ? rest.roles
-              : [rest.activeRole].filter(Boolean);
-          const activeRole = rest.activeRole || roles?.[0] || null;
-          const id = rest.id || (rest._id != null ? String(rest._id) : null);
-          if (!cancelled) {
-            const merged = mergeSession({ user: parsed, currentRole: activeRole });
-            setUser(merged || { ...rest, id, roles, activeRole, profileComplete: Boolean(rest.profileComplete ?? rest.is_profile_complete) });
+      try {
+        const res = await fetchProfileApi();
+        const data = safeUnwrapAuthResponse(res);
+        if (!cancelled && data?.user) {
+          const owner = sessionStorage.getItem('transpak_session_owner');
+          const nextId = String(data.user.id || '');
+          if (owner && nextId && owner !== nextId) {
+            logout();
+            return;
           }
-        } catch {
-          localStorage.removeItem('transpak_user');
+          login({ ...data, token: data.token || token || undefined });
         }
-      }
-
-      if (token) {
-        try {
-          const res = await fetchProfileApi();
-          const data = safeUnwrapAuthResponse(res);
-          if (!cancelled && data?.user) login(data);
-        } catch (err) {
-          const status = err?.response?.status;
-          if (status === 401) logout();
+      } catch (err) {
+        const status = err?.response?.status;
+        if (status === 401) {
+          if (!cancelled) logout();
+        } else if (import.meta.env.DEV) {
+          // eslint-disable-next-line no-console
+          console.warn('[auth] profile restore failed — session not hydrated from cache', err?.message || err);
         }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-
-      if (!cancelled) setLoading(false);
     })();
 
     return () => {
@@ -96,39 +95,92 @@ export const AuthProvider = ({ children }) => {
     };
   }, [login, logout]);
 
-  const setActiveRole = async (role) => {
-    if (!user) throw new Error('Not authenticated');
+  useEffect(() => {
+    const onTokenChanged = () => {
+      const token = getAuthToken();
+      if (!token) {
+        logout();
+        return;
+      }
+      refreshSession().catch(() => logout());
+    };
+    const onStorage = (e) => {
+      if (e.key === 'transpak_token' && e.storageArea === sessionStorage) {
+        onTokenChanged();
+      }
+    };
+    window.addEventListener('tp:auth-token-changed', onTokenChanged);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener('tp:auth-token-changed', onTokenChanged);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, [logout, refreshSession]);
+
+  const setActiveRole = useCallback(async (role) => {
+    const current = userRef.current;
+    if (!current) throw new Error('Not authenticated');
+    if (switchLockRef.current) return;
+
     const nextRole = String(role || '').trim().toLowerCase();
     if (!nextRole) throw new Error('Invalid role');
 
-    const prev = user;
-    const optimistic = { ...user, activeRole: nextRole };
-    setUser(optimistic);
-    localStorage.setItem('transpak_user', JSON.stringify(optimistic));
+    const roles = getUserRoles(current);
+    if (!roles.includes(nextRole)) throw new Error('Role not available for this account');
+    if (current.activeRole === nextRole) return;
 
+    switchLockRef.current = true;
+    setRoleSwitching(true);
+    prepareWorkspaceSwitch(current.id);
     try {
       const res = await patchActiveRoleApi(nextRole);
       const data = safeUnwrapAuthResponse(res);
-      if (data?.token) localStorage.setItem('transpak_token', data.token);
+      if (!data?.token) throw new Error('Role switch failed — no session token');
+      setAuthToken(data.token);
+
       let session = data;
       try {
         const profRes = await fetchProfileApi();
         const prof = safeUnwrapAuthResponse(profRes);
-        if (prof?.user) session = prof;
-      } catch {
-        /* use role-patch payload */
+        if (prof?.user) {
+          session = { ...prof, token: data.token };
+        }
+      } catch (profErr) {
+        if (import.meta.env.DEV) {
+          // eslint-disable-next-line no-console
+          console.warn('[auth] profile after role switch failed', profErr?.message || profErr);
+        }
       }
-      login(session);
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('tp:role-switched', { detail: { role: nextRole } }));
-        window.dispatchEvent(new CustomEvent('tp:realtime-refresh', { detail: { scope: 'all' } }));
-      }
+
+      login(session, { clearPrevious: false });
+      emitRoleSwitchComplete(nextRole);
     } catch (err) {
-      setUser(prev);
-      localStorage.setItem('transpak_user', JSON.stringify(prev));
       throw err;
+    } finally {
+      switchLockRef.current = false;
+      setRoleSwitching(false);
     }
-  };
+  }, [login]);
+
+  useEffect(() => {
+    const onUnauthorized = async () => {
+      try {
+        await refreshSession();
+      } catch {
+        logout();
+      }
+    };
+    const onRefreshed = (e) => {
+      const next = e?.detail?.user;
+      if (next) setUser(next);
+    };
+    window.addEventListener('tp:auth-unauthorized', onUnauthorized);
+    window.addEventListener('tp:auth-refreshed', onRefreshed);
+    return () => {
+      window.removeEventListener('tp:auth-unauthorized', onUnauthorized);
+      window.removeEventListener('tp:auth-refreshed', onRefreshed);
+    };
+  }, [refreshSession, logout]);
 
   useEffect(() => {
     const role = user?.activeRole || '';
@@ -143,10 +195,17 @@ export const AuthProvider = ({ children }) => {
   const value = {
     user,
     loading,
+    roleSwitching,
+    sessionVersion,
     login,
+    refreshSession,
     setActiveRole,
     logout
   };
+
+  if (loading) {
+    return <AuthContext.Provider value={value}>{null}</AuthContext.Provider>;
+  }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

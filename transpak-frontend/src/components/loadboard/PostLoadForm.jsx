@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import Button from '../ui/Button.jsx';
-import CitySelect from '../ui/CitySelect.jsx';
+import CitySelect from '../ui/CitySearchSelect.jsx';
+import Map from '../Map.jsx';
+import { routeFromCityNames } from '../../utils/mapCoords.js';
+import { useMapRoute } from '../../hooks/useMapRoute.js';
 import VehicleTypeSelect from './VehicleTypeSelect.jsx';
 import { notifyError } from '../ui/ToastProvider.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
@@ -19,7 +22,7 @@ const defaultForm = () => ({
   deadlineUnit: 'hours'
 });
 
-const PostLoadForm = ({ onSubmit, initialValues = null, submitLabel = null }) => {
+const PostLoadForm = ({ onSubmit, initialValues = null, submitLabel = null, submitting = false }) => {
   const { t } = useLanguage();
   const primaryCta = submitLabel ?? t('pages.postLoadForm.submitPost');
   const [form, setForm] = useState(() => ({
@@ -27,12 +30,30 @@ const PostLoadForm = ({ onSubmit, initialValues = null, submitLabel = null }) =>
     ...(initialValues || {})
   }));
 
-  const { estimate, loading: fareLoading } = useFareEstimate({
+  const { estimate, loading: fareLoading, usedLocalFallback } = useFareEstimate({
     origin: form.origin,
     destination: form.destination,
     vehicleType: form.vehicleType,
     enabled: !initialValues
   });
+
+  const minFare = Number(estimate?.minimumFare ?? estimate?.suggestedFare ?? 0);
+  const enteredPrice = Number(form.expectedPrice) || 0;
+  const showFareEstimate = isKnownCity(form.origin) && isKnownCity(form.destination) && !initialValues;
+  const fareTooLow = minFare > 0 && enteredPrice > 0 && enteredPrice + 0.01 < minFare;
+  const submitDisabled = submitting || fareTooLow;
+  const {
+    coordinates: orsRoute,
+    loading: routeLoading,
+    error: routeError,
+    usedFallback: routeFallback
+  } = useMapRoute({
+    origin: form.origin,
+    destination: form.destination,
+    enabled: showFareEstimate
+  });
+  const straightRoute = showFareEstimate ? routeFromCityNames(form.origin, form.destination) : [];
+  const routePreview = orsRoute.length >= 2 ? orsRoute : straightRoute;
 
   useEffect(() => {
     if (initialValues && typeof initialValues === 'object') {
@@ -50,7 +71,7 @@ const PostLoadForm = ({ onSubmit, initialValues = null, submitLabel = null }) =>
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const pickup = String(form.pickupDate || '').trim();
     const today = new Date();
@@ -65,6 +86,16 @@ const PostLoadForm = ({ onSubmit, initialValues = null, submitLabel = null }) =>
       notifyError(t('pages.postLoadForm.cityInvalid'));
       return;
     }
+    const weight = Number(form.weight);
+    if (!Number.isFinite(weight) || weight < 0.1 || weight > 80) {
+      notifyError(t('pages.postLoadForm.weightInvalid'));
+      return;
+    }
+    const price = Number(form.expectedPrice);
+    if (!Number.isFinite(price) || price < 1) {
+      notifyError(t('pages.postLoadForm.priceRequired'));
+      return;
+    }
     const val = Number(form.deadlineValue);
     const unit = form.deadlineUnit === 'minutes' ? 'minutes' : 'hours';
     const deadlineMinutes = unit === 'minutes' ? val : val * 60;
@@ -76,17 +107,23 @@ const PostLoadForm = ({ onSubmit, initialValues = null, submitLabel = null }) =>
       notifyError(t('pages.postLoadForm.deadlineInvalid'));
       return;
     }
-    if (minFare > 0 && enteredPrice + 0.01 < minFare) {
+    if (minFare > 0 && price + 0.01 < minFare) {
       notifyError(t('pages.postLoadForm.fareBelowMinimum', { fare: Math.ceil(minFare).toLocaleString() }));
       return;
     }
-    onSubmit?.({
-      ...form,
-      deadlineMinutes,
-      deadlineHours: Math.ceil(deadlineMinutes / 60),
-      distanceKm: estimate?.distanceKm,
-      suggestedFare: estimate?.suggestedFare
-    });
+    try {
+      await Promise.resolve(
+        onSubmit?.({
+          ...form,
+          deadlineMinutes,
+          deadlineHours: Math.ceil(deadlineMinutes / 60),
+          distanceKm: estimate?.distanceKm,
+          suggestedFare: estimate?.suggestedFare
+        })
+      );
+    } catch {
+      /* parent surfaces toast + dev log */
+    }
   };
 
   const tomorrow = (() => {
@@ -99,13 +136,6 @@ const PostLoadForm = ({ onSubmit, initialValues = null, submitLabel = null }) =>
     initialValues?.pickupDate && String(initialValues.pickupDate) < tomorrow
       ? String(initialValues.pickupDate)
       : tomorrow;
-
-  const minFare = Number(estimate?.minimumFare ?? estimate?.suggestedFare ?? 0);
-  const enteredPrice = Number(form.expectedPrice) || 0;
-  const showFareEstimate = isKnownCity(form.origin) && isKnownCity(form.destination) && !initialValues;
-  const fareTooLow = minFare > 0 && enteredPrice > 0 && enteredPrice + 0.01 < minFare;
-  const awaitingFare = showFareEstimate && (fareLoading || !estimate);
-  const submitDisabled = awaitingFare || fareTooLow;
 
   return (
     <form onSubmit={handleSubmit}>
@@ -142,7 +172,7 @@ const PostLoadForm = ({ onSubmit, initialValues = null, submitLabel = null }) =>
       </div>
       {showFareEstimate ? (
         <div className="tp-route-summary mt-2 mb-2 p-3 rounded-3" role="status">
-          {fareLoading ? (
+          {fareLoading && !estimate ? (
             <p className="mb-0 small text-muted">{t('pages.postLoadForm.fareCalculating')}</p>
           ) : estimate ? (
             <div className="row g-2 small">
@@ -177,11 +207,31 @@ const PostLoadForm = ({ onSubmit, initialValues = null, submitLabel = null }) =>
               </div>
             </div>
           ) : null}
+          {usedLocalFallback ? (
+            <p className="mb-0 small text-muted mt-2">{t('pages.postLoadForm.fareLocalHint')}</p>
+          ) : null}
           {fareTooLow ? (
             <p className="mb-0 small text-danger mt-2">
               {t('pages.postLoadForm.fareBelowMinimum', { fare: Math.ceil(minFare).toLocaleString() })}
             </p>
           ) : null}
+        </div>
+      ) : null}
+      {routePreview.length >= 2 ? (
+        <div className="tp-dashboard-map-preview mb-2">
+          <label className="form-label small text-muted mb-1">{t('pages.postLoadForm.routeMapLabel')}</label>
+          <Map
+            pickup={routePreview[0]}
+            delivery={routePreview[routePreview.length - 1]}
+            route={routePreview}
+            height={200}
+            loading={routeLoading}
+            errorMessage={
+              routeFallback && !routeLoading ? t('map.routeFallback') : routeError ? t('map.routeError') : ''
+            }
+            pickupLabel={t('pages.postLoadForm.pickupCity')}
+            deliveryLabel={t('pages.postLoadForm.dropoffCity')}
+          />
         </div>
       ) : null}
       <div className="row g-2 mt-1">
@@ -324,7 +374,7 @@ const PostLoadForm = ({ onSubmit, initialValues = null, submitLabel = null }) =>
         type="submit"
         disabled={submitDisabled}
       >
-        {primaryCta}
+        {submitting ? t('common.submitting') : primaryCta}
       </Button>
     </form>
   );

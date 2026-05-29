@@ -14,6 +14,7 @@ import { notifyError } from '../ui/ToastProvider.jsx';
 import { notifySystem, SystemNotifyType } from '../../utils/notifySystem.js';
 import { unwrapErrorMessage } from '../../utils/unwrapApi.js';
 import { formatUserError } from '../../utils/userErrors.js';
+import { shouldUseAdminShell } from '../../utils/rbac.js';
 import SafeAvatar from '../ui/SafeAvatar.jsx';
 import SafeImage from '../ui/SafeImage.jsx';
 import { resolveImageUrl } from '../../utils/imageUrl.js';
@@ -21,8 +22,35 @@ import { resolveImageUrl } from '../../utils/imageUrl.js';
 const CNIC_REGEX = /^[0-9]{5}-[0-9]{7}-[0-9]{1}$/;
 const PROFILE_FIELD_COUNT = 6;
 
+function profileFormFromUser(user, row = null) {
+  if (!user && !row) {
+    return {
+      full_name: '',
+      email: '',
+      phone: '',
+      cnic_number: '',
+      cnic_image: '',
+      cnic_image_back: '',
+      profile_image: ''
+    };
+  }
+  return {
+    full_name: row?.full_name ?? user?.fullName ?? user?.name ?? '',
+    email: row?.email ?? user?.email ?? '',
+    phone: row?.phone ?? user?.phone ?? '',
+    cnic_number: row?.cnic_number ?? user?.cnicNumber ?? user?.cnic ?? '',
+    cnic_image: row?.cnic_image ?? user?.cnicImage ?? '',
+    cnic_image_back: row?.cnic_image_back ?? '',
+    profile_image: row?.profile_image ?? user?.profileImage ?? user?.profile_image ?? ''
+  };
+}
+
 function imageFieldUrl(value) {
-  return resolveImageUrl(value) || '';
+  const url = resolveImageUrl(value);
+  if (url) return url;
+  const raw = typeof value === 'string' ? value.trim() : '';
+  if (raw && /^https?:\/\//i.test(raw)) return raw.replace(/^http:\/\//i, 'https://');
+  return '';
 }
 
 function initialsFrom(name, email) {
@@ -45,42 +73,40 @@ const ProfileEditor = ({ showTabs, onSaved }) => {
   const { request } = useApi();
   const { t } = useLanguage();
   const [tab, setTab] = useState('basic');
-  const [form, setForm] = useState({
-    full_name: '',
-    email: '',
-    phone: '',
-    cnic_number: '',
-    cnic_image: '',
-    cnic_image_back: '',
-    profile_image: ''
-  });
+  const [form, setForm] = useState(() => profileFormFromUser(user));
   const [files, setFiles] = useState({ cnic_image: null, cnic_image_back: null, profile_image: null });
-  const [cnicLocked, setCnicLocked] = useState(false);
+  const [cnicLocked, setCnicLocked] = useState(Boolean(user?.cnicNumber || user?.cnic));
   const [loading, setLoading] = useState(false);
-  const [profileComplete, setProfileComplete] = useState(false);
+  const [profileHydrating, setProfileHydrating] = useState(true);
+  const [profileComplete, setProfileComplete] = useState(Boolean(user?.profileComplete));
 
   useEffect(() => {
+    if (!user?.id) return;
+    setForm(profileFormFromUser(user));
+    setProfileComplete(Boolean(user.profileComplete));
+    setProfileHydrating(true);
+    let cancelled = false;
     const run = async () => {
-      if (!user) return;
       try {
         const u = await request({ method: 'GET', url: '/profile' });
-        setForm({
-          full_name: u.full_name || '',
-          email: u.email || '',
-          phone: u.phone || '',
-          cnic_number: u.cnic_number || '',
-          cnic_image: u.cnic_image || '',
-          cnic_image_back: u.cnic_image_back || '',
-          profile_image: u.profile_image || ''
-        });
+        if (cancelled) return;
+        setForm(profileFormFromUser(user, u));
         setCnicLocked(Boolean(u.cnic_number));
         setProfileComplete(Boolean(u.is_profile_complete));
-      } catch {
-        setForm((prev) => ({ ...prev, email: user.email || '' }));
+      } catch (err) {
+        if (!cancelled) {
+          setForm((prev) => ({ ...prev, email: user.email || prev.email }));
+          notifyError(formatUserError(err, t, { fallback: t('profile.loadFailed') }));
+        }
+      } finally {
+        if (!cancelled) setProfileHydrating(false);
       }
     };
     run();
-  }, [user, request]);
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, request]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -136,53 +162,29 @@ const ProfileEditor = ({ showTabs, onSaved }) => {
         data: fd
       });
       if (updated) {
+        const prof = updated.profile || updated;
         setForm((p) => ({
           ...p,
-          full_name: updated.full_name || '',
-          phone: updated.phone || '',
-          cnic_number: updated.cnic_number || '',
-          cnic_image: updated.cnic_image || '',
-          cnic_image_back: updated.cnic_image_back || '',
-          profile_image: updated.profile_image || ''
+          full_name: prof.full_name || '',
+          phone: prof.phone || '',
+          cnic_number: prof.cnic_number || '',
+          cnic_image: prof.cnic_image || '',
+          cnic_image_back: prof.cnic_image_back || '',
+          profile_image: prof.profile_image || ''
         }));
-        setCnicLocked(Boolean(updated.cnic_number));
-        setProfileComplete(Boolean(updated.is_profile_complete));
+        setCnicLocked(Boolean(prof.cnic_number));
+        setProfileComplete(Boolean(prof.is_profile_complete));
         setFiles({ cnic_image: null, cnic_image_back: null, profile_image: null });
-        try {
-          const profRes = await fetchProfileApi();
-          const prof = safeUnwrapAuthResponse(profRes);
-          if (prof?.user) login(prof);
-          else {
-            login({
-              user: {
-                ...user,
-                name: updated.full_name || user?.name,
-                fullName: updated.full_name || user?.fullName,
-                profileImage: updated.profile_image || user?.profileImage,
-                profileComplete: Boolean(updated.is_profile_complete)
-              },
-              currentRole: user?.activeRole,
-              roles: {
-                hasShipper: user?.hasShipper,
-                hasCarrier: user?.hasCarrier
-              }
-            });
+        if (updated.token && updated.user) {
+          login(updated);
+        } else {
+          try {
+            const profRes = await fetchProfileApi();
+            const fresh = safeUnwrapAuthResponse(profRes);
+            if (fresh?.user) login(fresh);
+          } catch {
+            /* form state already updated */
           }
-        } catch {
-          login({
-            user: {
-              ...user,
-              name: updated.full_name || user?.name,
-              fullName: updated.full_name || user?.fullName,
-              profileImage: updated.profile_image || user?.profileImage,
-              profileComplete: Boolean(updated.is_profile_complete)
-            },
-            currentRole: user?.activeRole,
-            roles: {
-              hasShipper: user?.hasShipper,
-              hasCarrier: user?.hasCarrier
-            }
-          });
         }
         onSaved?.();
         notifySystem(SystemNotifyType.PROFILE_UPDATED, t('common.save'));
@@ -205,6 +207,15 @@ const ProfileEditor = ({ showTabs, onSaved }) => {
   };
 
   if (!user) return <Loader />;
+
+  if (shouldUseAdminShell(user)) {
+    return (
+      <div className="tp-profile-section rounded-4 p-4 border shadow-sm">
+        <p className="fw-semibold mb-2">{t('profile.adminAccountTitle')}</p>
+        <p className="small tp-secondary-text mb-0">{t('profile.adminAccountBody')}</p>
+      </div>
+    );
+  }
 
   const tabBtn = (id, label) => (
     <li className="nav-item" key={id}>
@@ -407,7 +418,12 @@ const ProfileEditor = ({ showTabs, onSaved }) => {
 
   const rolePane = <ProfileRolePanel />;
 
-  const statusPane = (
+  const statusPane = profileHydrating ? (
+    <div className="tp-profile-section rounded-4 p-4 border shadow-sm text-center">
+      <Loader />
+      <p className="small tp-secondary-text mt-2 mb-0">{t('profile.loadingProfile')}</p>
+    </div>
+  ) : (
     <div className="d-flex flex-column gap-3">
       <div className="tp-profile-section rounded-4 p-3 border shadow-sm">
         <div className="d-flex justify-content-between align-items-center mb-2 gap-2">

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { FaBars } from 'react-icons/fa';
 import { useAuth } from '../../hooks/useAuth.js';
 import MobileDrawer from './MobileDrawer.jsx';
@@ -7,6 +7,8 @@ import BrandLogo from './BrandLogo.jsx';
 import NotificationDropdown from '../notifications/NotificationDropdown.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { dashboardPathForRole } from '../../utils/dashboardPath.js';
+import { resolveNavRoleAction } from '../../utils/roleSwitch.js';
+import { resolveAdminShell } from '../../utils/rbac.js';
 import { notifyError } from '../ui/ToastProvider.jsx';
 import { formatUserError } from '../../utils/userErrors.js';
 import LanguageToggle from '../ui/LanguageToggle.jsx';
@@ -14,50 +16,39 @@ import ActiveRoleBadge from '../profile/ActiveRoleBadge.jsx';
 
 const Navbar = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { t, isUrdu } = useLanguage();
-  const { user, setActiveRole } = useAuth();
+  const { user, setActiveRole, roleSwitching } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [roleSwitching, setRoleSwitching] = useState(false);
 
   const roles = user?.roles?.length ? user.roles : [user?.activeRole].filter(Boolean);
   const activeRole = user?.activeRole ?? roles[0];
 
-  const hasShipper = roles.includes('shipper');
-  const hasCarrier = roles.includes('carrier');
-  const hasBothCommercial = hasShipper && hasCarrier;
-  const hasOneCommercial = (hasShipper || hasCarrier) && !hasBothCommercial;
-  const showCommercialRoleAction = hasShipper || hasCarrier;
+  const adminShell = resolveAdminShell(user, location.pathname);
+  const roleAction = adminShell ? { mode: 'none' } : resolveNavRoleAction(user);
+  const showWorkspaceSwitch = roleAction.mode === 'switch' || roleAction.mode === 'add';
 
-  const missingCommercialRole = hasShipper && !hasCarrier ? 'carrier' : !hasShipper && hasCarrier ? 'shipper' : null;
-
-  const navRoleActionLabel = hasBothCommercial ? t('nav.switchAccount') : t('nav.addProfile');
+  const navRoleActionLabel =
+    roleAction.mode === 'switch' ? t('nav.switchAccount') : roleAction.mode === 'add' ? t('nav.addProfile') : '';
 
   const handleNavRoleAction = async () => {
-    if (!user || !showCommercialRoleAction || roleSwitching) return;
+    if (!user || !showWorkspaceSwitch || roleSwitching) return;
 
-    const originalRole = activeRole;
-
-    if (hasBothCommercial) {
-      const targetRole = activeRole === 'shipper' ? 'carrier' : activeRole === 'carrier' ? 'shipper' : null;
-      if (!targetRole || !roles.includes(targetRole)) return;
-      setRoleSwitching(true);
+    if (roleAction.mode === 'switch' && roleAction.target) {
       try {
-        await setActiveRole(targetRole);
-        navigate(dashboardPathForRole(targetRole), { replace: true });
+        await setActiveRole(roleAction.target);
+        navigate(dashboardPathForRole(roleAction.target), { replace: true });
       } catch (err) {
         notifyError(formatUserError(err, t, { fallback: t('errors.generic') }));
-        if (originalRole) navigate(dashboardPathForRole(originalRole), { replace: true });
-      } finally {
-        setRoleSwitching(false);
       }
       return;
     }
 
-    if (hasOneCommercial && missingCommercialRole) {
+    if (roleAction.mode === 'add' && roleAction.target) {
       navigate('/register', {
         replace: true,
         state: {
-          upgradeRole: missingCommercialRole,
+          upgradeRole: roleAction.target,
           prefill: {
             name: user?.fullName || user?.name || '',
             email: user?.email || '',
@@ -69,7 +60,7 @@ const Navbar = () => {
     }
   };
 
-  const roleActionBtn = showCommercialRoleAction ? (
+  const roleActionBtn = showWorkspaceSwitch ? (
     <button
       type="button"
       className="btn btn-outline-success btn-sm rounded-lg px-2 text-nowrap d-none d-md-inline-flex px-3"
@@ -81,7 +72,7 @@ const Navbar = () => {
     </button>
   ) : null;
 
-  const roleActionBtnMobile = showCommercialRoleAction ? (
+  const roleActionBtnMobile = showWorkspaceSwitch ? (
     <button
       type="button"
       className="btn btn-outline-success btn-sm rounded-lg px-2 text-nowrap d-md-none"
@@ -109,10 +100,12 @@ const Navbar = () => {
           </button>
           <Link to="/" className="navbar-brand fw-bold mb-0 d-flex align-items-center gap-2">
             <BrandLogo variant="mark" title={t('common.appName')} />
-            {user && <ActiveRoleBadge alwaysShow className="tp-active-role-badge--compact" />}
+            {user && !adminShell ? (
+              <ActiveRoleBadge alwaysShow className="tp-active-role-badge--compact" />
+            ) : null}
           </Link>
           <div className="d-flex align-items-center gap-2">
-            <LanguageToggle className="rounded-lg" />
+            {!adminShell ? <LanguageToggle className="rounded-lg" /> : null}
             {user && (
               <>
                 <NotificationDropdown />
@@ -128,11 +121,13 @@ const Navbar = () => {
         <div className="container-fluid px-3">
           <Link to="/" className="navbar-brand d-flex align-items-center gap-2 fw-bold">
             <BrandLogo variant="mark" title={t('common.appName')} />
-            {user && <ActiveRoleBadge alwaysShow className="tp-active-role-badge--compact" />}
+            {user && !adminShell ? (
+              <ActiveRoleBadge alwaysShow className="tp-active-role-badge--compact" />
+            ) : null}
           </Link>
 
           <div className="d-flex align-items-center gap-2 flex-wrap justify-content-end">
-            <LanguageToggle className="rounded-lg" />
+            {!adminShell ? <LanguageToggle className="rounded-lg" /> : null}
             {user ? (
               <>
                 <NotificationDropdown />

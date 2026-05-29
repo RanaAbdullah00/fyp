@@ -4,6 +4,8 @@ import 'leaflet/dist/leaflet.css';
 import '../styles/map.css';
 import { createMarkerIcon, fixLeafletIcons, MAP_MARKER_COLORS } from '../utils/leafletIcons.js';
 import { normalizeCoordList, toLatLngPair } from '../utils/mapCoords.js';
+import { useSmoothCoords } from '../hooks/useSmoothCoords.js';
+import { useLanguage } from '../hooks/useLanguage.js';
 fixLeafletIcons();
 
 function FitBounds({ points }) {
@@ -61,6 +63,8 @@ function MapResizeObserver() {
  * @param {string} [props.pickupLabel]
  * @param {string} [props.deliveryLabel]
  * @param {string} [props.driverLabel]
+ * @param {boolean} [props.loading]
+ * @param {string} [props.errorMessage]
  */
 const Map = ({
   pickup,
@@ -71,11 +75,15 @@ const Map = ({
   height = 'min(420px, 50vh)',
   pickupLabel = 'Pickup',
   deliveryLabel = 'Delivery',
-  driverLabel = 'Driver'
+  driverLabel = 'Driver',
+  loading = false,
+  errorMessage = ''
 }) => {
+  const { t } = useLanguage();
   const pickupPos = toLatLngPair(pickup);
   const deliveryPos = toLatLngPair(delivery);
-  const driverPos = toLatLngPair(driver);
+  const driverTarget = toLatLngPair(driver);
+  const driverPos = useSmoothCoords(driverTarget, { durationMs: 800 });
 
   const routeCoords = useMemo(() => {
     const fromProp = normalizeCoordList(route);
@@ -102,6 +110,7 @@ const Map = ({
 
   const center = allPoints[Math.floor(allPoints.length / 2)] || [30.3753, 69.3451];
   const zoom = allPoints.length > 1 ? 6 : allPoints.length === 1 ? 8 : 5;
+  const hasMapData = Boolean(effectivePickup || effectiveDelivery || driverPos || routeCoords.length);
 
   const pickupIcon = useMemo(() => createMarkerIcon(MAP_MARKER_COLORS.pickup, 'P'), []);
   const deliveryIcon = useMemo(() => createMarkerIcon(MAP_MARKER_COLORS.delivery, 'D'), []);
@@ -109,6 +118,21 @@ const Map = ({
 
   return (
     <div className={`tp-map-root ${className}`.trim()} style={{ height }}>
+      {loading ? (
+        <div className="tp-map-overlay tp-map-overlay--loading" role="status" aria-live="polite">
+          {t('map.loading')}
+        </div>
+      ) : null}
+      {!loading && errorMessage ? (
+        <div className="tp-map-overlay tp-map-overlay--warn" role="status">
+          {errorMessage}
+        </div>
+      ) : null}
+      {!hasMapData && !loading ? (
+        <div className="tp-map-empty" role="status">
+          {t('pages.tracking.noCoords')}
+        </div>
+      ) : null}
       <MapContainer
         center={center}
         zoom={zoom}

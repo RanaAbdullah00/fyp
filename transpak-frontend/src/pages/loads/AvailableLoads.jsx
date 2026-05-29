@@ -11,6 +11,7 @@ import { acceptLoadAtListedFare, submitCounterOffer, rejectLoadForCarrier } from
 import { normalizeLoads } from '../../adapters/normalize.js';
 import { filterOpenLoads } from '../../utils/loadBidding.js';
 import VehicleTypeDropdown from '../../components/loadboard/VehicleTypeDropdown.jsx';
+import CitySelect from '../../components/ui/CitySearchSelect.jsx';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue.js';
 
 const AvailableLoads = ({ embedded = false }) => {
@@ -97,7 +98,8 @@ const AvailableLoads = ({ embedded = false }) => {
             limit: 60
           }
         });
-        const normalized = normalizeLoads(data);
+        const raw = Array.isArray(data) ? data : data?.items ?? [];
+        const normalized = normalizeLoads(raw);
         const openOnly = filterOpenLoads(normalized);
         const filtered = openOnly.filter((l) => !myBidLoadIds.has(String(l.id)));
         setLoads(filtered);
@@ -190,18 +192,16 @@ const AvailableLoads = ({ embedded = false }) => {
       <div className="tp-filter-card mb-2">
         <div className="row g-2">
           <div className="col-6 col-md-3">
-            <input
+            <CitySelect
               name="origin"
-              className="form-control form-control-sm rounded-3"
               placeholder={t('pages.loads.origin')}
               value={filters.origin}
               onChange={handleFilterChange}
             />
           </div>
           <div className="col-6 col-md-3">
-            <input
+            <CitySelect
               name="destination"
-              className="form-control form-control-sm rounded-3"
               placeholder={t('pages.loads.destination')}
               value={filters.destination}
               onChange={handleFilterChange}

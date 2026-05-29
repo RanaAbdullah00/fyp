@@ -59,7 +59,7 @@ body.tp-role-admin {
 
 .tp-city-select__menu {
   position: absolute;
-  z-index: var(--tp-z-drawer);
+  z-index: var(--tp-z-dropdown);
   left: 0;
   right: 0;
   top: calc(100% + 2px);

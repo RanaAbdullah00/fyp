@@ -48,7 +48,7 @@ const LoadsHub = () => {
       <div className="container py-3">
         <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
           <div>
-            <h5 className="mb-1">{t('loadsHub.navOperations')}</h5>
+            <h5 className="mb-1">{t('loadsHub.carrierPageTitle')}</h5>
             <p className="text-muted small mb-0">{t('loadsHub.carrierOpsSubtitle')}</p>
           </div>
           <Link to="/carrier/space/post">

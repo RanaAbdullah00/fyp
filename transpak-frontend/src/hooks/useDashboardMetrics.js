@@ -24,6 +24,7 @@ export function useDashboardMetrics() {
   }, [request]);
 
   useEffect(() => {
+    setOps(null);
     setLoadingOps(true);
     refreshOps();
   }, [refreshOps, activeRole]);
