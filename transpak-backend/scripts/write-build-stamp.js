@@ -22,16 +22,23 @@ function resolveCommit() {
   }
 }
 
+const out = path.join(__dirname, "..", ".render-build-stamp.json");
+try {
+  fs.unlinkSync(out);
+} catch {
+  /* ignore — fresh stamp each build */
+}
+
 const commitFull = resolveCommit();
 const stamp = {
   commitFull,
   commitShort: commitFull.slice(0, 12),
   builtAt: new Date().toISOString(),
   nodeVersion: process.version,
+  schemaVersion: "023",
   render: Boolean(process.env.RENDER)
 };
 
-const out = path.join(__dirname, "..", ".render-build-stamp.json");
 fs.writeFileSync(out, `${JSON.stringify(stamp, null, 2)}\n`);
 // eslint-disable-next-line no-console
 console.log("[build] stamp written", out, stamp.commitShort);

@@ -32,7 +32,11 @@ function resolveGitCommitFull() {
   }
 
   const stamp = readBuildStamp();
-  if (stamp?.commitFull && stamp.commitFull !== "unknown") {
+  if (
+    stamp?.commitFull &&
+    stamp.commitFull !== "unknown" &&
+    (!process.env.RENDER_GIT_COMMIT || stamp.commitFull === process.env.RENDER_GIT_COMMIT)
+  ) {
     return stamp.commitFull;
   }
 
