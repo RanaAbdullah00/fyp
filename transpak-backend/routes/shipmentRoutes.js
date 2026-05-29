@@ -1,6 +1,6 @@
 const express = require("express");
 const { body } = require("express-validator");
-const { protect, requireAnyRole, requireActiveRole } = require("../middleware/authMiddleware");
+const { protect, requireAnyRole, requireRole } = require("../middleware/authMiddleware");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
 const { normalizeShipmentStatus, validateShipmentTransition } = require("../utils/shipmentStatus");
 const {
@@ -23,8 +23,17 @@ const {
   markGpsWritten,
   assertAssignedCarrierForGps
 } = require("../utils/gpsTracking");
+const { shipmentsRouteLimiter } = require("../middleware/apiRateLimit");
+const { appendShipmentLocationLog } = require("../utils/shipmentLocationLog");
+const { writeAudit } = require("../utils/auditLog");
+const {
+  hasAdminRole,
+  assertShipmentParties,
+  assertAssignedCarrier
+} = require("../utils/resourceAuth");
 
 const router = express.Router();
+router.use(shipmentsRouteLimiter);
 
 function isUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -63,16 +72,8 @@ function toTrackResponse(req, doc) {
   return { ...raw, tracking };
 }
 
-function assertTrackAccessOrThrow(load, auth, { allowCarrierStatusWrite = false } = {}) {
-  const roles = auth?.roles || [];
-  const isAdmin = roles.includes("admin");
-  if (isAdmin) return;
-
-  const uid = String(auth?.userId || "");
-  const isShipper = String(load?.shipper_id || "") === uid;
-  const isAssignedCarrier = String(load?.assigned_carrier_id || "") === uid;
-  if (isShipper || isAssignedCarrier) return;
-  throw Object.assign(new Error("Forbidden"), { statusCode: 403 });
+function assertTrackAccessOrThrow(load, auth) {
+  assertShipmentParties(load, auth);
 }
 
 async function resolveLoadForRef(refKey) {
@@ -160,7 +161,7 @@ router.get(
     try {
       const load = await resolveLoadForRef(req.params.id);
       if (!load) return sendError(res, 404, "Not found");
-      assertTrackAccessOrThrow(load, req.auth, { allowCarrierStatusWrite: false });
+      assertTrackAccessOrThrow(load, req.auth);
 
       const { rows: loadRows } = await query(
         `SELECT origin, destination FROM loads WHERE id = $1`,
@@ -192,8 +193,7 @@ router.get(
 router.put(
   "/:id/status",
   protect,
-  requireAnyRole(["carrier", "admin"]),
-  requireActiveRole("carrier"),
+  requireRole("carrier"),
   shipmentIdParam,
   shipmentStatusPutValidators,
   handleValidationErrors,
@@ -201,7 +201,8 @@ router.put(
     try {
       const load = await resolveLoadForRef(req.params.id);
       if (!load) return sendError(res, 404, "Not found");
-      assertTrackAccessOrThrow(load, req.auth, { allowCarrierStatusWrite: true });
+      assertTrackAccessOrThrow(load, req.auth);
+      assertAssignedCarrier(load, req.auth);
 
       const { status } = req.body || {};
       const nextRaw = String(status || "").trim();
@@ -283,6 +284,24 @@ router.put(
       });
       const room = trackRoomKey(load);
       if (room && core) emitToTracking(room, "tracking:update", core);
+      if (canonical === "booked") {
+        void writeAudit({
+          actorUserId: req.auth.userId,
+          action: "shipment.started",
+          targetEntity: "shipment",
+          targetId: shipment.id,
+          metadata: { loadId: load.id, status: canonical }
+        });
+      }
+      if (canonical === "delivered" || canonical === "closed") {
+        void writeAudit({
+          actorUserId: req.auth.userId,
+          action: "shipment.completed",
+          targetEntity: "shipment",
+          targetId: shipment.id,
+          metadata: { loadId: load.id, status: canonical }
+        });
+      }
       return sendSuccess(res, 200, payload);
     } catch (err) {
       const status = err.statusCode || 500;
@@ -296,8 +315,7 @@ router.put(
 router.put(
   "/:id/location",
   protect,
-  requireAnyRole(["carrier"]),
-  requireActiveRole("carrier"),
+  requireRole("carrier"),
   shipmentIdParam,
   [
     body("lat").isFloat({ min: -90, max: 90 }).withMessage("Invalid lat"),
@@ -308,7 +326,7 @@ router.put(
     try {
       const load = await resolveLoadForRef(req.params.id);
       if (!load) return sendError(res, 404, "Not found");
-      assertTrackAccessOrThrow(load, req.auth, { allowCarrierStatusWrite: true });
+      assertTrackAccessOrThrow(load, req.auth);
 
       const carrierErr = assertAssignedCarrierForGps(load, req.auth.userId);
       if (carrierErr) throw carrierErr;
@@ -335,6 +353,7 @@ router.put(
         return sendError(res, 500, "Could not save location");
       }
       markGpsWritten(load.id);
+      await appendShipmentLocationLog(load.id, lat, lng);
 
       const history = await getShipmentHistory(shipment.id);
       const core = await buildTrackingUpdatePayload(load.id, lat, lng);

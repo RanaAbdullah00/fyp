@@ -1,10 +1,16 @@
 const express = require("express");
 const { body, param, query, validationResult } = require("express-validator");
-const { protect, requireAnyRole, requireActiveRole } = require("../middleware/authMiddleware");
+const { protect, requireAnyRole, requireRole } = require("../middleware/authMiddleware");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
 const { query: dbQuery } = require("../db/pool");
 const userRepo = require("../repositories/userRepo");
 const { notifyUser } = require("../utils/notifyEvent");
+const {
+  canMutateCarrierSpaceListing,
+  hasAdminRole,
+  sendForbidden,
+  FORBIDDEN_CODES
+} = require("../utils/resourceAuth");
 
 const router = express.Router();
 
@@ -50,6 +56,11 @@ router.get("/", protect, requireAnyRole(["shipper", "carrier", "admin"]), async 
     params.push(availableFrom);
     clauses.push(`(s.available_from IS NULL OR s.available_from >= $${params.length}::date)`);
   }
+  const roles = req.auth?.roles || [];
+  if (roles.includes("shipper") && !hasAdminRole(req.auth)) {
+    params.push(req.auth.userId);
+    clauses.push(`s.carrier_id <> $${params.length}`);
+  }
   const { rows } = await dbQuery(
     `SELECT s.id, s.carrier_id AS "carrierId", s.origin, s.destination,
             s.truck_capacity_kg AS "truckCapacityKg", s.remaining_space_kg AS "remainingSpaceKg",
@@ -67,7 +78,7 @@ router.get("/", protect, requireAnyRole(["shipper", "carrier", "admin"]), async 
   return sendSuccess(res, 200, rows);
 });
 
-router.get("/mine", protect, requireAnyRole(["carrier", "admin"]), requireActiveRole("carrier"), async (req, res) => {
+router.get("/mine", protect, requireRole("carrier"), async (req, res) => {
   const { rows } = await dbQuery(
     `SELECT id, carrier_id AS "carrierId", origin, destination,
             truck_capacity_kg AS "truckCapacityKg", remaining_space_kg AS "remainingSpaceKg",
@@ -97,14 +108,13 @@ const createValidators = [
 router.post(
   "/",
   protect,
-  requireAnyRole(["carrier", "admin"]),
-  requireActiveRole("carrier"),
+  requireRole("carrier"),
   createValidators,
   validate,
   async (req, res) => {
     const user = await userRepo.findById(req.auth.userId);
     if (!user?.isProfileComplete) {
-      return sendError(res, 403, "Complete your profile to list available space");
+      return sendError(res, 403, "Complete your profile to list available space", null, "PROFILE_INCOMPLETE");
     }
     const {
       origin,
@@ -156,8 +166,7 @@ router.post(
 router.patch(
   "/:id",
   protect,
-  requireAnyRole(["carrier", "admin"]),
-  requireActiveRole("carrier"),
+  requireRole("carrier"),
   [
     param("id").custom((v) => (isUuid(v) ? true : (() => { throw new Error("Invalid id"); })())),
     body("remainingSpaceKg").optional().toFloat().isFloat({ min: 0 }),
@@ -169,8 +178,8 @@ router.patch(
     const { rows: found } = await dbQuery(`SELECT * FROM carrier_space_listings WHERE id = $1`, [id]);
     const row = found[0];
     if (!row) return sendError(res, 404, "Not found");
-    if (String(row.carrier_id) !== String(req.auth.userId) && !(req.auth.roles || []).includes("admin")) {
-      return sendError(res, 403, "Forbidden");
+    if (!canMutateCarrierSpaceListing(row, req.auth)) {
+      return sendForbidden(res, "You do not own this listing", FORBIDDEN_CODES.FORBIDDEN_OWNER);
     }
     const rem = req.body.remainingSpaceKg != null ? Number(req.body.remainingSpaceKg) : null;
     const status = req.body.status != null ? String(req.body.status) : null;
@@ -195,8 +204,7 @@ router.patch(
 router.delete(
   "/:id",
   protect,
-  requireAnyRole(["carrier", "admin"]),
-  requireActiveRole("carrier"),
+  requireRole("carrier"),
   [param("id").custom((v) => (isUuid(v) ? true : (() => { throw new Error("Invalid id"); })()))],
   validate,
   async (req, res) => {

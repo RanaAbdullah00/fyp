@@ -15,6 +15,8 @@ const backendRoot = path.join(__dirname, "..");
 const require = createRequire(path.join(backendRoot, "package.json"));
 require("dotenv").config({ path: path.join(backendRoot, ".env") });
 
+const { normalizeCommit, commitsMatch } = require(path.join(backendRoot, "utils/normalizeCommit.js"));
+
 const REPAIR = process.argv.includes("--repair");
 const EXPECTED_MIGRATIONS = [
   "020_truck_fleet_status.sql",
@@ -76,10 +78,13 @@ async function main() {
     health = { error: e.message };
   }
 
-  const remoteBuild = health?.data?.build || health?.data?.commit || null;
-  const commitMatch =
-    Boolean(localSha && remoteBuild) &&
-    (remoteBuild.startsWith(localShort) || remoteBuild === localSha || localSha.startsWith(remoteBuild.slice(0, 7)));
+  const deploy = health?.data?.deploy || {};
+  const remoteFull =
+    deploy.commitFull || health?.data?.commitFull || deploy.commit || health?.data?.build || health?.data?.commit || null;
+  const remoteNormalized =
+    deploy.normalizedCommit || deploy.commitShort || normalizeCommit(remoteFull);
+  const localNormalized = normalizeCommit(localSha);
+  const commitMatch = commitsMatch(localSha, remoteFull);
 
   const { getPool, endPool } = require(path.join(backendRoot, "db/pool.js"));
   const { verifySchema, SCHEMA_VERSION } = require(path.join(backendRoot, "db/schemaGuard.js"));

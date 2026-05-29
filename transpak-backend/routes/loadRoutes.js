@@ -1,6 +1,6 @@
 const express = require("express");
 const { body, param, validationResult } = require("express-validator");
-const { protect, requireAnyRole, requireActiveRole } = require("../middleware/authMiddleware");
+const { protect, requireAnyRole, requireRole } = require("../middleware/authMiddleware");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
 const { query } = require("../db/pool");
 const userRepo = require("../repositories/userRepo");
@@ -9,6 +9,10 @@ const { estimateDistanceKm, calculateSuggestedFare, calculateFareBreakdown } = r
 const { notifyUser, notifyLoadPostedToCarriers } = require("../utils/notifyEvent");
 const { apiLoadStatus } = require("../utils/bidStateMachine");
 const { parseDeadlineMinutesFromBody } = require("../utils/loadDeadline");
+const { asyncHandler } = require("../utils/asyncHandler");
+const { persistLoadRouteSnapshot } = require("../utils/loadRouteSnapshot");
+const { writeAudit } = require("../utils/auditLog");
+const { requireLoadRead, requireLoadShipperMutate } = require("../middleware/authorizeResource");
 
 const router = express.Router();
 
@@ -41,13 +45,12 @@ function validate(req, res, next) {
   return next();
 }
 
-router.get("/", protect, requireAnyRole(["carrier", "admin"]), requireActiveRole("carrier"), loadController.listOpen);
+router.get("/", protect, requireRole("carrier"), loadController.listOpen);
 
 router.post(
   "/:id/pass",
   protect,
-  requireAnyRole(["carrier", "admin"]),
-  requireActiveRole("carrier"),
+  requireRole("carrier"),
   [param("id").custom((v) => (isUuid(v) ? true : (() => { throw new Error("Invalid load id"); })()))],
   validate,
   async (req, res) => {
@@ -69,7 +72,7 @@ router.post(
   }
 );
 
-router.get("/mine", protect, requireAnyRole(["shipper", "admin"]), requireActiveRole("shipper"), async (req, res) => {
+router.get("/mine", protect, requireRole("shipper"), async (req, res) => {
   try {
     const { rows } = await query(
       `SELECT l.id, l.code, l.cargo, l.origin, l.destination, l.weight, l.vehicle_type AS "vehicleType",
@@ -127,17 +130,7 @@ async function updateLoad(req, res) {
   try {
     const { cargo, origin, destination, weight, type, vehicleType, price, expectedPrice, pickupDate, deadlineHours } =
       req.body || {};
-
-    const { rows: found } = await query(
-      `SELECT id, shipper_id, status, vehicle_type, expected_price
-       FROM loads
-       WHERE id = $1`,
-      [req.params.id]
-    );
-    const load = found[0];
-    if (!load) return sendError(res, 404, "Not found");
-    if (String(load.shipper_id) !== String(req.auth.userId)) return sendError(res, 403, "Forbidden");
-    if (load.status !== "open") return sendError(res, 409, "Only open loads can be updated");
+    const load = req.loadRow;
 
     let nextPickupDate = null;
     if (pickupDate !== undefined && pickupDate !== null && String(pickupDate).trim() !== "") {
@@ -190,12 +183,6 @@ async function updateLoad(req, res) {
 
 async function deleteOwnOpenLoad(req, res) {
   try {
-    const { rows: found } = await query(`SELECT id, shipper_id, status FROM loads WHERE id = $1`, [req.params.id]);
-    const load = found[0];
-    if (!load) return sendError(res, 404, "Not found");
-    if (String(load.shipper_id) !== String(req.auth.userId)) return sendError(res, 403, "Forbidden");
-    if (load.status !== "open") return sendError(res, 409, "Only open loads can be deleted");
-
     await query(`DELETE FROM loads WHERE id = $1`, [req.params.id]);
     return sendSuccess(res, 200, { ok: true }, "Deleted");
   } catch (err) {
@@ -206,8 +193,8 @@ async function deleteOwnOpenLoad(req, res) {
 router.patch(
   "/:id",
   protect,
-  requireAnyRole(["shipper", "admin"]),
-  requireActiveRole("shipper"),
+  requireRole("shipper"),
+  requireLoadShipperMutate("id"),
   updateLoadValidators,
   validate,
   updateLoad
@@ -216,41 +203,44 @@ router.patch(
 router.delete(
   "/:id",
   protect,
-  requireAnyRole(["shipper", "admin"]),
-  requireActiveRole("shipper"),
-  [param("id").custom((v) => (isUuid(v) ? true : (() => { throw new Error("Invalid load id"); })()))],
-  validate,
+  requireRole("shipper"),
+  requireLoadShipperMutate("id"),
   deleteOwnOpenLoad
 );
 
-router.get("/:id", protect, async (req, res) => {
-  const id = req.params.id;
-  if (!isUuid(id)) return sendError(res, 400, "Invalid load id");
-  const { rows } = await query(
-    `SELECT id, code, cargo, origin, destination, weight, vehicle_type AS "vehicleType",
-            expected_price AS "expectedPrice", pickup_date AS "pickupDate", deadline_hours AS "deadlineHours",
-            status, shipper_id AS "shipperId", assigned_carrier_id AS "assignedCarrierId",
-            created_at AS "createdAt", updated_at AS "updatedAt"
-     FROM loads
-     WHERE id = $1`,
-    [id]
-  );
-  const load = rows[0];
-  if (!load) return sendError(res, 404, "Not found");
-
-  const roles = req.auth?.roles || [];
-  const isAdmin = roles.includes("admin");
-  const isOwner = String(load.shipperId) === String(req.auth.userId);
-  const isAssignedCarrier = load.assignedCarrierId && String(load.assignedCarrierId) === String(req.auth.userId);
-  if (!isAdmin && !isOwner && !isAssignedCarrier) return sendError(res, 403, "Forbidden");
-  return sendSuccess(res, 200, load);
-});
+router.get(
+  "/:id",
+  protect,
+  requireAnyRole(["shipper", "carrier", "admin"]),
+  requireLoadRead("id"),
+  async (req, res) => {
+    const load = req.loadRow;
+    return sendSuccess(res, 200, {
+      id: load.id,
+      code: load.code,
+      cargo: load.cargo,
+      origin: load.origin,
+      destination: load.destination,
+      weight: load.weight,
+      vehicleType: load.vehicle_type,
+      expectedPrice: load.expected_price,
+      pickupDate: load.pickup_date,
+      deadlineHours: load.deadline_hours,
+      status: load.status,
+      shipperId: load.shipper_id,
+      assignedCarrierId: load.assigned_carrier_id,
+      createdAt: load.created_at,
+      updatedAt: load.updated_at
+    });
+  }
+);
 
 async function createLoad(req, res) {
+  try {
   const user = await userRepo.findById(req.auth.userId);
   if (!user) return sendError(res, 401, "Unauthorized");
   if (!user.isProfileComplete) {
-    return sendError(res, 403, "Complete your profile to post loads");
+    return sendError(res, 403, "Complete your profile to post loads", null, "PROFILE_INCOMPLETE");
   }
   const {
     cargo,
@@ -340,21 +330,54 @@ async function createLoad(req, res) {
      ON CONFLICT (load_id) DO NOTHING`,
     [load.id]
   );
-  await notifyUser({
-    receiverId: req.auth.userId,
-    senderId: req.auth.userId,
-    roleType: "shipper",
-    title: "LOAD_POSTED",
-    type: "LOAD_POSTED",
-    message: `Load ${code} posted: ${pickupLoc} → ${dropLoc}`
-  });
-  await notifyLoadPostedToCarriers({
-    shipperId: req.auth.userId,
-    loadCode: code,
-    origin: pickupLoc,
-    destination: dropLoc
+  try {
+    await persistLoadRouteSnapshot(load.id, pickupLoc, dropLoc);
+  } catch (routeErr) {
+    // eslint-disable-next-line no-console
+    console.error("[loads.create] route snapshot failed:", routeErr?.message || routeErr);
+  }
+  try {
+    await notifyUser({
+      receiverId: req.auth.userId,
+      senderId: req.auth.userId,
+      roleType: "shipper",
+      title: "LOAD_POSTED",
+      type: "LOAD_POSTED",
+      message: `Load ${code} posted: ${pickupLoc} → ${dropLoc}`
+    });
+    await notifyLoadPostedToCarriers({
+      shipperId: req.auth.userId,
+      loadCode: code,
+      origin: pickupLoc,
+      destination: dropLoc
+    });
+  } catch (notifyErr) {
+    // eslint-disable-next-line no-console
+    console.error("[loads.create] notification dispatch failed:", notifyErr?.message || notifyErr);
+  }
+  void writeAudit({
+    actorUserId: req.auth.userId,
+    action: "load.created",
+    targetEntity: "load",
+    targetId: load.id,
+    metadata: { code: load.code, origin: pickupLoc, destination: dropLoc }
   });
   return sendSuccess(res, 201, load, "Created");
+  } catch (err) {
+    const pgCode = String(err?.code || "");
+    if (pgCode === "42703") {
+      return sendError(
+        res,
+        503,
+        "Database schema is outdated. Run npm run db:migrate on the server.",
+        null,
+        "SCHEMA_OUTDATED"
+      );
+    }
+    // eslint-disable-next-line no-console
+    console.error("[loads.create]", err?.message || err);
+    return sendError(res, 500, err?.message || "Could not create load", null, "SERVER_ERROR");
+  }
 }
 
 const createLoadValidators = [
@@ -383,6 +406,11 @@ const createLoadValidators = [
     .toInt()
     .isInt({ min: 1, max: 72 })
     .withMessage("deadlineHours must be 1-72"),
+  body("deadlineMinutes")
+    .optional({ nullable: true })
+    .toInt()
+    .isInt({ min: 15, max: 4320 })
+    .withMessage("deadlineMinutes must be 15-4320"),
   body("distanceKm")
     .optional({ nullable: true })
     .toFloat()
@@ -390,7 +418,21 @@ const createLoadValidators = [
     .withMessage("distanceKm must be non-negative")
 ];
 
-router.post("/", protect, requireAnyRole(["shipper", "admin"]), requireActiveRole("shipper"), createLoadValidators, validate, createLoad);
-router.post("/create", protect, requireAnyRole(["shipper", "admin"]), requireActiveRole("shipper"), createLoadValidators, validate, createLoad);
+router.post(
+  "/",
+  protect,
+  requireRole("shipper"),
+  createLoadValidators,
+  validate,
+  asyncHandler(createLoad)
+);
+router.post(
+  "/create",
+  protect,
+  requireRole("shipper"),
+  createLoadValidators,
+  validate,
+  asyncHandler(createLoad)
+);
 
 module.exports = router;

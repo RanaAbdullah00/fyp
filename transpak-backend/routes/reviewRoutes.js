@@ -1,6 +1,7 @@
 const express = require("express");
 const { body, param } = require("express-validator");
-const { protect } = require("../middleware/authMiddleware");
+const { protect, requireAnyRole } = require("../middleware/authMiddleware");
+const COMMERCIAL_ROLES = ["shipper", "carrier", "admin"];
 const { validationResult } = require("express-validator");
 const { sendError, sendSuccess } = require("../utils/apiResponse");
 const { query } = require("../db/pool");
@@ -22,7 +23,7 @@ function validate(req, res, next) {
   next();
 }
 
-router.get("/pending", protect, async (req, res) => {
+router.get("/pending", protect, requireAnyRole(COMMERCIAL_ROLES), async (req, res) => {
   try {
     const uid = String(req.auth.userId);
     const pending = [];
@@ -102,6 +103,7 @@ router.get("/pending", protect, async (req, res) => {
 router.post(
   "/",
   protect,
+  requireAnyRole(COMMERCIAL_ROLES),
   [
     body("toUser").custom((v) => (isUuid(v) ? true : (() => { throw new Error("toUser is required"); })())),
     body("rating").isInt({ min: 1, max: 5 }).withMessage("rating must be 1–5"),
@@ -144,6 +146,13 @@ router.post(
       if (!ship) return sendError(res, 400, "Shipment not found for this load");
       if (!["delivered", "closed"].includes(String(ship.status))) {
         return sendError(res, 409, "Reviews are allowed after delivery is completed");
+      }
+      if (
+        ship.shipper_id &&
+        ship.assigned_carrier_id &&
+        String(ship.shipper_id) === String(ship.assigned_carrier_id)
+      ) {
+        return sendError(res, 409, "Invalid shipment parties for review");
       }
       const isParty =
         String(ship.shipper_id) === uid ||
@@ -218,6 +227,7 @@ router.post(
 router.get(
   "/:userId",
   protect,
+  requireAnyRole(COMMERCIAL_ROLES),
   [param("userId").custom((v) => (isUuid(v) ? true : (() => { throw new Error("Invalid userId"); })()))],
   validate,
   async (req, res) => {

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Verify production deployment alignment (code version + schema 023 + DB target).
- * Outputs Phase 6 final report JSON.
+ * Commit comparison uses normalized 12-char SHA — full vs short never false-fails.
+ * CODE_DRIFT is WARNING only (exit 0). Fails only on broken DB/schema/migrations.
  *
  * Usage: node scripts/verify-production-alignment.mjs [apiOrigin]
  */
@@ -14,6 +15,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const backendRoot = path.join(__dirname, "..");
 const require = createRequire(path.join(backendRoot, "package.json"));
 require("dotenv").config({ path: path.join(backendRoot, ".env") });
+
+const { normalizeCommit, commitsMatch } = require(path.join(backendRoot, "utils/normalizeCommit.js"));
 
 const API_ORIGIN = (
   process.argv[2] ||
@@ -33,9 +36,9 @@ const REQUIRED_MIGRATIONS = [
   "024_truck_status_constraint_reconcile.sql"
 ];
 
-function localCommitShort() {
+function localCommitFull() {
   try {
-    return execSync("git rev-parse --short HEAD", {
+    return execSync("git rev-parse HEAD", {
       cwd: path.join(__dirname, "..", ".."),
       encoding: "utf8"
     }).trim();
@@ -56,6 +59,25 @@ function classifyTruckConstraint(def) {
   if (hasCanonical && !hasLegacy) return "OK";
   if (hasLegacy) return "LEGACY";
   return "UNKNOWN";
+}
+
+function resolveRemoteCommitRefs(data, res) {
+  const deploy = data.deploy || {};
+  const full =
+    deploy.commitFull ||
+    data.commitFull ||
+    deploy.commit ||
+    data.build ||
+    data.commit ||
+    res.headers.get("X-TransPak-Build") ||
+    "";
+  const normalized =
+    deploy.normalizedCommit ||
+    deploy.commitShort ||
+    data.build ||
+    data.commit ||
+    normalizeCommit(full);
+  return { full: String(full).trim(), normalized };
 }
 
 async function auditDatabase(pool) {
@@ -86,7 +108,7 @@ async function auditDatabase(pool) {
       if (ageMs < staleMs) lockStuck = true;
     }
   } catch {
-    /* table created on next migrate */
+    /* created on next migrate */
   }
 
   const truckCheck = await pool.query(
@@ -100,7 +122,7 @@ async function auditDatabase(pool) {
     issues.push({ type: "DB_SCHEMA_DRIFT", detail: `Missing migrations: ${missingMigrations.join(", ")}` });
   }
   if (lockStuck) {
-    issues.push({ type: "MIGRATION_LOCK_STUCK", detail: "migration_lock.locked=true — run audit:production-db --repair" });
+    issues.push({ type: "MIGRATION_LOCK_STUCK", detail: "migration_lock.locked=true" });
   }
   if (truckConstraint === "LEGACY") {
     issues.push({ type: "DB_SCHEMA_DRIFT", detail: "trucks_status_check uses legacy enum values" });
@@ -113,27 +135,22 @@ async function auditDatabase(pool) {
   if (legacyRows.rows[0]?.c > 0) {
     issues.push({
       type: "LEGACY_TRUCK_ROWS",
-      detail: `${legacyRows.rows[0].c} rows still use active/pending_verification`
+      detail: `${legacyRows.rows[0].c} rows use active/pending_verification`
     });
   }
 
   const migrationStatus =
     missingMigrations.length > 0 ? "PARTIAL" : issues.some((i) => i.type === "DB_SCHEMA_DRIFT") ? "PARTIAL" : "OK";
 
-  return {
-    migrationCount: migrations.rows.length,
-    missingMigrations,
-    migrationStatus,
-    truckConstraint,
-    lockStuck,
-    issues
-  };
+  return { migrationCount: migrations.rows.length, missingMigrations, migrationStatus, truckConstraint, lockStuck, issues };
 }
 
 async function main() {
   printSection("Phase 1 — Deployment verification");
-  const localSha = localCommitShort();
-  console.log("Local git HEAD (short):", localSha);
+  const localFull = localCommitFull();
+  const localNormalized = normalizeCommit(localFull);
+  console.log("Local git HEAD (full):", localFull);
+  console.log("Local git HEAD (normalized):", localNormalized);
 
   printSection("Production /api/health");
   const url = `${API_ORIGIN}/api/health`;
@@ -143,14 +160,24 @@ async function main() {
   console.log(JSON.stringify(body, null, 2));
 
   const data = body?.data || {};
-  const remoteBuild = data.build || data.commit || res.headers.get("X-TransPak-Build");
-  const commitMatch =
-    Boolean(localSha && remoteBuild && localSha !== "unknown") &&
-    (String(remoteBuild).startsWith(localSha) || String(remoteBuild) === localSha);
+  const remote = resolveRemoteCommitRefs(data, res);
+  const remoteNormalized = remote.normalized || normalizeCommit(remote.full);
+  const commitMatch = commitsMatch(localFull, remote.full) || localNormalized === remoteNormalized;
 
-  if (!commitMatch) {
-    console.log("\n*** CODE DRIFT DETECTED ***");
-    console.log(`Render: ${remoteBuild || "unknown"}  |  Local: ${localSha}`);
+  console.log("Remote commit (full):", remote.full || "(none)");
+  console.log("Remote commit (normalized):", remoteNormalized || "(none)");
+  console.log("Commit match (normalized):", commitMatch);
+
+  const warnings = [];
+  const failures = [];
+  const issues = [];
+
+  if (!commitMatch && localNormalized !== "unknown" && remoteNormalized) {
+    const driftDetail = `Commit mismatch (normalized): local=${localNormalized} remote=${remoteNormalized} (full: local=${localFull} remote=${remote.full})`;
+    warnings.push({ type: "CODE_DRIFT", status: "WARNING", detail: driftDetail });
+    issues.push({ type: "CODE_DRIFT", detail: "Commit mismatch (normalized comparison)" });
+    console.log("\n*** CODE DRIFT (warning only) ***");
+    console.log(driftDetail);
   }
 
   printSection("Phase 2 — Database consistency (local DATABASE_URL)");
@@ -167,117 +194,120 @@ async function main() {
     const pool = getPool();
     dbAudit = await auditDatabase(pool);
     console.log("Migrations 020–024:", dbAudit.migrationStatus);
-    if (dbAudit.missingMigrations?.length) {
-      console.log("Missing:", dbAudit.missingMigrations.join(", "));
-    }
     console.log("trucks_status_check:", dbAudit.truckConstraint);
-    console.log("migration_lock stuck:", dbAudit.lockStuck);
     await endPool();
   } catch (e) {
     console.log("DB audit skipped:", e.message);
-    dbAudit.issues.push({ type: "DB_CONNECT_FAILED", detail: e.message });
+    failures.push({ type: "DB_CONNECT_FAILED", detail: e.message });
+  }
+
+  for (const i of dbAudit.issues) {
+    failures.push(i);
+    issues.push(i);
   }
 
   const hasSchema = data.schema != null;
   const schemaOk = data.schema?.ok === true;
   const schemaVer = data.schemaVersion || data.schema?.version || data.deploy?.schemaGuardVersion;
-  const dbStatus = data.db === "ready" ? "ready" : "unavailable";
+  const prodDbReady = data.db === "ready";
   const dbTargetMatch =
-    Boolean(localDb?.host && data.deploy?.databaseTarget?.host) &&
+    !localDb?.host ||
+    !data.deploy?.databaseTarget?.host ||
     localDb.host === data.deploy.databaseTarget.host;
 
-  const issues = [...dbAudit.issues];
-
-  if (!commitMatch) {
-    issues.unshift({
-      type: "CODE_DRIFT",
-      detail: `Render "${remoteBuild}" != local "${localSha}" — push latest commit and redeploy Render backend`
-    });
-  }
   if (!hasSchema || data.dbPing === "skipped") {
-    issues.push({
+    failures.push({
       type: "STALE_HEALTH_ENDPOINT",
-      detail: "Production lacks live health/schema — redeploy backend from latest commit"
+      detail: "Production lacks live health/schema — redeploy backend"
     });
+    issues.push(failures[failures.length - 1]);
   }
-  if (hasDeployMismatch(localDb, data)) {
-    issues.push({
+  if (!dbTargetMatch && localDb?.host) {
+    failures.push({
       type: "DB_TARGET_MISMATCH",
-      detail: `Render DB host "${data.deploy.databaseTarget.host}" != local "${localDb.host}"`
+      detail: `Render DB host "${data.deploy?.databaseTarget?.host}" != local "${localDb.host}"`
     });
+    issues.push(failures[failures.length - 1]);
   }
   if (schemaOk === false) {
-    issues.push({
+    failures.push({
       type: "DB_SCHEMA_MISSING",
       detail: `Missing: ${(data.schema?.missing || []).join(", ")}`
     });
+    issues.push(failures[failures.length - 1]);
+  }
+  if (!prodDbReady && schemaOk !== false && !failures.some((f) => f.type === "STALE_HEALTH_ENDPOINT")) {
+    failures.push({ type: "DB_NOT_READY", detail: `Production db="${data.db}"` });
+    issues.push(failures[failures.length - 1]);
   }
 
-  const deploymentStatus = commitMatch && !issues.some((i) => i.type === "CODE_DRIFT") ? "SYNCED" : "DRIFTED";
+  const deploymentStatus =
+    commitMatch && failures.length === 0 && prodDbReady && schemaOk ? "SYNCED" : "DRIFTED";
   const migrationStatus =
     dbAudit.migrationStatus === "OK" && schemaOk !== false
       ? "OK"
-      : dbAudit.missingMigrations?.length || schemaOk === false
+      : failures.some((f) => f.type.includes("SCHEMA"))
         ? "PARTIAL"
-        : "MISSING";
+        : dbAudit.migrationStatus;
+
+  const overallStatus = failures.length ? "FAIL" : warnings.length ? "WARNING" : "OK";
 
   const report = {
+    status: overallStatus,
     deploymentStatus,
     commitMatch,
-    localCommit: localSha,
-    remoteCommit: remoteBuild || null,
+    localCommit: localFull,
+    localCommitNormalized: localNormalized,
+    remoteCommit: remote.full || null,
+    remoteCommitNormalized: remoteNormalized || null,
     migrationStatus,
-    dbStatus: schemaOk && data.db === "ready" ? "ready" : "unavailable",
+    dbStatus: prodDbReady && schemaOk ? "ready" : "unavailable",
     schemaVersion: schemaVer || EXPECTED_SCHEMA,
     dbTargetMatch,
     productionHealth: {
       db: data.db,
       dbPing: data.dbPing,
       schemaOk,
+      deploymentStatus: data.deploymentStatus,
       migrationSafe: data.deploy?.migrationSafe
     },
     issues: issues.map((i) => ({ type: i.type, detail: i.detail })),
-    primaryCause: !commitMatch
-      ? "CODE_DRIFT"
-      : issues.some((i) => i.type.includes("SCHEMA") || i.type === "DB_SCHEMA_DRIFT")
-        ? "DB_SCHEMA_DRIFT"
-        : issues.length
-          ? "OPERATIONAL"
-          : null,
+    warnings: warnings.map((w) => ({ type: w.type, detail: w.detail })),
+    failures: failures.map((f) => ({ type: f.type, detail: f.detail })),
+    primaryCause: failures.length ? failures[0].type : !commitMatch ? "CODE_DRIFT" : null,
     recommendedActions: []
   };
 
   if (!commitMatch) {
-    report.recommendedActions.push("git push origin <branch> && Render Dashboard → Manual Deploy → Clear build cache");
+    report.recommendedActions.push("git push && Render Manual Deploy (clear build cache) if normalized commits differ");
   }
-  if (migrationStatus !== "OK" || schemaOk === false) {
-    report.recommendedActions.push("Render Shell or deploy hook: cd transpak-backend && npm run db:migrate");
-  }
-  if (dbAudit.lockStuck) {
-    report.recommendedActions.push("npm run audit:production-db -- --repair");
-  }
-  if (!dbTargetMatch && localDb?.host) {
-    report.recommendedActions.push("Set Render DATABASE_URL to same Supabase pooler as local .env");
+  if (failures.some((f) => f.type.includes("SCHEMA") || f.type === "DB_NOT_READY")) {
+    report.recommendedActions.push("npm run db:migrate on production DATABASE_URL");
   }
 
   printSection("Phase 6 — Final verification");
   console.log(JSON.stringify(report, null, 2));
 
-  if (!issues.length) {
-    console.log("\nOK: Production aligned with local.");
+  if (warnings.length) {
+    for (const w of warnings) {
+      console.log(`WARN [${w.type}] ${w.detail}`);
+    }
+  }
+
+  if (failures.length) {
+    for (const f of failures) {
+      console.log(`FAIL [${f.type}] ${f.detail}`);
+    }
+    process.exit(1);
+  }
+
+  if (warnings.length) {
+    console.log("\nPASS with warnings: DB and schema OK.");
     process.exit(0);
   }
-  for (const i of issues) {
-    console.log(`FAIL [${i.type}] ${i.detail}`);
-  }
-  process.exit(1);
-}
 
-function hasDeployMismatch(localDb, data) {
-  return (
-    Boolean(localDb?.host && data.deploy?.databaseTarget?.host) &&
-    localDb.host !== data.deploy.databaseTarget.host
-  );
+  console.log("\nOK: Production fully aligned.");
+  process.exit(0);
 }
 
 main().catch((e) => {

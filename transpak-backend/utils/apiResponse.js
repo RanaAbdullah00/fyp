@@ -4,6 +4,8 @@
  * Error:   { success, message, data?, code?, errors?, deliveryReason?, deliveryHint? }
  */
 
+const { clientMessage, sanitizeErrorData } = require("./safeApiError");
+
 function sendSuccess(res, statusCode, data, message = "OK", code = null) {
   const payload = {
     success: true,
@@ -23,15 +25,17 @@ function sendSuccess(res, statusCode, data, message = "OK", code = null) {
  * @param {{ errors?: unknown, deliveryReason?: string, deliveryHint?: string }|null} [meta] — merged onto payload (not nested in data)
  */
 function sendError(res, statusCode, message, data = null, code = null, meta = null) {
+  const status = statusCode || 400;
+  const resolvedCode =
+    code ||
+    (status >= 500 ? "SERVER_ERROR" : status === 404 ? "NOT_FOUND" : status === 403 ? "FORBIDDEN" : "ERROR");
   const payload = {
     success: false,
-    message: message || "Error",
-    data: data !== undefined ? data : null
+    code: resolvedCode,
+    message: clientMessage(status, message),
+    data: sanitizeErrorData(data),
+    error: resolvedCode
   };
-  if (code) {
-    payload.code = code;
-    payload.error = code;
-  }
   if (meta && typeof meta === "object") {
     if (meta.errors !== undefined) payload.errors = meta.errors;
     if (meta.deliveryReason !== undefined) payload.deliveryReason = meta.deliveryReason;

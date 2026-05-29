@@ -1,4 +1,4 @@
-const { query } = require("../db/pool");
+const { query, getPool } = require("../db/pool");
 
 const ALLOWED_ROLES = ["shipper", "carrier", "admin"];
 
@@ -55,7 +55,7 @@ async function findRowByEmailWithPassword(email) {
             full_name, phone, cnic_number, cnic_image, cnic_image_back, profile_image, is_profile_complete,
             password_hash
      FROM users
-     WHERE email = $1`,
+     WHERE lower(trim(email)) = lower(trim($1))`,
     [String(email || "").trim().toLowerCase()]
   );
   return rows[0] || null;
@@ -66,7 +66,7 @@ async function findByEmail(email) {
     `SELECT id, email, roles, active_role, blocked, verified,
             full_name, phone, cnic_number, cnic_image, cnic_image_back, profile_image, is_profile_complete
      FROM users
-     WHERE email = $1`,
+     WHERE lower(trim(email)) = lower(trim($1))`,
     [String(email || "").trim().toLowerCase()]
   );
   return toAuthUser(rows[0]);
@@ -193,6 +193,53 @@ async function setActiveRole(userId, nextRole) {
   return toAuthUser(rows[0]);
 }
 
+const USER_RETURNING = `id, email, roles, active_role, blocked, verified,
+  full_name, phone, cnic_number, cnic_image, cnic_image_back, profile_image, is_profile_complete`;
+
+/**
+ * Atomically ensure role is on account (except admin) and set active_role.
+ * Caller must reject admin if not already in roles[].
+ */
+async function switchActiveRole(userId, nextRole) {
+  const role = normalizeRole(nextRole);
+  if (!role) return null;
+
+  const pool = getPool();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows: locked } = await client.query(
+      `SELECT roles FROM users WHERE id = $1 FOR UPDATE`,
+      [userId]
+    );
+    if (!locked[0]) {
+      await client.query("ROLLBACK");
+      return null;
+    }
+
+    const roles = Array.isArray(locked[0].roles) ? locked[0].roles.map(normalizeRole).filter(Boolean) : [];
+    if (!roles.includes(role)) {
+      await client.query("ROLLBACK");
+      return null;
+    }
+
+    const { rows } = await client.query(
+      `UPDATE users
+       SET active_role = $2, updated_at = now()
+       WHERE id = $1
+       RETURNING ${USER_RETURNING}`,
+      [userId, role]
+    );
+    await client.query("COMMIT");
+    return toAuthUser(rows[0]);
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 async function upsertDemoAdmin({ email, passwordHash, roles, activeRole, phone, cnicNumber, fullName }) {
   const normalizedEmail = String(email || "").trim().toLowerCase();
   const cleanRoles = Array.isArray(roles)
@@ -265,6 +312,7 @@ module.exports = {
   setPhoneIfEmpty,
   setFullNameIfEmpty,
   setActiveRole,
+  switchActiveRole,
   upsertDemoAdmin,
   setVerifiedByEmail,
   updatePasswordHashByEmail

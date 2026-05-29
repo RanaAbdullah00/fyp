@@ -13,6 +13,26 @@ const {
 } = require("../utils/otpDelivery");
 
 const { isDemoAdminEmail } = require("../utils/demoAdmin");
+const { resolveAuthUserForSession } = require("../utils/resolveAuthUser");
+const { isTransientDbError, classifyDbError } = require("../utils/dbErrors");
+const { writeAudit } = require("../utils/auditLog");
+
+async function withDbRetry(fn, attempts = 2) {
+  let lastErr;
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (i < attempts - 1 && isTransientDbError(err)) {
+        await new Promise((r) => setTimeout(r, 350 * (i + 1)));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
+}
 
 function normalizeRolesAndActiveRole(user) {
   const allowed = userRepo.ALLOWED_ROLES;
@@ -44,23 +64,6 @@ async function register(req, res) {
   try {
     const maybeError = validationErrorResponse(req, res);
     if (maybeError) return maybeError;
-
-    const dbg =
-      process.env.NODE_ENV === "development" ||
-      String(process.env.AUTH_DEBUG_REGISTER || "").toLowerCase() === "true";
-    if (dbg) {
-      const { name, email, phone, CNIC, role } = req.body || {};
-      // eslint-disable-next-line no-console
-      console.log("[auth.register] body (redacted)", {
-        name,
-        email,
-        phone,
-        CNIC,
-        role,
-        hasPassword: Boolean(req.body?.password),
-        fileFields: req.file ? [req.file.fieldname] : req.files ? Object.keys(req.files) : []
-      });
-    }
 
     const { name, email, phone, CNIC, password, confirmPassword, role } = req.body;
 
@@ -279,7 +282,7 @@ async function login(req, res) {
     const { email, password, roleHint } = req.body;
     const normalizedEmail = String(email || "").trim().toLowerCase();
 
-    const row = await userRepo.findRowByEmailWithPassword(normalizedEmail);
+    const row = await withDbRetry(() => userRepo.findRowByEmailWithPassword(normalizedEmail));
     if (!row) {
       return sendError(res, 401, "Invalid credentials", null, "INVALID_CREDENTIALS");
     }
@@ -317,11 +320,11 @@ async function login(req, res) {
       );
     }
 
-    let authUser = await userRepo.findByEmail(normalizedEmail);
+    let authUser = await withDbRetry(() => userRepo.findByEmail(normalizedEmail));
     if (!authUser) return sendError(res, 401, "Invalid credentials", null, "INVALID_CREDENTIALS");
 
     if (isDemoAdminEmail(normalizedEmail)) {
-      // Demo account may skip role-hint normalization when demo mode is enabled.
+      authUser.activeRole = "admin";
     } else {
       const normalized = normalizeRolesAndActiveRole(authUser);
       if (!normalized.ok) {
@@ -343,15 +346,20 @@ async function login(req, res) {
     }
 
     if (authUser.activeRole) {
-      await userRepo.setActiveRole(authUser.id, authUser.activeRole);
+      await withDbRetry(() => userRepo.setActiveRole(authUser.id, authUser.activeRole));
     }
 
-    const refreshed = await userRepo.findById(authUser.id);
-    const token = signToken(refreshed || authUser);
-    return sendSuccess(res, 200, loginAuthData(refreshed || authUser, token), "Logged in");
+    const refreshed = await withDbRetry(() => userRepo.findById(authUser.id));
+    const sessionUser = await resolveAuthUserForSession(refreshed || authUser);
+    const token = signToken(sessionUser);
+    return sendSuccess(res, 200, loginAuthData(sessionUser, token), "Logged in");
   } catch (err) {
+    const classified = classifyDbError(err);
     // eslint-disable-next-line no-console
-    console.error("[auth.login] full error:", err);
+    console.error("[auth.login]", classified.log || err?.message || err, err?.code || "");
+    if (classified.code !== "SERVER_ERROR") {
+      return sendError(res, classified.status, classified.message, null, classified.code);
+    }
     const isProd = process.env.NODE_ENV === "production";
     return sendError(
       res,
@@ -367,7 +375,9 @@ async function profile(req, res) {
   try {
     const user = await userRepo.findById(req.auth.userId);
     if (!user) return sendError(res, 401, "Unauthorized");
-    return sendSuccess(res, 200, authDataNoToken(user), "OK");
+    const sessionUser = await resolveAuthUserForSession(user);
+    const token = signToken(sessionUser);
+    return sendSuccess(res, 200, authData(sessionUser, token), "OK");
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error("[auth.profile]", err?.message || err);
@@ -387,23 +397,27 @@ async function updateActiveRole(req, res) {
   let user = await userRepo.findById(req.auth.userId);
   if (!user) return sendError(res, 401, "Unauthorized");
 
-  if (!userRepo.hasRole(user, next)) {
-    if (next === "admin") {
-      return sendError(res, 403, "Role not available for this account");
-    }
-    const appended = await userRepo.addRole(req.auth.userId, next);
-    if (!appended) {
-      return sendError(res, 500, "Could not add role to account");
-    }
-    user = appended;
+  if (next === "admin" && !userRepo.hasRole(user, "admin")) {
+    return sendError(res, 403, "Role not available for this account");
   }
 
-  const updated = await userRepo.setActiveRole(req.auth.userId, next);
+  if (!userRepo.hasRole(user, next)) {
+    return sendError(res, 403, "Role not available for this account", null, "ROLE_NOT_GRANTED");
+  }
+
+  const updated = await userRepo.switchActiveRole(req.auth.userId, next);
   if (!updated) {
     return sendError(res, 500, "Role update failed");
   }
 
   const token = signToken(updated);
+  void writeAudit({
+    actorUserId: req.auth.userId,
+    action: "role.switched",
+    targetEntity: "user",
+    targetId: req.auth.userId,
+    metadata: { activeRole: next }
+  });
   return sendSuccess(res, 200, authData(updated, token), "Role updated");
   } catch (err) {
     // eslint-disable-next-line no-console
@@ -427,17 +441,36 @@ async function addRoleToAccount(req, res) {
     if (!user) return sendError(res, 401, "Unauthorized");
 
     if (userRepo.hasRole(user, next)) {
-      return sendSuccess(res, 200, { roles: user.roles }, "Role already on account");
+      const token = signToken(user);
+      return sendSuccess(res, 200, authData(user, token), "Role already on account");
+    }
+
+    if (!user.isProfileComplete) {
+      return sendError(
+        res,
+        403,
+        "Complete your current profile before adding another role",
+        null,
+        "PROFILE_INCOMPLETE"
+      );
     }
 
     user = await userRepo.addRole(user.id, next);
     if (!user) return sendError(res, 500, "Could not add role");
 
-    return sendSuccess(res, 200, { roles: user.roles }, "Role added successfully");
+    const token = signToken(user);
+    void writeAudit({
+      actorUserId: req.auth.userId,
+      action: "role.added",
+      targetEntity: "user",
+      targetId: user.id,
+      metadata: { role: next }
+    });
+    return sendSuccess(res, 200, authData(user, token), "Role added successfully");
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error("[auth.addRole]", err?.message || err);
-    return sendError(res, 500, "Failed to add role");
+    return sendError(res, 500, "Failed to add role", null, "SERVER_ERROR");
   }
 }
 

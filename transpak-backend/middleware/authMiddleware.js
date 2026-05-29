@@ -1,27 +1,42 @@
 const { verifyToken } = require("../utils/jwt");
 const { sendError } = require("../utils/apiResponse");
+const { recordAuthFailure } = require("../utils/opsTelemetry");
 const userRepo = require("../repositories/userRepo");
 const { isDemoAdminEmail } = require("../utils/demoAdmin");
+const { buildAuthContextFromDB, logAuthContext } = require("../utils/authContext");
 
-async function protect(req, res, next) {
+/** Valid JWT identity → load permissions from DB only. */
+async function requireAuth(req, res, next) {
   try {
-    const auth = req.headers.authorization || "";
-    const [scheme, token] = auth.split(" ");
+    const authHeader = req.headers.authorization || "";
+    const [scheme, token] = authHeader.split(" ");
 
     if (scheme !== "Bearer" || !token) {
+      recordAuthFailure("missing_token");
       return sendError(res, 401, "Unauthorized");
     }
 
-    const decoded = verifyToken(token);
+    let decoded;
+    try {
+      decoded = verifyToken(token);
+    } catch {
+      recordAuthFailure("invalid_token");
+      return sendError(res, 401, "Unauthorized");
+    }
+
     const userId = decoded?.sub;
     if (!userId) {
+      recordAuthFailure("missing_sub");
       return sendError(res, 401, "Unauthorized");
     }
 
-    const user = await userRepo.findById(userId);
-    if (!user) {
+    const ctx = await buildAuthContextFromDB(userId);
+    if (!ctx?.user) {
+      recordAuthFailure("user_not_found");
       return sendError(res, 401, "Unauthorized");
     }
+
+    const user = ctx.user;
     if (user.blocked) {
       return sendError(res, 403, "Account is blocked");
     }
@@ -31,11 +46,8 @@ async function protect(req, res, next) {
     }
 
     req.user = user;
-    req.auth = {
-      userId: String(user.id),
-      roles: Array.isArray(user.roles) ? user.roles : [],
-      activeRole: user.activeRole || null
-    };
+    req.auth = ctx;
+    logAuthContext(req, ctx);
 
     return next();
   } catch (err) {
@@ -43,20 +55,25 @@ async function protect(req, res, next) {
   }
 }
 
+/** Account must include role in DB roles[] (authorization only — see docs/RBAC.md). */
 function requireRole(role) {
+  const required = String(role || "").trim().toLowerCase();
   return (req, res, next) => {
-    const roles = req.auth?.roles || req.user?.roles || [];
-    if (!roles.includes(role)) {
+    const roles = req.auth?.roles || [];
+    if (!roles.includes(required)) {
       return sendError(res, 403, "Forbidden", null, "FORBIDDEN_ROLE");
     }
     return next();
   };
 }
 
+/** Account must include at least one role from the list (DB roles[] only). */
 function requireAnyRole(rolesList) {
-  const required = Array.isArray(rolesList) ? rolesList : [];
+  const required = (Array.isArray(rolesList) ? rolesList : []).map((r) =>
+    String(r).trim().toLowerCase()
+  );
   return (req, res, next) => {
-    const roles = req.auth?.roles || req.user?.roles || [];
+    const roles = req.auth?.roles || [];
     if (!required.some((r) => roles.includes(r))) {
       return sendError(res, 403, "Forbidden", null, "FORBIDDEN_ROLE");
     }
@@ -64,20 +81,14 @@ function requireAnyRole(rolesList) {
   };
 }
 
-function requireActiveRole(...allowed) {
-  const list = allowed.flat();
-  return (req, res, next) => {
-    const roles = req.auth?.roles || [];
-    if (roles.includes("admin")) return next();
-    const active = req.auth?.activeRole;
-    if (list.includes(active)) return next();
-    return sendError(res, 403, "Switch role to continue", null, "WRONG_ACTIVE_ROLE");
-  };
-}
+const protect = requireAuth;
+
+const { validateViewAs } = require("./validateViewAs");
 
 module.exports = {
+  requireAuth,
   protect,
   requireRole,
   requireAnyRole,
-  requireActiveRole
+  validateViewAs
 };

@@ -1,6 +1,12 @@
 const express = require("express");
 const { body, param, validationResult } = require("express-validator");
-const { protect, requireAnyRole, requireActiveRole } = require("../middleware/authMiddleware");
+const { protect, requireAnyRole, requireRole, validateViewAs } = require("../middleware/authMiddleware");
+const {
+  canMutateBidAsShipper,
+  canMutateBidAsCarrier,
+  sendForbidden,
+  FORBIDDEN_CODES
+} = require("../utils/resourceAuth");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
 const { getPool, query } = require("../db/pool");
 const {
@@ -14,9 +20,16 @@ const {
   assertCounterLimit
 } = require("../utils/bidStateMachine");
 const { notifyUser } = require("../utils/notifyEvent");
-const { isBiddingOpen } = require("../utils/loadDeadline");
-
+const { validateBidPlacement, validateCounterBid } = require("../utils/matchingEngine");
+const { bidsRouteLimiter } = require("../middleware/apiRateLimit");
+const { resolveCommercialViewRole } = require("../utils/commercialViewRole");
+const { assertNotSelfCommercial } = require("../utils/selfExclusion");
+const { requireCarrierTruckReady } = require("../middleware/commercialGates");
+const { writeAudit } = require("../utils/auditLog");
+const { forbidAdminOnlyCommercial } = require("../middleware/forbidAdminOnlyCommercial");
 const router = express.Router();
+
+router.use(forbidAdminOnlyCommercial);
 
 function isUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -34,41 +47,14 @@ function validate(req, res, next) {
   return next();
 }
 
-router.get("/", protect, requireAnyRole(["shipper", "carrier", "admin"]), async (req, res) => {
+router.get("/", protect, requireAnyRole(["shipper", "carrier"]), validateViewAs(), async (req, res) => {
   const roles = req.auth?.roles || [];
-  const active = req.auth?.activeRole;
-  const isAdmin = roles.includes("admin");
-  const viewAs =
-    active === "shipper" || active === "carrier"
-      ? active
-      : roles.includes("shipper")
-      ? "shipper"
-      : roles.includes("carrier")
-      ? "carrier"
-      : null;
+  const viewAs = resolveCommercialViewRole(roles, req.commercialView);
 
   const loadId = req.query?.loadId ? String(req.query.loadId).trim() : "";
-  const adminLoadFilter = loadId && isUuid(loadId) ? "AND b.load_id = $1" : "";
   const shipperLoadClause = loadId && isUuid(loadId) ? "AND b.load_id = $2" : "";
 
-  if (isAdmin) {
-    const adminParams = adminLoadFilter ? [loadId] : [];
-    const { rows } = await query(
-      `SELECT b.id, b.load_id AS "loadId", b.carrier_id AS "carrierId", b.amount,
-              b.status, b.created_at AS "createdAt",
-              COALESCE(u.full_name, u.email, 'Carrier') AS "carrierName",
-              'Truck' AS "vehicleType"
-       FROM bids b
-       JOIN users u ON u.id = b.carrier_id
-       WHERE 1=1 ${adminLoadFilter}
-       ORDER BY b.created_at DESC
-       LIMIT 500`,
-      adminParams
-    );
-    return sendSuccess(res, 200, rows);
-  }
-
-  if (active === "carrier") {
+  if (viewAs === "carrier") {
     const { rows } = await query(
       `SELECT b.id, b.load_id AS "loadId", b.carrier_id AS "carrierId", b.amount,
               b.status, b.suggested_amount AS "suggestedAmount", b.suggested_by AS "suggestedBy",
@@ -96,7 +82,9 @@ router.get("/", protect, requireAnyRole(["shipper", "carrier", "admin"]), async 
        FROM bids b
        JOIN loads l ON l.id = b.load_id
        JOIN users u ON u.id = b.carrier_id
-       WHERE l.shipper_id = $1 ${shipperLoadClause}
+       WHERE l.shipper_id = $1
+         AND b.carrier_id <> l.shipper_id
+         ${shipperLoadClause}
        ORDER BY b.created_at DESC
        LIMIT 500`,
       params
@@ -108,11 +96,7 @@ router.get("/", protect, requireAnyRole(["shipper", "carrier", "admin"]), async 
 });
 
 // Frontend convenience: /bids/mine for carriers
-router.get("/mine", protect, requireAnyRole(["carrier", "admin"]), async (req, res) => {
-  const roles = req.auth?.roles || [];
-  if (!roles.includes("carrier") && !roles.includes("admin")) {
-    return sendError(res, 403, "Carrier role required");
-  }
+router.get("/mine", protect, requireRole("carrier"), async (req, res) => {
   const { rows } = await query(
     `SELECT b.id, b.load_id AS "loadId", l.code AS "loadCode", b.carrier_id AS "carrierId", b.amount,
             b.status, b.suggested_amount AS "suggestedAmount", b.suggested_by AS "suggestedBy",
@@ -121,7 +105,7 @@ router.get("/mine", protect, requireAnyRole(["carrier", "admin"]), async (req, r
             'Truck' AS "vehicleType"
      FROM bids b
      JOIN loads l ON l.id = b.load_id
-     WHERE b.carrier_id = $1
+     WHERE b.carrier_id = $1 AND l.shipper_id <> b.carrier_id
      ORDER BY b.created_at DESC
      LIMIT 500`,
     [req.auth.userId]
@@ -132,8 +116,9 @@ router.get("/mine", protect, requireAnyRole(["carrier", "admin"]), async (req, r
 router.post(
   "/",
   protect,
-  requireAnyRole(["carrier", "admin"]),
-  requireActiveRole("carrier"),
+  bidsRouteLimiter,
+  requireRole("carrier"),
+  requireCarrierTruckReady,
   [
     body("loadId").custom((v) => (isUuid(v) ? true : (() => { throw new Error("loadId is required"); })())),
     body("amount").toFloat().isFloat({ gt: 0 }).withMessage("amount must be greater than 0")
@@ -143,18 +128,23 @@ router.post(
     try {
     const { loadId, amount } = req.body || {};
     const { rows: loadRows } = await query(
-      `SELECT id, status, deadline_hours, deadline_minutes, created_at
+      `SELECT id, shipper_id, status, weight, vehicle_type,
+              deadline_hours, deadline_minutes, created_at
        FROM loads
        WHERE id = $1`,
       [loadId]
     );
     const load = loadRows[0];
     if (!load) return sendError(res, 404, "Not found", null, "NOT_FOUND");
-    if (load.status !== "open") return sendError(res, 409, "Load is not open for bidding", null, "LOAD_NOT_OPEN");
-    if (!isBiddingOpen(load)) {
-      return sendError(res, 409, "Bidding deadline has passed", null, "BID_DEADLINE_PASSED");
+    try {
+      assertNotSelfCommercial({
+        shipperId: load.shipper_id,
+        carrierId: req.auth.userId,
+        action: "bid on"
+      });
+    } catch (e) {
+      return sendError(res, e.statusCode || 403, e.message, null, e.code);
     }
-
     const { rows: existing } = await query(
       `SELECT id, load_id AS "loadId", carrier_id AS "carrierId", amount, status,
               suggested_amount AS "suggestedAmount", suggested_by AS "suggestedBy",
@@ -162,29 +152,45 @@ router.post(
        FROM bids WHERE load_id = $1 AND carrier_id = $2`,
       [loadId, req.auth.userId]
     );
-    if (existing[0]) {
-      const st = normalizeBidStatus(existing[0].status);
-      if (st === BID.ACCEPTED) {
-        return sendError(res, 409, "This load already has an accepted carrier", null, "BID_ALREADY_ACCEPTED");
-      }
-      if (isAwaitingShipper(existing[0].status) && Number(existing[0].amount) === Number(amount)) {
-        const bid = { ...existing[0], flowStatus: apiBidStatus(existing[0].status) };
-        return sendSuccess(res, 200, bid, "Already submitted");
-      }
-      assertBidTransition(existing[0].status, BID.PENDING_SHIPPER);
+
+    const placement = await validateBidPlacement({
+      carrierUserId: req.auth.userId,
+      load,
+      existingBid: existing[0] || null
+    });
+    if (!placement.ok) {
+      return sendError(res, placement.status, placement.message, null, placement.code);
+    }
+
+    if (existing[0] && isAwaitingShipper(existing[0].status) && Number(existing[0].amount) === Number(amount)) {
+      const bid = { ...existing[0], flowStatus: apiBidStatus(existing[0].status) };
+      return sendSuccess(res, 200, bid, "Already submitted");
     }
 
     const { rows } = await query(
       `INSERT INTO bids (load_id, carrier_id, amount, status)
        VALUES ($1, $2, $3, 'pending_shipper_confirmation')
-       ON CONFLICT (load_id, carrier_id)
-         DO UPDATE SET amount = EXCLUDED.amount, status = 'pending_shipper_confirmation',
-           suggested_amount = NULL, suggested_by = NULL, counter_round_count = 0, updated_at = now()
-         RETURNING id, load_id AS "loadId", carrier_id AS "carrierId", amount, status,
-                   suggested_amount AS "suggestedAmount", suggested_by AS "suggestedBy",
-                   created_at AS "createdAt"`,
+       ON CONFLICT (load_id, carrier_id) DO NOTHING
+       RETURNING id, load_id AS "loadId", carrier_id AS "carrierId", amount, status,
+                 suggested_amount AS "suggestedAmount", suggested_by AS "suggestedBy",
+                 created_at AS "createdAt"`,
       [loadId, req.auth.userId, Number(amount)]
     );
+
+    if (!rows[0]) {
+      const { rows: again } = await query(
+        `SELECT id, load_id AS "loadId", carrier_id AS "carrierId", amount, status,
+                suggested_amount AS "suggestedAmount", suggested_by AS "suggestedBy",
+                created_at AS "createdAt"
+         FROM bids WHERE load_id = $1 AND carrier_id = $2`,
+        [loadId, req.auth.userId]
+      );
+      if (again[0]) {
+        const bid = { ...again[0], flowStatus: apiBidStatus(again[0].status) };
+        return sendSuccess(res, 200, bid, "Already submitted");
+      }
+      return sendError(res, 409, "Active bid already exists on this load", null, "ACTIVE_BID_EXISTS");
+    }
 
     const { rows: loadOwner } = await query(`SELECT shipper_id FROM loads WHERE id = $1`, [loadId]);
     if (loadOwner[0]?.shipper_id) {
@@ -201,11 +207,7 @@ router.post(
     const bid = { ...rows[0], flowStatus: apiBidStatus(rows[0].status) };
     return sendSuccess(res, 201, bid, "Created");
     } catch (err) {
-      if (
-        err.code === "INVALID_BID_TRANSITION" ||
-        err.code === "INVALID_BID_STATE" ||
-        err.code === "COUNTER_LIMIT_REACHED"
-      ) {
+      if (err.code === "COUNTER_LIMIT_REACHED") {
         return sendError(res, err.statusCode || 409, err.message, null, err.code);
       }
       return sendError(res, 500, err.message || "Server error", null, "SERVER_ERROR");
@@ -216,8 +218,7 @@ router.post(
 router.put(
   "/:id/reject",
   protect,
-  requireAnyRole(["shipper", "admin"]),
-  requireActiveRole("shipper"),
+  requireRole("shipper"),
   [param("id").custom((v) => (isUuid(v) ? true : (() => { throw new Error("Invalid bid id"); })()))],
   validate,
   async (req, res) => {
@@ -230,8 +231,8 @@ router.put(
     );
     const bid = bidRows[0];
     if (!bid) return sendError(res, 404, "Not found");
-    if (String(bid.shipper_id) !== String(req.auth.userId) && !(req.auth.roles || []).includes("admin")) {
-      return sendError(res, 403, "Forbidden");
+    if (!canMutateBidAsShipper(bid, req.auth)) {
+      return sendForbidden(res, "Forbidden", FORBIDDEN_CODES.FORBIDDEN_OWNER);
     }
     assertBidTransition(bid.status, BID.REJECTED);
     await query(`UPDATE bids SET status = 'rejected', updated_at = now() WHERE id = $1`, [bidId]);
@@ -246,6 +247,13 @@ router.put(
         message: "Your bid was declined by the shipper"
       });
     }
+    void writeAudit({
+      actorUserId: req.auth.userId,
+      action: "bid.rejected",
+      targetEntity: "bid",
+      targetId: bidId,
+      metadata: { loadId: bid.load_id }
+    });
     return sendSuccess(res, 200, { ok: true, flowStatus: "REJECTED" }, "Rejected");
   }
 );
@@ -253,8 +261,7 @@ router.put(
 router.put(
   "/:id/suggest",
   protect,
-  requireAnyRole(["shipper", "admin"]),
-  requireActiveRole("shipper"),
+  requireRole("shipper"),
   [
     param("id").custom((v) => (isUuid(v) ? true : (() => { throw new Error("Invalid bid id"); })())),
     body("amount").toFloat().isFloat({ gt: 0 }).withMessage("amount must be greater than 0")
@@ -265,15 +272,34 @@ router.put(
       const bidId = req.params.id;
       const amount = Number(req.body.amount);
       const { rows: bidRows } = await query(
-        `SELECT b.id, b.load_id, b.status, b.carrier_id, b.counter_round_count, l.shipper_id
+        `SELECT b.id, b.load_id, b.status, b.carrier_id, b.counter_round_count, l.shipper_id,
+                l.status AS load_status, l.weight, l.vehicle_type,
+                l.deadline_hours, l.deadline_minutes, l.created_at
          FROM bids b JOIN loads l ON l.id = b.load_id
          WHERE b.id = $1`,
         [bidId]
       );
       const bid = bidRows[0];
       if (!bid) return sendError(res, 404, "Not found");
-      if (String(bid.shipper_id) !== String(req.auth.userId) && !(req.auth.roles || []).includes("admin")) {
-        return sendError(res, 403, "Forbidden");
+      if (!canMutateBidAsShipper(bid, req.auth)) {
+        return sendForbidden(res, "Forbidden", FORBIDDEN_CODES.FORBIDDEN_OWNER);
+      }
+      const load = {
+        status: bid.load_status,
+        weight: bid.weight,
+        vehicle_type: bid.vehicle_type,
+        deadline_hours: bid.deadline_hours,
+        deadline_minutes: bid.deadline_minutes,
+        created_at: bid.created_at
+      };
+      const counterCheck = await validateCounterBid({
+        actorRole: "shipper",
+        carrierUserId: bid.carrier_id,
+        bid,
+        load
+      });
+      if (!counterCheck.ok) {
+        return sendError(res, counterCheck.status, counterCheck.message, null, counterCheck.code);
       }
       assertBidTransition(bid.status, BID.COUNTER);
       assertCounterLimit(bid.counter_round_count);
@@ -292,6 +318,13 @@ router.put(
         type: "COUNTER_OFFERED",
         message: `Shipper counter offer: PKR ${amount}`
       });
+      void writeAudit({
+        actorUserId: req.auth.userId,
+        action: "bid.countered",
+        targetEntity: "bid",
+        targetId: bidId,
+        metadata: { by: "shipper", amount }
+      });
       return sendSuccess(res, 200, { ok: true, flowStatus: "COUNTER_OFFERED" }, "Suggested");
     } catch (err) {
       if (
@@ -301,7 +334,7 @@ router.put(
       ) {
         return sendError(res, err.statusCode || 409, err.message, null, err.code);
       }
-      return sendError(res, 500, err.message || "Server error");
+      return sendError(res, 500, err.message || "Server error", null, "SERVER_ERROR");
     }
   }
 );
@@ -309,8 +342,8 @@ router.put(
 router.put(
   "/:id/suggest-carrier",
   protect,
-  requireAnyRole(["carrier", "admin"]),
-  requireActiveRole("carrier"),
+  requireRole("carrier"),
+  requireCarrierTruckReady,
   [
     param("id").custom((v) => (isUuid(v) ? true : (() => { throw new Error("Invalid bid id"); })())),
     body("amount").toFloat().isFloat({ gt: 0 }).withMessage("amount must be greater than 0")
@@ -321,15 +354,34 @@ router.put(
       const bidId = req.params.id;
       const amount = Number(req.body.amount);
       const { rows: bidRows } = await query(
-        `SELECT b.id, b.carrier_id, b.status, b.suggested_amount, b.suggested_by, b.counter_round_count, l.shipper_id
+        `SELECT b.id, b.carrier_id, b.status, b.suggested_amount, b.suggested_by, b.counter_round_count,
+                l.shipper_id, l.status AS load_status, l.weight, l.vehicle_type,
+                l.deadline_hours, l.deadline_minutes, l.created_at
          FROM bids b JOIN loads l ON l.id = b.load_id
          WHERE b.id = $1`,
         [bidId]
       );
       const bid = bidRows[0];
       if (!bid) return sendError(res, 404, "Not found", null, "NOT_FOUND");
-      if (String(bid.carrier_id) !== String(req.auth.userId) && !(req.auth.roles || []).includes("admin")) {
-        return sendError(res, 403, "Forbidden", null, "FORBIDDEN");
+      if (!canMutateBidAsCarrier(bid, req.auth)) {
+        return sendForbidden(res, "Forbidden", FORBIDDEN_CODES.FORBIDDEN_OWNER);
+      }
+      const load = {
+        status: bid.load_status,
+        weight: bid.weight,
+        vehicle_type: bid.vehicle_type,
+        deadline_hours: bid.deadline_hours,
+        deadline_minutes: bid.deadline_minutes,
+        created_at: bid.created_at
+      };
+      const counterCheck = await validateCounterBid({
+        actorRole: "carrier",
+        carrierUserId: req.auth.userId,
+        bid,
+        load
+      });
+      if (!counterCheck.ok) {
+        return sendError(res, counterCheck.status, counterCheck.message, null, counterCheck.code);
       }
       const st = normalizeBidStatus(bid.status);
       if (st === BID.ACCEPTED) {
@@ -359,6 +411,13 @@ router.put(
         type: "COUNTER_OFFERED",
         message: `Carrier counter offer: PKR ${amount}`
       });
+      void writeAudit({
+        actorUserId: req.auth.userId,
+        action: "bid.countered",
+        targetEntity: "bid",
+        targetId: bidId,
+        metadata: { by: "carrier", amount }
+      });
       return sendSuccess(res, 200, { ok: true, flowStatus: "COUNTER_OFFERED" }, "Suggested");
     } catch (err) {
       if (
@@ -376,8 +435,8 @@ router.put(
 router.put(
   "/:id/accept-suggestion",
   protect,
-  requireAnyRole(["carrier", "admin"]),
-  requireActiveRole("carrier"),
+  requireRole("carrier"),
+  requireCarrierTruckReady,
   [param("id").custom((v) => (isUuid(v) ? true : (() => { throw new Error("Invalid bid id"); })()))],
   validate,
   async (req, res) => {
@@ -416,8 +475,7 @@ router.put(
 router.put(
   "/:id/reject-suggestion",
   protect,
-  requireAnyRole(["carrier", "admin"]),
-  requireActiveRole("carrier"),
+  requireRole("carrier"),
   [param("id").custom((v) => (isUuid(v) ? true : (() => { throw new Error("Invalid bid id"); })()))],
   validate,
   async (req, res) => {
@@ -437,8 +495,7 @@ router.put(
 router.put(
   "/:id/accept",
   protect,
-  requireAnyRole(["shipper", "admin"]),
-  requireActiveRole("shipper"),
+  requireRole("shipper"),
   [param("id").custom((v) => (isUuid(v) ? true : (() => { throw new Error("Invalid bid id"); })()))],
   validate,
   async (req, res) => {
@@ -451,11 +508,11 @@ router.put(
       const { rows: bidRows } = await client.query(
         `SELECT b.id, b.load_id, b.carrier_id, b.amount, b.status,
                 b.suggested_amount AS suggested_amount, b.suggested_by AS suggested_by,
-                l.shipper_id, l.status AS load_status
+                l.id AS load_id_locked, l.shipper_id, l.status AS load_status, l.accepted_bid_id
          FROM bids b
          JOIN loads l ON l.id = b.load_id
          WHERE b.id = $1
-         FOR UPDATE`,
+         FOR UPDATE OF l, b`,
         [bidId]
       );
       const bid = bidRows[0];
@@ -463,6 +520,40 @@ router.put(
         await client.query("ROLLBACK");
         return sendError(res, 404, "Not found");
       }
+
+      if (!canMutateBidAsShipper(bid, req.auth)) {
+        await client.query("ROLLBACK");
+        return sendForbidden(res, "Forbidden", FORBIDDEN_CODES.FORBIDDEN_OWNER);
+      }
+
+      try {
+        assertNotSelfCommercial({
+          shipperId: bid.shipper_id,
+          carrierId: bid.carrier_id,
+          action: "accept a bid on"
+        });
+      } catch (e) {
+        await client.query("ROLLBACK");
+        return sendError(res, e.statusCode || 403, e.message, null, e.code);
+      }
+
+      if (bid.accepted_bid_id && String(bid.accepted_bid_id) !== String(bidId)) {
+        await client.query("ROLLBACK");
+        return sendError(res, 409, "This load is already booked", null, "LOAD_ALREADY_BOOKED");
+      }
+
+      const { rows: otherAccepted } = await client.query(
+        `SELECT id FROM bids
+         WHERE load_id = $1 AND status = 'accepted' AND id <> $2
+         LIMIT 1
+         FOR UPDATE`,
+        [bid.load_id, bidId]
+      );
+      if (otherAccepted[0]) {
+        await client.query("ROLLBACK");
+        return sendError(res, 409, "Another carrier was already accepted", null, "LOAD_ALREADY_BOOKED");
+      }
+
       if (normalizeBidStatus(bid.status) === BID.ACCEPTED) {
         await client.query("ROLLBACK");
         return sendSuccess(res, 200, { id: bid.id, flowStatus: "ACCEPTED" }, "Already accepted");
@@ -484,25 +575,31 @@ router.put(
         await client.query("ROLLBACK");
         return sendError(res, 409, "Bid is not pending");
       }
-      if (String(bid.shipper_id) !== String(req.auth.userId) && !(req.auth.roles || []).includes("admin")) {
-        await client.query("ROLLBACK");
-        return sendError(res, 403, "Forbidden");
-      }
       if (bid.load_status !== "open") {
         await client.query("ROLLBACK");
-        return sendError(res, 409, "Load is not open");
+        return sendError(res, 409, "Load is not open", null, "LOAD_NOT_OPEN");
       }
-
-      await client.query(
-        `INSERT INTO shipments (load_id, status, location_unavailable)
-         VALUES ($1, 'posted', true)
-         ON CONFLICT (load_id) DO NOTHING`,
-        [bid.load_id]
-      );
 
       let effectiveAmount = Number(bid.amount);
       if (isCounterOffered(bid.status) && bid.suggested_by === "carrier" && bid.suggested_amount != null) {
         effectiveAmount = Number(bid.suggested_amount);
+      }
+
+      const { rows: loadBooked } = await client.query(
+        `UPDATE loads
+         SET assigned_carrier_id = $2,
+             accepted_bid_id = $3,
+             status = 'booked',
+             updated_at = now()
+         WHERE id = $1
+           AND status = 'open'
+           AND (accepted_bid_id IS NULL OR accepted_bid_id = $3)
+         RETURNING id`,
+        [bid.load_id, bid.carrier_id, bidId]
+      );
+      if (!loadBooked[0]) {
+        await client.query("ROLLBACK");
+        return sendError(res, 409, "Load was booked by another request", null, "LOAD_ALREADY_BOOKED");
       }
 
       await client.query(
@@ -532,24 +629,41 @@ router.put(
       const bookingId = bookingRows[0]?.id;
 
       await client.query(
-        `UPDATE loads
-         SET assigned_carrier_id = $2, accepted_bid_id = $3, status = 'booked', updated_at = now()
-         WHERE id = $1`,
-        [bid.load_id, bid.carrier_id, bidId]
-      );
-      await client.query(
-        `UPDATE shipments
-         SET booking_id = $2, status = 'booked', updated_at = now()
-         WHERE load_id = $1`,
+        `INSERT INTO shipments (load_id, booking_id, status, location_unavailable)
+         VALUES ($1, $2, 'booked', true)
+         ON CONFLICT (load_id)
+         DO UPDATE SET booking_id = EXCLUDED.booking_id, status = 'booked', updated_at = now()`,
         [bid.load_id, bookingId]
       );
+
       await client.query(
         `INSERT INTO shipment_events (shipment_id, status, note, location_label)
-         SELECT s.id, 'booked', NULL, 'System' FROM shipments s WHERE s.load_id = $1`,
+         SELECT s.id, 'booked', NULL, 'System'
+         FROM shipments s
+         WHERE s.load_id = $1
+           AND NOT EXISTS (
+             SELECT 1 FROM shipment_events e
+             WHERE e.shipment_id = s.id AND e.status = 'booked'
+           )`,
         [bid.load_id]
       );
 
       await client.query("COMMIT");
+
+      void writeAudit({
+        actorUserId: req.auth.userId,
+        action: "bid.accepted",
+        targetEntity: "bid",
+        targetId: bidId,
+        metadata: { loadId: bid.load_id, carrierId: bid.carrier_id, amount: effectiveAmount }
+      });
+      void writeAudit({
+        actorUserId: req.auth.userId,
+        action: "shipment.started",
+        targetEntity: "load",
+        targetId: bid.load_id,
+        metadata: { bidId, bookingId }
+      });
 
       await notifyUser({
         receiverId: bid.carrier_id,

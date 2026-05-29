@@ -1,3 +1,5 @@
+const { clientMessage, sanitizeErrorData } = require("./safeApiError");
+
 /**
  * Central Express error middleware — never leak stack traces in production.
  */
@@ -11,9 +13,9 @@ function globalErrorMiddleware(err, req, res, next) {
   if (err instanceof SyntaxError && err.status === 400 && "body" in err) {
     return res.status(400).json({
       success: false,
+      code: "INVALID_JSON",
       message: "Invalid JSON body",
       data: null,
-      code: "INVALID_JSON",
       error: "INVALID_JSON"
     });
   }
@@ -31,8 +33,7 @@ function globalErrorMiddleware(err, req, res, next) {
         ? "SERVER_ERROR"
         : "ERROR";
 
-  const message =
-    isProd && status >= 500 ? "Something went wrong" : err.message || "Something went wrong";
+  const message = clientMessage(status, err.message);
 
   if (status >= 500) {
     // eslint-disable-next-line no-console
@@ -41,9 +42,9 @@ function globalErrorMiddleware(err, req, res, next) {
 
   const payload = {
     success: false,
-    message,
-    data: err.data !== undefined ? err.data : null,
     code,
+    message,
+    data: sanitizeErrorData(err.data),
     error: code
   };
 
@@ -52,8 +53,13 @@ function globalErrorMiddleware(err, req, res, next) {
 
 function registerProcessSafetyHandlers() {
   process.on("unhandledRejection", (reason) => {
+    const msg = reason?.message || String(reason || "");
     // eslint-disable-next-line no-console
-    console.error("[process] unhandledRejection:", reason?.message || reason);
+    console.error("[process] unhandledRejection:", msg);
+    if (String(reason?.code || "") === "42703" || /does not exist/i.test(msg)) {
+      // eslint-disable-next-line no-console
+      console.error("[process] hint: run `npm run db:migrate` or `npm run db:ensure-notifications` (migration 023_notifications_realtime.sql)");
+    }
   });
 
   process.on("uncaughtException", (err) => {
