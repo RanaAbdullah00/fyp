@@ -275,6 +275,7 @@ export const AppProvider = ({ children }) => {
 
     const reconcileMs = Number(import.meta.env.VITE_CACHE_RECONCILE_MS || 300000);
     const reconcileId = window.setInterval(async () => {
+      if (document.hidden) return;
       pruneWorkspaceQueryCaches();
       try {
         const count = await fetchUnreadCount(user);
@@ -292,7 +293,7 @@ export const AppProvider = ({ children }) => {
 
     const pollMs = Number(import.meta.env.VITE_NOTIFICATION_POLL_MS || 28000);
     const pollId = window.setInterval(async () => {
-      if (socketConnectedRef.current) return;
+      if (document.hidden || socketConnectedRef.current) return;
       await refetchNotifications();
       try {
         const count = await fetchUnreadCount(user);
