@@ -65,6 +65,7 @@ export const AppProvider = ({ children }) => {
   const socketRef = useRef(null);
   const socketConnectedRef = useRef(false);
   const addNotificationRef = useRef(null);
+  const lastReconnectSyncRef = useRef(0);
 
   const registerChatMessageHandler = useCallback((fn) => {
     chatMessageHandlers.current.add(fn);
@@ -126,8 +127,7 @@ export const AppProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    const token = getAuthToken();
-    if (!token) {
+    if (!user?.id) {
       setNotifications([]);
       return undefined;
     }
@@ -182,7 +182,7 @@ export const AppProvider = ({ children }) => {
   const syncReconnectNotifications = useCallback(async () => {
     if (!user?.id) return;
     try {
-      const since = getLastNotificationSyncAt();
+      const since = getLastNotificationSyncAt(user.id);
       const out = await syncNotificationsSince(user, since ? { since } : {});
       mergeNotificationsFromServer(out.items);
       window.dispatchEvent(
@@ -196,8 +196,7 @@ export const AppProvider = ({ children }) => {
   }, [user, mergeNotificationsFromServer]);
 
   const refetchNotifications = useCallback(async () => {
-    const token = getAuthToken();
-    if (!token) return;
+    if (!user?.id) return;
     try {
       const res = await api.get('/notifications', {
         params: { limit: 30, ...workspaceQueryParams(user) },
@@ -332,6 +331,9 @@ export const AppProvider = ({ children }) => {
         socketConnectedRef.current = Boolean(connected);
       },
       onReconnect: async () => {
+        const now = Date.now();
+        if (now - lastReconnectSyncRef.current < 6000) return;
+        lastReconnectSyncRef.current = now;
         await refetchNotifications();
         await syncReconnectNotifications();
       },

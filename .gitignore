@@ -1,4 +1,6 @@
 node_modules/ 
-.env 
+.env
+tmp-login.json
+**/tmp-login.json 
 build/ 
 dist/ 
