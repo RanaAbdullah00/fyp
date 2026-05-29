@@ -3,9 +3,9 @@
 #
 # Do NOT set PORT in Render Environment — the platform injects it (HTTPS URL maps to that port only).
 #
-# After the first successful deploy, open a Shell on the web service and run:
-#   cd transpak-backend && npm run db:migrate:otp
-# (Applies SQL in db/migrations, including pending_registrations + OTP tables.)
+# After the first successful deploy, migrations run automatically on start (npm run db:migrate).
+# Manual fallback in Render Shell:
+#   cd transpak-backend && npm run db:ensure-notifications
 #
 # CORS_ORIGIN is set below for Cloudflare Pages + Render; override in the Dashboard if your frontend URL changes.
 #
@@ -23,7 +23,7 @@ services:
     plan: free
     rootDir: transpak-backend
     buildCommand: npm ci && npm run build
-    startCommand: npm start
+    startCommand: npm run db:migrate && node server.js
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
@@ -46,3 +46,4 @@ services:
       - key: TRANSPAK_DEMO_ADMIN_EMAIL
         value: mrrajpoot.327@gmail.com
       # Set in Render Dashboard (never commit): TRANSPAK_DEMO_ADMIN_PASSWORD=11223344
+      # Set in Render Dashboard (never commit): ORS_API_KEY — OpenRouteService routing proxy
