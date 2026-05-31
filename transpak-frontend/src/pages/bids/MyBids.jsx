@@ -5,20 +5,29 @@ import BidList from '../../components/loadboard/BidList.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { normalizeTrucksResponse } from '../../utils/fleetApi.js';
 import { useAuth } from '../../hooks/useAuth.js';
-import { normalizeBids } from '../../adapters/normalize.js';
+import { normalizeBids, normalizeLoads } from '../../adapters/normalize.js';
+import { ensureArray } from '../../utils/unwrapApi.js';
 import { notifyError, notifySuccess } from '../../components/ui/ToastProvider.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { formatUserError } from '../../utils/userErrors.js';
-import { filterActiveBids } from '../../utils/bidStatus.js';
+import { usePollingAllowed } from '../../hooks/useSocketPolling.js';
+import { emitRealtimeRefresh } from '../../utils/realtimeRefresh.js';
+
+import { isTruckMatchingEligible } from '../../utils/fleetApi.js';
+import { isActiveBidStatus } from '../../utils/bidStatus.js';
 
 const isTruckComplete = (t) =>
-  t && (t.engineNumber || t.truckNumber) && (t.truckCardFrontImage || t.truckFrontImage) && (t.truckCardBackImage || t.truckBackImage);
+  isTruckMatchingEligible(t) &&
+  (t.engineNumber || t.truckNumber) &&
+  (t.truckCardFrontImage || t.truckFrontImage) &&
+  (t.truckCardBackImage || t.truckBackImage);
 
 const MyBids = () => {
   const { t, isUrdu } = useLanguage();
   const { user } = useAuth();
   const profileComplete = user?.profileComplete === true;
   const { request, loading } = useApi();
+  const pollingAllowed = usePollingAllowed();
   const [bids, setBids] = useState([]);
   const [trucks, setTrucks] = useState([]);
   const [loadMetaByLoad, setLoadMetaByLoad] = useState({});
@@ -37,7 +46,7 @@ const MyBids = () => {
   const fetchBidsData = useCallback(async () => {
     try {
       const data = await request({ method: 'GET', url: '/bids/mine' });
-      setBids(normalizeBids(data));
+      setBids(normalizeBids(ensureArray(data)));
     } catch (err) {
       notifyError(t('pages.bids.loadBidsFailed'));
       setBids([]);
@@ -49,12 +58,23 @@ const MyBids = () => {
   }, [fetchBidsData]);
 
   useEffect(() => {
+    const onRefresh = (e) => {
+      const scope = e?.detail?.scope;
+      if (scope && scope !== 'all' && scope !== 'bids') return;
+      fetchBidsData();
+    };
+    window.addEventListener('tp:realtime-refresh', onRefresh);
+    return () => window.removeEventListener('tp:realtime-refresh', onRefresh);
+  }, [fetchBidsData]);
+
+  useEffect(() => {
+    if (!pollingAllowed) return undefined;
     const tick = () => {
       if (document.visibilityState === 'visible') fetchBidsData();
     };
     const interval = setInterval(tick, 25000);
     return () => clearInterval(interval);
-  }, [fetchBidsData]);
+  }, [fetchBidsData, pollingAllowed]);
 
   useEffect(() => {
     fetchTrucks();
@@ -74,7 +94,12 @@ const MyBids = () => {
           try {
             const load = await request({ url: `/loads/${lid}` });
             if (load?.shipperId) {
-              next[lid] = { shipperId: String(load.shipperId), code: load.code || '' };
+              const normalized = normalizeLoads([load])[0];
+              next[lid] = {
+                shipperId: String(load.shipperId),
+                code: load.code || '',
+                distanceKm: normalized?.distanceKm ?? normalized?.distance ?? null
+              };
             }
           } catch {
             /* e.g. not yet assigned — hide badge until load is visible */
@@ -94,6 +119,14 @@ const MyBids = () => {
   const counterpartyLabelByLoadId = Object.fromEntries(
     Object.entries(loadMetaByLoad).map(([k, v]) => [k, `${t('auth.shipper')} · ${v.code || k.slice(0, 8)}`])
   );
+  const distanceByLoadId = Object.fromEntries(
+    Object.entries(loadMetaByLoad).map(([k, v]) => [k, v.distanceKm ?? null])
+  );
+  const bidsWithDistance = bids.map((b) => {
+    const lid = b.loadId ? String(b.loadId) : null;
+    const distanceKm = lid ? distanceByLoadId[lid] : null;
+    return distanceKm != null && distanceKm > 0 ? { ...b, distanceKm } : b;
+  });
 
   const actionsDisabled = !profileComplete || !trucksComplete;
 
@@ -101,6 +134,7 @@ const MyBids = () => {
     try {
       await request({ method: 'PUT', url: `/bids/${bid.id}/accept-suggestion` });
       notifySuccess(t('pages.bids.suggestionAccepted'));
+      emitRealtimeRefresh('bids');
       fetchBidsData();
     } catch (err) {
       notifyError(formatUserError(err, t, { fallback: t('pages.bids.acceptSuggestionFailed') }));
@@ -111,6 +145,7 @@ const MyBids = () => {
     try {
       await request({ method: 'PUT', url: `/bids/${bid.id}/reject-suggestion` });
       notifySuccess(t('pages.bids.suggestionRejected'));
+      emitRealtimeRefresh('bids');
       fetchBidsData();
     } catch (err) {
       notifyError(formatUserError(err, t, { fallback: t('pages.bids.rejectSuggestionFailed') }));
@@ -121,6 +156,7 @@ const MyBids = () => {
     try {
       await request({ method: 'PUT', url: `/bids/${bid.id}/suggest-carrier`, data: { amount } });
       notifySuccess(t('pages.bids.suggestSent', { amount: Number(amount).toLocaleString() }));
+      emitRealtimeRefresh('bids');
       fetchBidsData();
     } catch (err) {
       notifyError(formatUserError(err, t, { fallback: t('pages.bids.suggestFailed') }));
@@ -136,7 +172,7 @@ const MyBids = () => {
         </div>
       ) : (
         <>
-          {actionsDisabled && (bids.some((b) => b.status === 'suggested') || bids.some((b) => b.status === 'pending')) && (
+          {actionsDisabled && bids.some((b) => isActiveBidStatus(b.status)) && (
             <div className="alert alert-warning mb-3">
               {t('pages.bids.completeProfilePrefix')}{' '}
               <Link to="/profile" className="alert-link">
@@ -150,7 +186,7 @@ const MyBids = () => {
             </div>
           )}
           <BidList
-            bids={filterActiveBids(bids)}
+            bids={bidsWithDistance}
             mode="carrier"
             onAcceptSuggestion={handleAcceptSuggestion}
             onRejectSuggestion={handleRejectSuggestion}

@@ -7,7 +7,8 @@ import UserRatingBadge from '../reviews/UserRatingBadge.jsx';
 import ProfileLink from '../profile/ProfileLink.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { translateBidStatus } from '../../utils/i18nLabels.js';
-import { isAwaitingShipper, isCounterOffered, normalizeBidStatus } from '../../utils/bidStatus.js';
+import { isAwaitingShipper, isCounterOffered, isActiveBidStatus, normalizeBidStatus, BID_STATUS } from '../../utils/bidStatus.js';
+import { formatDistanceKm } from '../../utils/formatDistance.js';
 
 function formatHHMMSS(totalSeconds) {
   const s = Math.max(0, Math.floor(totalSeconds));
@@ -82,25 +83,34 @@ const BidCard = ({
 
   const [confirmState, setConfirmState] = useState(null); // { kind: 'accept'|'reject', handler: fn }
 
-  const showActions = (bid.status === 'pending' || bid.status === 'suggested') && !isExpired;
+  const showActions = isActiveBidStatus(bid.status) && !isExpired;
 
   const canAccept = isShipper
-    ? showActions && (bid.status === 'pending' || suggestedByCarrier) && typeof onAccept === 'function'
+    ? showActions && (isAwaitingShipper(bid.status) || suggestedByCarrier) && typeof onAccept === 'function'
     : isCarrier
     ? showActions && suggestedByShipper && typeof onAcceptSuggestion === 'function'
     : false;
 
   const canReject = isShipper
-    ? showActions && isAwaitingShipper(bid.status) && typeof onReject === 'function'
+    ? showActions &&
+      (isAwaitingShipper(bid.status) || suggestedByCarrier) &&
+      typeof onReject === 'function'
     : isCarrier
     ? showActions && suggestedByShipper && typeof onRejectSuggestion === 'function'
     : false;
 
   const canSuggest = isShipper
-    ? showActions && typeof onSuggest === 'function'
+    ? showActions &&
+      (isAwaitingShipper(bid.status) || suggestedByCarrier) &&
+      typeof onSuggest === 'function'
     : isCarrier
-    ? showActions && typeof onSuggest === 'function'
+    ? showActions &&
+      (isAwaitingShipper(bid.status) || suggestedByShipper) &&
+      typeof onSuggest === 'function'
     : false;
+
+  const distRaw = bid?.distanceKm ?? bid?.distance ?? bid?.loadDistanceKm;
+  const routeDistance = formatDistanceKm(distRaw, t);
 
   const acceptHandler = canAccept
     ? () => (isShipper ? onAccept?.(bid) : onAcceptSuggestion?.(bid))
@@ -140,9 +150,23 @@ const BidCard = ({
           </div>
           <small className="text-muted d-block text-break">
             {bid.vehicleType} · {bid.transitTime} {t('bidCard.daysSuffix')}
+            {routeDistance.available ? ` · ${routeDistance.display}` : ''}
           </small>
+          {!routeDistance.available && distRaw != null ? (
+            <small className="text-muted d-block">{routeDistance.display}</small>
+          ) : null}
         </div>
-        <Badge variant={bid.status === 'accepted' ? 'success' : bid.status === 'suggested' ? 'info' : isExpired ? 'secondary' : 'warning'}>
+        <Badge
+          variant={
+            canonStatus === BID_STATUS.ACCEPTED
+              ? 'success'
+              : isCounterOffered(bid.status)
+                ? 'info'
+                : isExpired
+                  ? 'secondary'
+                  : 'warning'
+          }
+        >
           {statusBadgeLabel}
         </Badge>
       </div>

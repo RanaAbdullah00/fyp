@@ -10,6 +10,7 @@ import { useLanguage } from '../../hooks/useLanguage.js';
 import { notifySuccess, notifyError, notifyInfo } from '../../components/ui/ToastProvider.jsx';
 import { notifyProfileIncomplete } from '../../utils/notifySystem.js';
 import { formatUserError } from '../../utils/userErrors.js';
+import { emitRealtimeRefresh } from '../../utils/realtimeRefresh.js';
 
 // Carrier bid placement page. Expects "load" object from AvailableLoads route state.
 const PlaceBid = () => {
@@ -24,7 +25,7 @@ const PlaceBid = () => {
     const role = user?.activeRole ?? user?.roles?.[0];
     if (role === 'carrier' && !load) {
       notifyInfo(t('pages.loads.carrierUseFreightBoard'));
-      navigate('/loads/manage', { replace: true, state: { tab: 'freight' } });
+      navigate('/loads/manage?tab=freight', { replace: true });
       return;
     }
     if (user && user.profileComplete === false) {
@@ -66,30 +67,21 @@ const PlaceBid = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const bidPayload = {
-        loadId: load.id,
-        carrierId: user.id,
-        loadCode: load.code,
-        amount: Number(amount),
-        currency,
-        transitTime,
-        note,
-        createdAt: new Date().toISOString(),
-        expiresAt: new Date(
-          Date.now() +
-            (Number(load.deadlineMinutes) > 0
-              ? Number(load.deadlineMinutes) * 60 * 1000
-              : parseInt(load.deadlineHours || 2, 10) * 60 * 60 * 1000)
-        ).toISOString()
-      };
-
-      await request({
+      const bid = await request({
         url: '/bids',
         method: 'POST',
-        data: bidPayload
+        data: {
+          loadId: load.id,
+          amount: Number(amount)
+        },
+        skipGlobalErrorToast: true
       });
+      if (!bid?.id && !bid?.loadId) {
+        throw new Error(t('pages.placeBid.bidFailed'));
+      }
 
       notifySuccess(t('pages.placeBid.bidPlaced', { code: load.code }));
+      emitRealtimeRefresh('bids');
       navigate('/loads');
     } catch (error) {
       notifyError(formatUserError(error, t, { fallback: t('pages.placeBid.bidFailed') }));
