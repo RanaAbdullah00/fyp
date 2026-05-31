@@ -1,0 +1,102 @@
+name: Deploy sync chain
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "deploy/manifest.json"
+      - "deploy/.sync-state.json"
+      - "docs/**"
+      - "**/*.md"
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: deploy-sync-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  VITE_API_URL: https://transpak-backend-1.onrender.com
+  DEPLOY_STRICT: "1"
+
+jobs:
+  drift-gate:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Verify manifest content hashes match monorepo
+        run: node scripts/sync-deploy-repos.mjs --check-only
+
+  sync-and-verify:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: |
+            transpak-backend/package-lock.json
+            transpak-frontend/package-lock.json
+
+      - name: Install backend deps
+        working-directory: transpak-backend
+        run: npm ci
+
+      - name: Install frontend deps and production build
+        working-directory: transpak-frontend
+        run: npm ci && npm run build
+
+      - name: Sync deploy repos (atomic)
+        env:
+          DEPLOY_GITHUB_TOKEN: ${{ secrets.DEPLOY_GITHUB_TOKEN }}
+        run: node scripts/sync-deploy-repos.mjs --ci
+
+      - name: Trigger Render deploy hook
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        if: env.RENDER_DEPLOY_HOOK_URL != ''
+        run: node scripts/trigger-render-deploy.mjs
+        continue-on-error: true
+
+      - name: Wait for Render production
+        run: node scripts/wait-production-sync.mjs
+        env:
+          WAIT_PRODUCTION_ATTEMPTS: 45
+          WAIT_PRODUCTION_INTERVAL_MS: 20000
+
+      - name: Wait for Cloudflare frontend
+        run: node scripts/wait-frontend-sync.mjs
+        env:
+          WAIT_FRONTEND_ATTEMPTS: 30
+          WAIT_FRONTEND_INTERVAL_MS: 20000
+
+      - name: Verify deploy chain (strict)
+        env:
+          GITHUB_TOKEN: ${{ secrets.DEPLOY_GITHUB_TOKEN }}
+        run: node scripts/verify-deploy-chain.mjs --strict
+
+      - name: Verify backend health (strict)
+        working-directory: transpak-backend
+        run: node scripts/verify-production-alignment.mjs --strict
+
+      - name: Commit manifest to fyp
+        env:
+          GITHUB_TOKEN: ${{ secrets.DEPLOY_GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add deploy/manifest.json deploy/.sync-state.json 2>/dev/null || git add deploy/manifest.json
+          git diff --staged --quiet || git commit -m "chore(deploy): update manifest [deploy-sync]"
+          git push

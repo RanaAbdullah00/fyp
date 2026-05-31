@@ -1,26 +1,41 @@
 #!/usr/bin/env node
 /**
- * Poll production /api/health until Render commit matches local HEAD (or timeout).
+ * Poll production /api/health until Render commit matches expected deploy SHA (or timeout).
+ * Expected SHA: argv[1] → manifest.backend.repoSha → nested backend HEAD.
+ *
  * Usage: node scripts/wait-production-sync.mjs [expectedCommitShort]
  */
 import { execSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadManifest, normalizeCommit } from './lib/deploy-chain.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.join(__dirname, '..');
 const API =
   (process.env.VITE_API_URL || 'https://transpak-backend-1.onrender.com').replace(/\/api\/?.*$/i, '').replace(/\/$/, '');
 
+const manifest = loadManifest();
+
 const expected =
   process.argv[2] ||
-  execSync('git rev-parse --short=12 HEAD', { cwd: repoRoot, encoding: 'utf8' }).trim();
+  manifest?.backend?.repoSha ||
+  (() => {
+    try {
+      return execSync('git rev-parse --short=12 HEAD', {
+        cwd: path.join(repoRoot, 'transpak-backend'),
+        encoding: 'utf8'
+      }).trim();
+    } catch {
+      return execSync('git rev-parse --short=12 HEAD', { cwd: repoRoot, encoding: 'utf8' }).trim();
+    }
+  })();
 
 const maxAttempts = Number(process.env.WAIT_PRODUCTION_ATTEMPTS || 36);
 const intervalMs = Number(process.env.WAIT_PRODUCTION_INTERVAL_MS || 20000);
 
 function normalize(c) {
-  return String(c || '').trim().toLowerCase().slice(0, 12);
+  return normalizeCommit(c);
 }
 
 const want = normalize(expected);

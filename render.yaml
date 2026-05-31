@@ -25,9 +25,9 @@ services:
     branch: main
     autoDeploy: true
     # Clear build cache in Dashboard on manual deploy if behavior looks stale.
-    buildCommand: rm -rf node_modules .render-build-stamp.json && npm ci && npm run build
+    buildCommand: rm -rf node_modules dist .render-build-stamp.json && npm ci && npm run build
     startCommand: npm run db:migrate && node server.js
-    healthCheckPath: /health
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
@@ -38,7 +38,7 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: CORS_ORIGIN
-        value: "https://cb3857ee.transpak-frontend.pages.dev,https://626c52a8.transpak-frontend.pages.dev,https://20f26555.transpak-frontend.pages.dev,https://transpak-backend-1.onrender.com"
+        value: "https://cb3857ee.transpak-frontend.pages.dev,https://626c52a8.transpak-frontend.pages.dev,https://20f26555.transpak-frontend.pages.dev,https://1c7c2150.transpak-frontend.pages.dev,https://transpak-backend-1.onrender.com"
       # Local Vite → prod API (optional). Remove if you want production-only origins.
       - key: CORS_EXTRA_ORIGINS
         value: "http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173"

@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "updatedAt": "2026-05-29T17:56:42.785Z",
+  "chainStatus": "synced",
+  "fyp": {
+    "sha": "e1b755cb0ac746da222da4b67cf3364022e2ee75",
+    "short": "e1b755cb0ac7"
+  },
+  "backend": {
+    "repo": "RanaAbdullah00/transpak-backend",
+    "repoSha": "935f98b9f84940da31c7aac9ffd0d9540468fd01",
+    "short": "935f98b9f849",
+    "contentHash": "033bcce7a6396379"
+  },
+  "frontend": {
+    "repo": "RanaAbdullah00/transpak-frontend",
+    "repoSha": "ec6edbbe75a269a70bc15fb64f8c2c3ff807ed19",
+    "short": "ec6edbbe75a2",
+    "contentHash": "a6ac457310951093",
+    "assetFingerprint": "KfaNJnKm",
+    "buildMeta": "ec6edbbe75a2"
+  },
+  "live": {
+    "apiOrigin": "https://transpak-backend-1.onrender.com",
+    "frontendUrls": [
+      "https://cb3857ee.transpak-frontend.pages.dev",
+      "https://626c52a8.transpak-frontend.pages.dev",
+      "https://20f26555.transpak-frontend.pages.dev"
+    ],
+    "lastVerifiedAt": null
+  }
+}
