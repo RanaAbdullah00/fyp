@@ -2,9 +2,9 @@
 /**
  * Verify production deployment alignment (code version + schema 023 + DB target).
  * Commit comparison uses normalized 12-char SHA — full vs short never false-fails.
- * CODE_DRIFT is WARNING only (exit 0). Fails only on broken DB/schema/migrations.
+ * CODE_DRIFT fails when --strict or DEPLOY_STRICT=1 (deploy chain hardening).
  *
- * Usage: node scripts/verify-production-alignment.mjs [apiOrigin]
+ * Usage: node scripts/verify-production-alignment.mjs [apiOrigin] [--strict]
  */
 import { execSync } from "node:child_process";
 import path from "node:path";
@@ -18,8 +18,14 @@ require("dotenv").config({ path: path.join(backendRoot, ".env") });
 
 const { normalizeCommit, commitsMatch } = require(path.join(backendRoot, "utils/normalizeCommit.js"));
 
+const argv = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+const strict =
+  process.argv.includes("--strict") ||
+  String(process.env.DEPLOY_STRICT || "").toLowerCase() === "1" ||
+  String(process.env.DEPLOY_STRICT || "").toLowerCase() === "true";
+
 const API_ORIGIN = (
-  process.argv[2] ||
+  argv[0] ||
   process.env.QA_BASE_URL ||
   process.env.VITE_API_URL ||
   "https://transpak-backend-1.onrender.com"
@@ -37,13 +43,26 @@ const REQUIRED_MIGRATIONS = [
 ];
 
 function localCommitFull() {
+  const backendDir = path.join(__dirname, "..");
+  const monorepoRoot = path.join(__dirname, "..", "..");
+  /** Render deploys github.com/.../transpak-backend — use nested repo HEAD when present. */
+  for (const cwd of [backendDir, monorepoRoot]) {
+    try {
+      return execSync("git rev-parse HEAD", { cwd, encoding: "utf8" }).trim();
+    } catch {
+      /* try next */
+    }
+  }
+  return "unknown";
+}
+
+function localCommitSource() {
+  const backendDir = path.join(__dirname, "..");
   try {
-    return execSync("git rev-parse HEAD", {
-      cwd: path.join(__dirname, "..", ".."),
-      encoding: "utf8"
-    }).trim();
+    execSync("git rev-parse HEAD", { cwd: backendDir, stdio: "pipe" });
+    return "transpak-backend (Render deploy repo)";
   } catch {
-    return "unknown";
+    return "monorepo root";
   }
 }
 
@@ -149,6 +168,7 @@ async function main() {
   printSection("Phase 1 — Deployment verification");
   const localFull = localCommitFull();
   const localNormalized = normalizeCommit(localFull);
+  console.log("Local git source:", localCommitSource());
   console.log("Local git HEAD (full):", localFull);
   console.log("Local git HEAD (normalized):", localNormalized);
 
@@ -174,10 +194,21 @@ async function main() {
 
   if (!commitMatch && localNormalized !== "unknown" && remoteNormalized) {
     const driftDetail = `Commit mismatch (normalized): local=${localNormalized} remote=${remoteNormalized} (full: local=${localFull} remote=${remote.full})`;
-    warnings.push({ type: "CODE_DRIFT", status: "WARNING", detail: driftDetail });
+    const driftIssue = { type: "CODE_DRIFT", detail: driftDetail };
     issues.push({ type: "CODE_DRIFT", detail: "Commit mismatch (normalized comparison)" });
-    console.log("\n*** CODE DRIFT (warning only) ***");
+    if (strict) {
+      failures.push(driftIssue);
+      console.log("\n*** CODE DRIFT (strict — FAIL) ***");
+    } else {
+      warnings.push({ type: "CODE_DRIFT", status: "WARNING", detail: driftDetail });
+      console.log("\n*** CODE DRIFT (warning — use --strict to fail) ***");
+    }
     console.log(driftDetail);
+  }
+
+  if (strict && data.socketEngine && data.socketEngine !== "ready") {
+    failures.push({ type: "SOCKET_ENGINE", detail: `socketEngine=${data.socketEngine}` });
+    issues.push(failures[failures.length - 1]);
   }
 
   printSection("Phase 2 — Database consistency (local DATABASE_URL)");
@@ -250,10 +281,11 @@ async function main() {
         ? "PARTIAL"
         : dbAudit.migrationStatus;
 
-  const overallStatus = failures.length ? "FAIL" : warnings.length ? "WARNING" : "OK";
+  const overallStatus = failures.length ? "FAIL" : strict && !commitMatch ? "DRIFT_STATE" : warnings.length ? "WARNING" : "OK";
 
   const report = {
     status: overallStatus,
+    strict,
     deploymentStatus,
     commitMatch,
     localCommit: localFull,
