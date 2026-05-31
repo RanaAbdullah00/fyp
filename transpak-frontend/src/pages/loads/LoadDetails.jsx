@@ -21,6 +21,8 @@ import {
 import { normalizeLoads, normalizeBids } from '../../adapters/normalize.js';
 import { formatUserError } from '../../utils/userErrors.js';
 import { mergeWorkspaceParams } from '../../utils/workspaceApi.js';
+import { isActiveBidStatus, normalizeBidStatus, BID_STATUS } from '../../utils/bidStatus.js';
+import { emitRealtimeRefresh } from '../../utils/realtimeRefresh.js';
 
 const LoadDetails = () => {
   const { id } = useParams();
@@ -37,22 +39,24 @@ const LoadDetails = () => {
   const activeRole = user?.activeRole ?? user?.roles?.[0];
   const uid = user?.id || user?._id;
   const isOwner = useMemo(
-    () => activeRole === 'shipper' && load && String(load.shipperId) === String(uid),
-    [activeRole, load, uid]
+    () => load && uid && String(load.shipperId) === String(uid),
+    [load, uid]
   );
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const loadPromise = request({ url: `/loads/${id}` });
-      const bidsPromise =
-        activeRole === 'shipper'
-          ? request({ url: '/bids', params: { loadId: id, ...mergeWorkspaceParams(user) } })
-          : Promise.resolve([]);
-      const [raw, bidRows] = await Promise.all([loadPromise, bidsPromise]);
+      const raw = await request({ url: `/loads/${id}` });
       const normalizedLoads = normalizeLoads([raw]);
-      setLoad(normalizedLoads[0] || null);
-      setBids(activeRole === 'shipper' ? normalizeBids(bidRows) : []);
+      const loadRow = normalizedLoads[0] || null;
+      setLoad(loadRow);
+      const ownsLoad = loadRow && uid && String(loadRow.shipperId) === String(uid);
+      if (ownsLoad) {
+        const bidRows = await request({ url: '/bids', params: { loadId: id, ...mergeWorkspaceParams(user) } });
+        setBids(normalizeBids(bidRows));
+      } else {
+        setBids([]);
+      }
     } catch (error) {
       notifyError(formatUserError(error, t, { fallback: t('pages.loads.failedLoadDetail') }));
       setLoad(null);
@@ -60,23 +64,29 @@ const LoadDetails = () => {
     } finally {
       setLoading(false);
     }
-  }, [id, request, activeRole, t]);
+  }, [id, request, uid, user, t]);
 
   useEffect(() => {
     if (!id || !user) return;
     fetchData();
   }, [id, user?.id, fetchData]);
 
+  useEffect(() => {
+    const onRefresh = (e) => {
+      const scope = e?.detail?.scope;
+      if (scope && scope !== 'all' && scope !== 'bids' && scope !== 'loads') return;
+      fetchData();
+    };
+    window.addEventListener('tp:realtime-refresh', onRefresh);
+    return () => window.removeEventListener('tp:realtime-refresh', onRefresh);
+  }, [fetchData]);
+
   const handleAccept = async (bid) => {
     try {
       await request({ method: 'PUT', url: `/bids/${bid.id}/accept` });
-      setBids((prev) =>
-        prev.map((b) =>
-          b.id === bid.id ? { ...b, status: 'accepted', flowStatus: 'ACCEPTED' } : { ...b, status: 'rejected' }
-        )
-      );
       notifyBidAccepted(t('pages.bids.bidAccepted'));
-      fetchData();
+      emitRealtimeRefresh('bids');
+      await fetchData();
     } catch (error) {
       notifyError(formatUserError(error, t, { fallback: t('pages.bids.acceptFailed') }));
     }
@@ -85,8 +95,9 @@ const LoadDetails = () => {
   const handleReject = async (bid) => {
     try {
       await request({ method: 'PUT', url: `/bids/${bid.id}/reject` });
-      setBids((prev) => prev.map((b) => (b.id === bid.id ? { ...b, status: 'rejected' } : b)));
       notifyBidRejected(t('pages.bids.bidRejected'));
+      emitRealtimeRefresh('bids');
+      await fetchData();
     } catch (error) {
       notifyError(formatUserError(error, t, { fallback: t('pages.bids.rejectFailed') }));
     }
@@ -95,12 +106,9 @@ const LoadDetails = () => {
   const handleSuggest = async (bid, amount) => {
     try {
       await request({ method: 'PUT', url: `/bids/${bid.id}/suggest`, data: { amount } });
-      setBids((prev) =>
-        prev.map((b) =>
-          b.id === bid.id ? { ...b, status: 'suggested', suggestedAmount: amount, suggestedBy: 'shipper' } : b
-        )
-      );
       notifyCounterOffer(t('pages.bids.suggestSent', { amount: Number(amount).toLocaleString() }));
+      emitRealtimeRefresh('bids');
+      await fetchData();
     } catch (error) {
       notifyError(formatUserError(error, t, { fallback: t('pages.bids.suggestFailed') }));
     }
@@ -129,7 +137,7 @@ const LoadDetails = () => {
   if (!load) return <div className="container py-3 text-muted">{t('pages.loads.failedLoadDetail')}</div>;
 
   const isOpen = load.status === 'open';
-  const approvedBid = bids.find((b) => b.status === 'accepted');
+  const approvedBid = bids.find((b) => normalizeBidStatus(b.status) === BID_STATUS.ACCEPTED);
 
   return (
     <div className="container py-3">
