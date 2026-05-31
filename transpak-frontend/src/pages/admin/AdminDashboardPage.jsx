@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo } from 'react';
 import { useSafeInterval } from '../../hooks/useSafeInterval.js';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { SkeletonStatCards } from '../../components/ui/Skeleton.jsx';
 import AdminDemoVideoManager from '../../components/admin/AdminDemoVideoManager.jsx';
 import AdminWidgetShell from '../../components/admin/AdminWidgetShell.jsx';
@@ -8,8 +8,10 @@ import { useApi } from '../../hooks/useApi.js';
 import { useAuth } from '../../hooks/useAuth.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { useAdminDashboardWidgets } from '../../hooks/useAdminDashboardWidgets.js';
+import { AppContext } from '../../context/AppContext.jsx';
 import { canAccessAdminRoutes } from '../../utils/authSession.js';
 import { formatLoadDisplayId } from '../../utils/displayId.js';
+import { describeAdminWidgetError } from '../../utils/adminWidgetErrors.js';
 import { formatStatValue } from '../../utils/formatStat.js';
 
 const POLL_MS = 28000;
@@ -22,13 +24,26 @@ const CARD_WIDGET = {
   bids: 'bids',
   shipments: 'shipments',
   completed: 'shipments',
-  notifToday: 'users',
   disputes: 'users',
-  verification: 'users',
   shippers: 'users',
   carriers: 'users',
   profiles: 'users',
   trucks: 'users'
+};
+
+const CARD_LINK = {
+  users: '/admin/users',
+  activeUsers: '/admin/users?filter=active',
+  loads: '/admin/loads',
+  openLoads: '/admin/loads',
+  bids: '/admin/bids',
+  shipments: '/admin/shipments',
+  completed: '/admin/shipments',
+  disputes: '/admin/disputes',
+  shippers: '/admin/users?role=shipper',
+  carriers: '/admin/users?role=carrier',
+  profiles: '/admin/users?filter=incomplete',
+  trucks: '/admin/fleet'
 };
 
 function formatWhen(iso, locale) {
@@ -44,12 +59,14 @@ function formatWhen(iso, locale) {
 }
 
 const AdminDashboardPage = () => {
+  const navigate = useNavigate();
   const { user, roleSwitching } = useAuth();
   const { request } = useApi();
   const { t, isUrdu } = useLanguage();
   const locale = isUrdu ? 'ur-PK' : 'en-PK';
-  const { live, widgetState, initialLoading, loadAll, retryWidget, widgetFailed, widgetLoading, anyOk } =
+  const { live, widgetState, initialLoading, loadAll, retryWidget, widgetFailed, widgetLoading, anyOk, authRequired } =
     useAdminDashboardWidgets(request);
+  const { socketStatus } = useContext(AppContext) || {};
 
   const adminReady =
     canAccessAdminRoutes(user) && user?.activeRole === 'admin' && !roleSwitching;
@@ -60,12 +77,19 @@ const AdminDashboardPage = () => {
   }, [loadAll, adminReady]);
 
   useEffect(() => {
-    const onRefresh = () => loadAll();
+    let timer = null;
+    const onRefresh = () => {
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(() => loadAll(), 1200);
+    };
     window.addEventListener('tp:realtime-refresh', onRefresh);
-    return () => window.removeEventListener('tp:realtime-refresh', onRefresh);
+    return () => {
+      if (timer) window.clearTimeout(timer);
+      window.removeEventListener('tp:realtime-refresh', onRefresh);
+    };
   }, [loadAll]);
 
-  useSafeInterval(() => loadAll(), POLL_MS, { enabled: adminReady });
+  useSafeInterval(() => loadAll(), POLL_MS, { enabled: adminReady && socketStatus !== 'connected' });
 
   const stats = live?.stats;
   const meta = live?.meta;
@@ -94,19 +118,7 @@ const AdminDashboardPage = () => {
         value: stats?.completedShipments,
         hint: t('pages.admin.completedShipmentsHint')
       },
-      {
-        key: 'notifToday',
-        title: t('pages.admin.notificationsToday'),
-        value: stats?.notificationsToday,
-        hint: t('pages.admin.notificationsTodayHint')
-      },
       { key: 'disputes', title: t('nav.disputes'), value: stats?.openDisputes, hint: t('pages.admin.openDisputesHint') },
-      {
-        key: 'verification',
-        title: t('nav.verification'),
-        value: stats?.pendingVerification,
-        hint: t('pages.admin.pendingVerificationHint')
-      },
       { key: 'shippers', title: t('pages.admin.shipperAccounts'), value: stats?.shipperAccounts, hint: t('pages.admin.shipperAccountsHint') },
       { key: 'carriers', title: t('pages.admin.carrierAccounts'), value: stats?.carrierAccounts, hint: t('pages.admin.carrierAccountsHint') },
       {
@@ -119,18 +131,6 @@ const AdminDashboardPage = () => {
     ],
     [stats, t]
   );
-
-  const quickLinks = [
-    { to: '/admin/users', label: t('nav.adminUsers') },
-    { to: '/admin/bids', label: t('pages.admin.bidsTitle') },
-    { to: '/admin/verification', label: t('nav.verification') },
-    { to: '/admin/disputes', label: t('nav.disputes') },
-    { to: '/admin/loads', label: t('nav.adminModeration') },
-    { to: '/admin/shipments', label: t('nav.shipments') },
-    { to: '/admin/notifications', label: t('pages.admin.notificationsTitle') },
-    { to: '/admin/otp-logs', label: t('nav.adminReports') },
-    { to: '/admin/roles', label: t('nav.roleManagement') }
-  ];
 
   const activity = useMemo(() => {
     const items = [];
@@ -190,6 +190,11 @@ const AdminDashboardPage = () => {
 
   const showSkeleton = initialLoading && !anyOk;
 
+  const openCard = (key) => {
+    const to = CARD_LINK[key];
+    if (to) navigate(to);
+  };
+
   return (
     <div className="container py-3 tp-dashboard tp-dashboard--admin">
       <div className="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
@@ -212,6 +217,13 @@ const AdminDashboardPage = () => {
         </button>
       </div>
 
+      {authRequired ? (
+        <div className="alert alert-warning rounded-3 border-0 shadow-sm mb-3" role="alert">
+          <div className="fw-semibold mb-1">{t('pages.admin.widgetAuthError')}</div>
+          <p className="small mb-0 text-muted">{t('pages.admin.widgetAuthErrorHint')}</p>
+        </div>
+      ) : null}
+
       {meta?.dbReachable === false ? (
         <div className="alert alert-danger rounded-3 border-0 shadow-sm mb-3" role="alert">
           <div className="fw-semibold mb-1">{t('pages.admin.dbUnreachable')}</div>
@@ -232,9 +244,17 @@ const AdminDashboardPage = () => {
           const source = CARD_WIDGET[c.key] || 'users';
           const failed = widgetFailed(source);
           const loading = widgetLoading(source);
+          const link = CARD_LINK[c.key];
+          const CardTag = link ? 'button' : 'div';
           return (
             <div key={c.key} className="col-6 col-lg-4 col-xl-3">
-              <div className="card border-0 shadow-sm h-100 rounded-3 tp-admin-stat-card">
+              <CardTag
+                type={link ? 'button' : undefined}
+                className={`card border-0 shadow-sm h-100 rounded-3 tp-admin-stat-card w-100 text-start${
+                  link ? ' tp-admin-stat-card--clickable' : ''
+                }`}
+                onClick={link ? () => openCard(c.key) : undefined}
+              >
                 <div className="card-body py-3">
                   <div className="d-flex justify-content-between align-items-start gap-1">
                     <div className="text-muted small mb-1">{c.title}</div>
@@ -242,7 +262,10 @@ const AdminDashboardPage = () => {
                       <button
                         type="button"
                         className="btn btn-link btn-sm p-0 text-muted"
-                        onClick={() => retryWidget(source)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          retryWidget(source);
+                        }}
                         title={t('pages.admin.tryAgain')}
                       >
                         ↻
@@ -258,10 +281,12 @@ const AdminDashboardPage = () => {
                   </div>
                   <div className="small text-body-secondary mt-2">{c.hint}</div>
                   {failed ? (
-                    <p className="small text-warning mb-0 mt-1">{t('pages.admin.widgetUnavailable')}</p>
+                    <p className="small text-warning mb-0 mt-1">
+                      {describeAdminWidgetError(widgetState?.[source], t)}
+                    </p>
                   ) : null}
                 </div>
-              </div>
+              </CardTag>
             </div>
           );
         })}
@@ -272,32 +297,34 @@ const AdminDashboardPage = () => {
           <AdminWidgetShell
             title={t('pages.admin.observabilityTitle')}
             loading={widgetLoading('observability')}
-            error={widgetFailed('observability') ? widgetState.observability?.error : null}
+            error={widgetFailed('observability') ? describeAdminWidgetError(widgetState?.observability, t) : null}
             onRetry={() => retryWidget('observability')}
           >
             {live?.observability ? (
               <div className="row g-2 small">
-              <div className="col-6 col-md-3">
-                <span className="text-muted d-block">{t('pages.admin.uptime')}</span>
-                <span className="fw-semibold">
-                  {Math.floor((live.observability.uptimeSeconds || 0) / 3600)}h{' '}
-                  {Math.floor(((live.observability.uptimeSeconds || 0) % 3600) / 60)}m
-                </span>
-              </div>
-              <div className="col-6 col-md-3">
-                <span className="text-muted d-block">{t('pages.admin.websocketConnections')}</span>
-                <span className="fw-semibold">{live.observability.websocketConnections ?? 0}</span>
-              </div>
-              <div className="col-6 col-md-3">
-                <span className="text-muted d-block">{t('pages.admin.openLoads')}</span>
-                <span className="fw-semibold">{formatStatValue(stats?.openLoads, { failed: widgetFailed('loads') })}</span>
-              </div>
-              <div className="col-6 col-md-3">
-                <span className="text-muted d-block">{t('pages.admin.completedShipments')}</span>
-                <span className="fw-semibold">
-                  {formatStatValue(stats?.completedShipments, { failed: widgetFailed('shipments') })}
-                </span>
-              </div>
+                <div className="col-6 col-md-3">
+                  <span className="text-muted d-block">{t('pages.admin.uptime')}</span>
+                  <span className="fw-semibold">
+                    {Math.floor((live.observability.uptimeSeconds || 0) / 3600)}h{' '}
+                    {Math.floor(((live.observability.uptimeSeconds || 0) % 3600) / 60)}m
+                  </span>
+                </div>
+                <div className="col-6 col-md-3">
+                  <span className="text-muted d-block">{t('pages.admin.websocketConnections')}</span>
+                  <span className="fw-semibold">{live.observability.websocketConnections ?? 0}</span>
+                </div>
+                <div className="col-6 col-md-3">
+                  <span className="text-muted d-block">{t('pages.admin.openLoads')}</span>
+                  <span className="fw-semibold">
+                    {formatStatValue(stats?.openLoads, { failed: widgetFailed('loads') })}
+                  </span>
+                </div>
+                <div className="col-6 col-md-3">
+                  <span className="text-muted d-block">{t('pages.admin.completedShipments')}</span>
+                  <span className="fw-semibold">
+                    {formatStatValue(stats?.completedShipments, { failed: widgetFailed('shipments') })}
+                  </span>
+                </div>
               </div>
             ) : null}
           </AdminWidgetShell>
@@ -311,14 +338,14 @@ const AdminDashboardPage = () => {
               <AdminWidgetShell
                 title={t('pages.admin.auditLogTitle')}
                 loading={widgetLoading('audit')}
-                error={widgetFailed('audit') ? widgetState.audit?.error : null}
+                error={widgetFailed('audit') ? describeAdminWidgetError(widgetState?.audit, t) : null}
                 onRetry={() => retryWidget('audit')}
               >
-                {!live?.auditEvents?.length ? (
+                {(live?.auditEvents ?? []).length === 0 ? (
                   <p className="small text-muted mb-0">{t('pages.admin.auditLogEmpty')}</p>
                 ) : (
                   <ul className="list-group list-group-flush tp-admin-activity-list mb-0">
-                    {live.auditEvents.map((ev) => (
+                    {(live?.auditEvents ?? []).map((ev) => (
                       <li key={ev.id} className="list-group-item px-0 border-0 border-bottom tp-border-theme">
                         <div className="d-flex justify-content-between gap-2">
                           <div className="min-w-0">
@@ -347,7 +374,18 @@ const AdminDashboardPage = () => {
               <AdminWidgetShell
                 title={t('pages.admin.recentActivity')}
                 loading={activityLoading && !activity.length}
-                error={activityWidgetsFailed ? t('pages.admin.widgetUnavailable') : null}
+                error={
+                  activityWidgetsFailed
+                    ? describeAdminWidgetError(
+                        widgetState?.loads?.error
+                          ? widgetState.loads
+                          : widgetState?.bids?.error
+                            ? widgetState.bids
+                            : widgetState?.shipments,
+                        t
+                      )
+                    : null
+                }
                 onRetry={retryActivity}
               >
                 {!activity.length ? (
@@ -378,21 +416,7 @@ const AdminDashboardPage = () => {
 
       <div className="row g-3 mb-4">
         <div className="col-lg-5">
-          <div className="d-grid gap-3">
-            <div className="card border-0 shadow-sm rounded-3">
-              <div className="card-body">
-                <h6 className="fw-semibold mb-3">{t('pages.admin.quickActions')}</h6>
-                <div className="d-grid gap-2">
-                  {quickLinks.map((link) => (
-                    <Link key={link.to} to={link.to} className="btn btn-outline-primary btn-sm rounded-lg text-start">
-                      {link.label}
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <AdminDemoVideoManager />
-          </div>
+          <AdminDemoVideoManager />
         </div>
       </div>
     </div>

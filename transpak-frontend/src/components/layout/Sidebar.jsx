@@ -7,12 +7,11 @@ import {
   FaListUl,
   FaGavel,
   FaCheckCircle,
-  FaShippingFast,
-  FaHistory,
   FaCog,
   FaSignOutAlt,
   FaQuestionCircle,
-  FaClipboardCheck
+  FaClipboardCheck,
+  FaWarehouse
 } from 'react-icons/fa';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import SafeAvatar from '../ui/SafeAvatar.jsx';
@@ -62,29 +61,21 @@ const Sidebar = () => {
               <FaCheckCircle />
               {t('pages.bids.approveCarrier')}
             </NavLink>
-            <NavLink to="/shipments/tracking" className={navLinkClass}>
-              <FaShippingFast />
-              {t('pages.shipments.tracking')}
-            </NavLink>
-            <NavLink to="/shipments/history" className={navLinkClass}>
-              <FaHistory />
-              {t('pages.shipments.history')}
-            </NavLink>
           </>
         )}
         {isCarrier && (
           <>
-            <NavLink to="/carrier/space/post" className={navLinkClass}>
+            <NavLink to="/loads/manage?tab=freight" className={navLinkClass}>
               <FaListUl />
+              {t('pages.dashboard.statOpenMarketplace')}
+            </NavLink>
+            <NavLink to="/loads/manage?tab=capacity" className={navLinkClass}>
+              <FaWarehouse />
               {t('loadsHub.navCapacityHub')}
             </NavLink>
             <NavLink to="/bids/mine" className={navLinkClass}>
               <FaGavel />
               {t('pages.bids.management')}
-            </NavLink>
-            <NavLink to="/fleet" className={navLinkClass}>
-              <FaTruck />
-              {t('common.fleet')}
             </NavLink>
             <NavLink to="/carrier/truck-details" className={navLinkClass}>
               <FaTruck />
@@ -93,14 +84,6 @@ const Sidebar = () => {
             <NavLink to="/carrier/verification" className={navLinkClass}>
               <FaClipboardCheck />
               {t('nav.carrierVerification')}
-            </NavLink>
-            <NavLink to="/shipments/tracking" className={navLinkClass}>
-              <FaShippingFast />
-              {t('pages.shipments.tracking')}
-            </NavLink>
-            <NavLink to="/shipments/history" className={navLinkClass}>
-              <FaHistory />
-              {t('pages.shipments.history')}
             </NavLink>
           </>
         )}

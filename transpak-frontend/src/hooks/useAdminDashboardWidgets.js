@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ADMIN_DASHBOARD_WIDGETS,
+  EMPTY_ADMIN_DASHBOARD,
   fetchAdminDashboardResilient,
   fetchAdminWidget,
-  mergeAdminDashboardWidgets
+  mergeAdminDashboardWidgets,
+  normalizeWidgetPayload
 } from '../utils/adminDashboardApi.js';
 
 const emptyWidgetState = () =>
@@ -33,32 +35,47 @@ export function useAdminDashboardWidgets(request) {
     }));
   }, []);
 
-  const loadAll = useCallback(async () => {
-    setInitialLoading(true);
-    setWidgetState((prev) => {
-      const next = { ...prev };
-      for (const w of ADMIN_DASHBOARD_WIDGETS) {
-        next[w] = { ...next[w], loading: true, error: null };
-      }
-      return next;
-    });
+  const loadInFlightRef = useRef(null);
 
-    try {
-      await fetchAdminDashboardResilient(request, {
-        onWidget: (widget, state) => {
-          if (!mountedRef.current) return;
-          patchWidget(widget, {
-            loading: Boolean(state.loading),
-            data: state.data ?? null,
-            error: state.error ?? null,
-            code: state.code ?? null,
-            attempts: state.attempts ?? 0
-          });
-        }
-      });
-    } finally {
-      if (mountedRef.current) setInitialLoading(false);
+  const loadAll = useCallback(async () => {
+    if (loadInFlightRef.current) {
+      return loadInFlightRef.current;
     }
+
+    const run = (async () => {
+      setInitialLoading(true);
+      setWidgetState((prev) => {
+        const next = { ...prev };
+        for (const w of ADMIN_DASHBOARD_WIDGETS) {
+          next[w] = { ...next[w], loading: true, error: null };
+        }
+        return next;
+      });
+
+      try {
+        await fetchAdminDashboardResilient(request, {
+          onWidget: (widget, state) => {
+            if (!mountedRef.current) return;
+            patchWidget(widget, {
+              loading: Boolean(state.loading),
+              data: state.data ?? null,
+              error: state.error ?? null,
+              code: state.code ?? null,
+              httpStatus: state.httpStatus ?? null,
+              endpoint: state.endpoint ?? null,
+              errorType: state.errorType ?? null,
+              attempts: state.attempts ?? 0
+            });
+          }
+        });
+      } finally {
+        if (mountedRef.current) setInitialLoading(false);
+        loadInFlightRef.current = null;
+      }
+    })();
+
+    loadInFlightRef.current = run;
+    return run;
   }, [request, patchWidget]);
 
   const retryWidget = useCallback(
@@ -67,13 +84,16 @@ export function useAdminDashboardWidgets(request) {
       try {
         const out = await fetchAdminWidget(request, widget);
         if (!mountedRef.current) return;
-        patchWidget(widget, { loading: false, data: out.data, error: null, attempts: out.attempts });
+        patchWidget(widget, { loading: false, data: normalizeWidgetPayload(out.data), error: null, attempts: out.attempts });
       } catch (err) {
         if (!mountedRef.current) return;
         patchWidget(widget, {
           loading: false,
           error: err?.message || 'Unavailable',
           code: err?.code || null,
+          httpStatus: err?.httpStatus ?? err?.response?.status ?? null,
+          endpoint: err?.endpoint ?? null,
+          errorType: err?.errorType ?? null,
           attempts: err?.attempt || 0
         });
       }
@@ -82,23 +102,35 @@ export function useAdminDashboardWidgets(request) {
   );
 
   const live = useMemo(() => mergeAdminDashboardWidgets(widgetState), [widgetState]);
+  const safeLive = live ?? EMPTY_ADMIN_DASHBOARD;
 
   const widgetFailed = useCallback(
-    (id) => Boolean(widgetState[id]?.error && !widgetState[id]?.data),
+    (id) => {
+      const w = widgetState?.[id];
+      if (w?.error && !w?.data) return true;
+      if (w?.data?.partialFailure) return true;
+      const stats = w?.data?.stats;
+      if (stats && typeof stats === 'object') {
+        const vals = Object.values(stats).filter((v) => v === null);
+        if (vals.length > 0) return true;
+      }
+      return false;
+    },
     [widgetState]
   );
 
-  const widgetLoading = useCallback((id) => Boolean(widgetState[id]?.loading), [widgetState]);
+  const widgetLoading = useCallback((id) => Boolean(widgetState?.[id]?.loading), [widgetState]);
 
   return {
     widgetState,
-    live,
+    live: safeLive,
     initialLoading,
     loadAll,
     retryWidget,
     widgetFailed,
     widgetLoading,
-    anyOk: live.anyOk,
-    allFailed: live.allFailed
+    anyOk: safeLive.anyOk,
+    allFailed: safeLive.allFailed,
+    authRequired: safeLive.authRequired
   };
 }

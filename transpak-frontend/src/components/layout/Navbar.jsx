@@ -7,7 +7,7 @@ import BrandLogo from './BrandLogo.jsx';
 import NotificationDropdown from '../notifications/NotificationDropdown.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { dashboardPathForRole } from '../../utils/dashboardPath.js';
-import { resolveNavRoleAction } from '../../utils/roleSwitch.js';
+import { resolveNavRoleAction, getUserRoles } from '../../utils/roleSwitch.js';
 import { resolveAdminShell } from '../../utils/rbac.js';
 import { notifyError } from '../ui/ToastProvider.jsx';
 import { formatUserError } from '../../utils/userErrors.js';
@@ -21,7 +21,7 @@ const Navbar = () => {
   const { user, setActiveRole, roleSwitching } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const roles = user?.roles?.length ? user.roles : [user?.activeRole].filter(Boolean);
+  const roles = getUserRoles(user);
   const activeRole = user?.activeRole ?? roles[0];
 
   const adminShell = resolveAdminShell(user, location.pathname);
@@ -63,7 +63,7 @@ const Navbar = () => {
   const roleActionBtn = showWorkspaceSwitch ? (
     <button
       type="button"
-      className="btn btn-outline-success btn-sm rounded-lg px-2 text-nowrap d-none d-md-inline-flex px-3"
+      className="btn btn-outline-primary btn-sm rounded-lg px-2 text-nowrap d-none d-md-inline-flex px-3"
       onClick={handleNavRoleAction}
       title={navRoleActionLabel}
       disabled={roleSwitching}
@@ -75,7 +75,7 @@ const Navbar = () => {
   const roleActionBtnMobile = showWorkspaceSwitch ? (
     <button
       type="button"
-      className="btn btn-outline-success btn-sm rounded-lg px-2 text-nowrap d-md-none"
+      className="btn btn-outline-primary btn-sm rounded-lg px-2 text-nowrap d-md-none"
       onClick={handleNavRoleAction}
       title={navRoleActionLabel}
       disabled={roleSwitching}
@@ -99,7 +99,7 @@ const Navbar = () => {
             <FaBars />
           </button>
           <Link to="/" className="navbar-brand fw-bold mb-0 d-flex align-items-center gap-2">
-            <BrandLogo variant="mark" title={t('common.appName')} />
+            <BrandLogo variant="auth" title={t('common.appName')} className="tp-navbar-brand" />
             {user && !adminShell ? (
               <ActiveRoleBadge alwaysShow className="tp-active-role-badge--compact" />
             ) : null}
@@ -120,7 +120,7 @@ const Navbar = () => {
       >
         <div className="container-fluid px-3">
           <Link to="/" className="navbar-brand d-flex align-items-center gap-2 fw-bold">
-            <BrandLogo variant="mark" title={t('common.appName')} />
+            <BrandLogo variant="auth" title={t('common.appName')} className="tp-navbar-brand" />
             {user && !adminShell ? (
               <ActiveRoleBadge alwaysShow className="tp-active-role-badge--compact" />
             ) : null}

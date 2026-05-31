@@ -1,12 +1,11 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { NavLink } from 'react-router-dom';
-import { FaSignOutAlt, FaClipboardCheck } from 'react-icons/fa';
+import { FaSignOutAlt, FaClipboardCheck, FaWarehouse } from 'react-icons/fa';
 import { useAuth } from '../../hooks/useAuth.js';
 import LogoutConfirmModal from '../ui/LogoutConfirmModal.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { getPortalContainer } from '../../utils/portalRoot.js';
-import BrandLogo from './BrandLogo.jsx';
 
 const linkClass = ({ isActive }) =>
   `list-group-item list-group-item-action border-0 rounded-lg mb-1 ${isActive ? 'active' : ''}`;
@@ -42,10 +41,7 @@ const MobileDrawer = ({ open, onClose }) => {
           onClick={(e) => e.stopPropagation()}
         >
           <div className="d-flex justify-content-between align-items-center mb-2 gap-2 flex-wrap">
-            <div className="d-flex align-items-center gap-2">
-              <BrandLogo variant="mark" title="TransPak" className="tp-drawer-brand" />
-              <div className="fw-bold mb-0">{t('nav.menu')}</div>
-            </div>
+            <div className="fw-bold mb-0">{t('nav.menu')}</div>
             <button type="button" className="btn btn-sm btn-outline-secondary rounded-lg" onClick={onClose}>
               {t('nav.close')}
             </button>
@@ -69,14 +65,17 @@ const MobileDrawer = ({ open, onClose }) => {
             )}
             {activeRole === 'carrier' && (
               <>
-                <NavLink to="/carrier/space/post" className={linkClass} onClick={onClose}>
-                  {t('loadsHub.navCapacityHub')}
+                <NavLink to="/loads/manage?tab=freight" className={linkClass} onClick={onClose}>
+                  {t('pages.dashboard.statOpenMarketplace')}
+                </NavLink>
+                <NavLink to="/loads/manage?tab=capacity" className={linkClass} onClick={onClose}>
+                  <span className="d-flex align-items-center gap-2">
+                    <FaWarehouse size={14} aria-hidden />
+                    {t('loadsHub.navCapacityHub')}
+                  </span>
                 </NavLink>
                 <NavLink to="/bids/mine" className={linkClass} onClick={onClose}>
                   {t('nav.myBids')}
-                </NavLink>
-                <NavLink to="/fleet" className={linkClass} onClick={onClose}>
-                  {t('nav.fleet')}
                 </NavLink>
                 <NavLink to="/carrier/truck-details" className={linkClass} onClick={onClose}>
                   {t('nav.truckDetails')}
@@ -94,23 +93,20 @@ const MobileDrawer = ({ open, onClose }) => {
                 <NavLink to="/admin/dashboard" className={linkClass} onClick={onClose}>
                   {t('nav.adminDashboard')}
                 </NavLink>
-                <NavLink to="/admin/users" className={linkClass} onClick={onClose}>
-                  {t('nav.adminUsers')}
+                <NavLink to="/admin/fleet" className={linkClass} onClick={onClose}>
+                  {t('nav.fleetApproval')}
                 </NavLink>
-                <NavLink to="/admin/verification" className={linkClass} onClick={onClose}>
-                  {t('nav.verification')}
+                <NavLink to="/admin/bids" className={linkClass} onClick={onClose}>
+                  {t('pages.admin.bidsTitle')}
                 </NavLink>
                 <NavLink to="/admin/disputes" className={linkClass} onClick={onClose}>
                   {t('nav.disputes')}
                 </NavLink>
+                <NavLink to="/admin/users" className={linkClass} onClick={onClose}>
+                  {t('pages.admin.usersTitle')}
+                </NavLink>
                 <NavLink to="/admin/loads" className={linkClass} onClick={onClose}>
                   {t('nav.adminModeration')}
-                </NavLink>
-                <NavLink to="/admin/shipments" className={linkClass} onClick={onClose}>
-                  {t('nav.shipments')}
-                </NavLink>
-                <NavLink to="/admin/otp-logs" className={linkClass} onClick={onClose}>
-                  {t('nav.adminReports')}
                 </NavLink>
                 <NavLink to="/admin/notifications" className={linkClass} onClick={onClose}>
                   {t('pages.admin.notificationsTitle')}
