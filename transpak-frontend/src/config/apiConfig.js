@@ -7,20 +7,12 @@ function trimUrl(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-/** Origin from import.meta.env.VITE_API_URL (empty string = dev proxy relative mode). */
+/** Origin from import.meta.env.VITE_API_URL only (empty in dev = Vite proxy). */
 export function resolveViteApiOrigin() {
   const raw = trimUrl(import.meta.env.VITE_API_URL);
   if (!raw) {
     if (import.meta.env.DEV) {
       return '';
-    }
-    const proxy = trimUrl(import.meta.env.VITE_PROXY_TARGET);
-    if (proxy) {
-      try {
-        return new URL(proxy).origin;
-      } catch {
-        return proxy.replace(/\/api\/?.*$/i, '').replace(/\/$/, '');
-      }
     }
     console.error('[api] VITE_API_URL is missing — production build must set it to your Render API URL.');
     return '';
@@ -55,7 +47,30 @@ export function getApiBase() {
 export function getApiRoot() {
   const origin = resolveViteApiOrigin();
   if (origin) return `${origin.replace(/\/$/, '')}/api`;
+  if (import.meta.env.PROD) {
+    console.error(
+      '[api] VITE_API_URL is missing in production build — requests will hit relative /api and fail. Rebuild with VITE_API_URL=https://your-render-backend.onrender.com'
+    );
+  }
   return '/api';
+}
+
+/** One-time runtime log so production misconfiguration is visible in DevTools. */
+export function logApiBootstrap() {
+  const viteUrl = trimUrl(import.meta.env.VITE_API_URL) || '(unset — dev proxy mode)';
+  const root = getApiRoot();
+  const origin = resolveViteApiOrigin() || '(relative /api via dev proxy)';
+  // eslint-disable-next-line no-console
+  console.log('API BASE URL:', viteUrl);
+  // eslint-disable-next-line no-console
+  console.log('[transpak] API origin:', origin, '| API root:', root);
+  if (import.meta.env.PROD && !trimUrl(import.meta.env.VITE_API_URL)) {
+    console.error('[transpak] FATAL: production build without VITE_API_URL');
+  }
+  if (import.meta.env.PROD && root === '/api') {
+    console.error('[transpak] FATAL: API root is relative — set VITE_API_URL and rebuild frontend');
+  }
+  return { viteUrl, root, origin };
 }
 
 /**
