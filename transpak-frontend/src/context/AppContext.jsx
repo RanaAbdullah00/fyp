@@ -5,10 +5,9 @@ import { isRenderableClientNotification, sanitizeNotificationRoleType } from '..
 import { notificationsForWorkspace } from '../utils/notificationScope.js';
 import { routeRealtimeNotification } from '../utils/notifySystem.js';
 import api from '../services/api.js';
-import { unwrapResponseData } from '../utils/unwrapApi.js';
+import { unwrapResponseData, ensureArray } from '../utils/unwrapApi.js';
 import { notifyApiError } from '../utils/notifySystem.js';
 import { useAuth } from '../hooks/useAuth.js';
-import { playNotificationSound } from '../utils/notificationSound.js';
 import { getAuthToken } from '../utils/authTokenStorage.js';
 import { workspaceQueryParams } from '../utils/workspaceApi.js';
 import { getWorkspace } from '../utils/workspace.js';
@@ -63,9 +62,15 @@ export const AppProvider = ({ children }) => {
   const lastTrackingSig = useRef({ sig: '', t: 0 });
   const lastTrackingTsByRef = useRef(new Map());
   const socketRef = useRef(null);
+  const socketClientRef = useRef(null);
   const socketConnectedRef = useRef(false);
+  const socketLostRef = useRef(false);
+  const [socketStatus, setSocketStatus] = useState('idle');
   const addNotificationRef = useRef(null);
+  const welcomeToastShownRef = useRef(false);
   const lastReconnectSyncRef = useRef(0);
+  const userRef = useRef(user);
+  userRef.current = user;
 
   const registerChatMessageHandler = useCallback((fn) => {
     chatMessageHandlers.current.add(fn);
@@ -110,9 +115,17 @@ export const AppProvider = ({ children }) => {
       });
       if (dup) return prev;
       const next = [{ id: nid ?? `local-${Date.now()}`, read: Boolean(normalized.read), ...normalized }, ...prev];
-      return user ? notificationsForWorkspace(next, user) : next;
+      const scoped = user ? notificationsForWorkspace(next, user) : next;
+      if (showToast) {
+        queueMicrotask(() => {
+          routeRealtimeNotification(normalized);
+          window.dispatchEvent(new CustomEvent('tp:notification-sound'));
+          const unread = scoped.filter((n) => !(n.read || n.isRead)).length;
+          window.dispatchEvent(new CustomEvent('tp:unread-sync', { detail: { count: unread } }));
+        });
+      }
+      return scoped;
     });
-    if (showToast) routeRealtimeNotification(normalized);
   }, [user?.id, user?.activeRole]);
 
   addNotificationRef.current = (n) => addNotification(n, { showToast: true });
@@ -129,6 +142,7 @@ export const AppProvider = ({ children }) => {
   useEffect(() => {
     if (!user?.id) {
       setNotifications([]);
+      welcomeToastShownRef.current = false;
       return undefined;
     }
 
@@ -144,9 +158,23 @@ export const AppProvider = ({ children }) => {
         });
         if (cancelled) return;
         const page = normalizeNotificationsPayload(unwrapResponseData(res));
-        setNotifications(page.items.map(mapNotificationRow));
+        const items = ensureArray(page.items).map(mapNotificationRow);
+        setNotifications(items);
         setNotificationsCursor(page.nextCursor);
         setNotificationsHasMore(page.hasMore);
+        const welcome = items.find(
+          (n) => String(n.type || n.title || '').toUpperCase() === 'LOGIN_SUCCESS' && !n.read
+        );
+        if (welcome && !welcomeToastShownRef.current) {
+          const age = Date.now() - new Date(welcome.createdAt || 0).getTime();
+          if (age >= 0 && age < 120000) {
+            welcomeToastShownRef.current = true;
+            queueMicrotask(() => {
+              routeRealtimeNotification(welcome);
+              window.dispatchEvent(new CustomEvent('tp:notification-sound'));
+            });
+          }
+        }
       } catch (err) {
         if (err?.response?.status !== 401) notifyApiError(err);
       }
@@ -155,11 +183,11 @@ export const AppProvider = ({ children }) => {
     return () => {
       cancelled = true;
     };
-  }, [user?.id, user?.activeRole, sessionVersion]);
+  }, [user?.id, user?.activeRole]);
 
   const mergeNotificationsFromServer = useCallback((rows) => {
-    if (!Array.isArray(rows)) return;
-    const mapped = rows.map(mapNotificationRow);
+    const list = ensureArray(rows);
+    const mapped = list.map(mapNotificationRow);
     setNotifications((prev) => {
       const byId = new Map();
       const keyOf = (n) => String(n.eventId || n.id || n._id || '');
@@ -184,7 +212,7 @@ export const AppProvider = ({ children }) => {
     try {
       const since = getLastNotificationSyncAt(user.id);
       const out = await syncNotificationsSince(user, since ? { since } : {});
-      mergeNotificationsFromServer(out.items);
+      mergeNotificationsFromServer(ensureArray(out.items));
       window.dispatchEvent(
         new CustomEvent('tp:unread-sync', { detail: { count: out.unreadCount } })
       );
@@ -203,7 +231,7 @@ export const AppProvider = ({ children }) => {
         skipGlobalErrorToast: true
       });
       const page = normalizeNotificationsPayload(unwrapResponseData(res));
-      mergeNotificationsFromServer(page.items);
+      mergeNotificationsFromServer(ensureArray(page.items));
       setNotificationsCursor(page.nextCursor);
       setNotificationsHasMore(page.hasMore);
       window.dispatchEvent(new CustomEvent('tp_notifications_read'));
@@ -227,7 +255,7 @@ export const AppProvider = ({ children }) => {
         skipGlobalErrorToast: true
       });
       const page = normalizeNotificationsPayload(unwrapResponseData(res));
-      mergeNotificationsFromServer(page.items);
+      mergeNotificationsFromServer(ensureArray(page.items));
       setNotificationsCursor(page.nextCursor);
       setNotificationsHasMore(page.hasMore);
     } catch (err) {
@@ -271,11 +299,11 @@ export const AppProvider = ({ children }) => {
   }, [refetchNotifications]);
 
   useEffect(() => {
-    if (!user?.id) return undefined;
+    if (!user?.id || socketStatus === 'connected') return undefined;
 
     const reconcileMs = Number(import.meta.env.VITE_CACHE_RECONCILE_MS || 300000);
     const reconcileId = window.setInterval(async () => {
-      if (document.hidden) return;
+      if (document.hidden || socketConnectedRef.current) return;
       pruneWorkspaceQueryCaches();
       try {
         const count = await fetchUnreadCount(user);
@@ -286,10 +314,10 @@ export const AppProvider = ({ children }) => {
     }, reconcileMs);
 
     return () => window.clearInterval(reconcileId);
-  }, [user?.id, user?.activeRole]);
+  }, [user?.id, user?.activeRole, socketStatus]);
 
   useEffect(() => {
-    if (!user?.id) return undefined;
+    if (!user?.id || socketStatus === 'connected') return undefined;
 
     const pollMs = Number(import.meta.env.VITE_NOTIFICATION_POLL_MS || 28000);
     const pollId = window.setInterval(async () => {
@@ -306,12 +334,23 @@ export const AppProvider = ({ children }) => {
     return () => window.clearInterval(pollId);
   }, [user?.id, user?.activeRole, refetchNotifications]);
 
+  const refetchNotificationsRef = useRef(refetchNotifications);
+  const syncReconnectRef = useRef(syncReconnectNotifications);
+  refetchNotificationsRef.current = refetchNotifications;
+  syncReconnectRef.current = syncReconnectNotifications;
+
   useEffect(() => {
+    if (!user?.id) {
+      setSocketStatus('idle');
+      return undefined;
+    }
+
     const token = getAuthToken();
     const workspaceScoped = (row) => {
-      if (!user) return true;
+      const u = userRef.current;
+      if (!u) return true;
       const rt = row?.roleType != null ? String(row.roleType).toLowerCase() : '';
-      const active = getWorkspace(user);
+      const active = getWorkspace(u);
       if (!rt) return true;
       if (active === 'admin') return rt === 'admin';
       return rt === active;
@@ -319,28 +358,38 @@ export const AppProvider = ({ children }) => {
 
     const ingestNotification = (n) => {
       if (!workspaceScoped(n)) return;
-      if (n?.eventId && !shouldProcessRealtimeEvent(n.eventId)) return;
       addNotificationRef.current?.(n);
-      window.dispatchEvent(new CustomEvent('tp:notification-sound'));
-      playNotificationSound();
     };
 
     const client = createSocketClient({
       token: token || undefined,
-      workspace: user ? getWorkspace(user) : null,
-      onConnectionChange: (connected) => {
+      workspace: userRef.current ? getWorkspace(userRef.current) : null,
+      onConnectionChange: (connected, meta) => {
         socketConnectedRef.current = Boolean(connected);
+        if (connected) {
+          socketLostRef.current = false;
+          setSocketStatus('connected');
+          return;
+        }
+        if (meta?.exhausted) {
+          socketLostRef.current = true;
+          setSocketStatus('lost');
+          return;
+        }
+        socketLostRef.current = false;
+        setSocketStatus('reconnecting');
       },
       onReconnect: async () => {
+        if (socketLostRef.current) return;
         const now = Date.now();
-        if (now - lastReconnectSyncRef.current < 6000) return;
+        if (now - lastReconnectSyncRef.current < 8000) return;
         lastReconnectSyncRef.current = now;
-        await refetchNotifications();
-        await syncReconnectNotifications();
+        await syncReconnectRef.current?.();
       },
       onDispatch: (d) => {
-        if (d?.scope?.workspace && user) {
-          const active = getWorkspace(user);
+        const u = userRef.current;
+        if (d?.scope?.workspace && u) {
+          const active = getWorkspace(u);
           if (String(d.scope.workspace).toLowerCase() !== active) return;
         }
         if (d?.eventId && !shouldProcessRealtimeEvent(d.eventId)) return;
@@ -397,11 +446,20 @@ export const AppProvider = ({ children }) => {
       }
     });
     socketRef.current = client.socket;
+    socketClientRef.current = client;
     return () => {
       client.disconnect();
       socketRef.current = null;
+      socketClientRef.current = null;
+      setSocketStatus('idle');
     };
-  }, [user?.id, user?.activeRole, sessionVersion, refetchNotifications, syncReconnectNotifications]);
+  }, [user?.id, sessionVersion]);
+
+  useEffect(() => {
+    const ws = user?.activeRole ? getWorkspace(user) : null;
+    if (!ws || !socketClientRef.current) return;
+    socketClientRef.current.rejoinWorkspace?.(ws);
+  }, [user?.activeRole, user?.id]);
 
   const getSocket = useCallback(() => socketRef.current, []);
 
@@ -417,7 +475,8 @@ export const AppProvider = ({ children }) => {
       registerTrackingHandler,
       refetchNotifications,
       loadMoreNotifications,
-      getSocket
+      getSocket,
+      socketStatus
     }),
     [
       notifications,
@@ -430,7 +489,8 @@ export const AppProvider = ({ children }) => {
       registerTrackingHandler,
       refetchNotifications,
       loadMoreNotifications,
-      getSocket
+      getSocket,
+      socketStatus
     ]
   );
 

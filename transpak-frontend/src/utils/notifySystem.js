@@ -117,11 +117,18 @@ export function routeRealtimeNotification(normalized) {
     notifySystem(SystemNotifyType.BID_ACCEPTED, msg);
     return;
   }
-  if (type.includes('BID_REJECTED') || type.includes('REJECTED')) {
+  if (type.includes('BID_REJECTED') || (type.includes('REJECTED') && type.includes('BID'))) {
     notifySystem(SystemNotifyType.BID_REJECTED, msg);
     return;
   }
-  if (type.includes('BID_RECEIVED') || type.includes('CONFIRMATION')) {
+  if (
+    type.includes('BID_CREATED') ||
+    type.includes('BID_RECEIVED') ||
+    type.includes('BID_COUNTER') ||
+    type.includes('BID_UPDATED') ||
+    type.includes('CONFIRMATION') ||
+    type.includes('COUNTER_OFFERED')
+  ) {
     notifySystem(SystemNotifyType.BID_RECEIVED, msg);
     return;
   }
@@ -131,6 +138,38 @@ export function routeRealtimeNotification(normalized) {
   }
   if (type.includes('LOAD_POSTED')) {
     notifySystem(SystemNotifyType.LOAD_POSTED, msg);
+    return;
+  }
+  if (type.includes('SPACE_REQUEST') || type.includes('SPACE_ACCEPTED')) {
+    notifySystem(SystemNotifyType.BID_RECEIVED, msg);
+    return;
+  }
+  if (type.includes('SPACE_REJECTED')) {
+    notifySystem(SystemNotifyType.BID_REJECTED, msg);
+    return;
+  }
+  if (type.includes('SPACE_IN_TRANSIT') || type.includes('SPACE_COMPLETED') || type.includes('SPACE_UPDATE')) {
+    notifySystem(SystemNotifyType.SHIPMENT_ASSIGNED, msg);
+    return;
+  }
+  if (type.includes('TRUCK_APPROVED')) {
+    notifySystem(SystemNotifyType.SUCCESS, msg);
+    return;
+  }
+  if (type.includes('TRUCK_REJECTED') || type.includes('TRUCK_SUSPENDED')) {
+    notifySystem(SystemNotifyType.WARNING, msg);
+    return;
+  }
+  if (type.includes('DELIVERED') || type.includes('COMPLETED')) {
+    notifySystem(SystemNotifyType.SHIPMENT_ASSIGNED, msg);
+    return;
+  }
+  if (type.includes('SPACE_LISTED') || type.includes('CAPACITY')) {
+    notifySystem(SystemNotifyType.LOAD_POSTED, msg);
+    return;
+  }
+  if (type.includes('LOGIN_SUCCESS')) {
+    notifySystem(SystemNotifyType.SUCCESS, msg);
     return;
   }
   if (type.includes('TRACKING') || type.includes('LOCATION')) {
@@ -169,6 +208,7 @@ export function mapAuthError(err, t, flow = 'login') {
   }
 
   if (code === 'INVALID_CREDENTIALS') return t('errors.invalidCredentials');
+  if (code === 'WRONG_ROLE') return t('errors.wrongRoleForAccount');
   if (code === 'ACCOUNT_BLOCKED') return t('errors.accountBlocked');
   if (code === 'EMAIL_NOT_VERIFIED') return t('errors.emailNotVerified');
   if (code === 'INVALID_ROLE' || code === 'ROLE_NOT_AVAILABLE') return t('errors.invalidRole');
