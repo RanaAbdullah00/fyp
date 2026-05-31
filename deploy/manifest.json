@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "updatedAt": "2026-05-31T04:10:00.000Z",
+  "updatedAt": "2026-05-31T04:12:00.000Z",
   "chainStatus": "synced",
   "fyp": {
-    "sha": "67e58254afa9ae9d09d141eb606ce77d058f651b",
-    "short": "67e58254afa9"
+    "sha": "cc78ec162bc3723e5c1278e96caba82d6d67f6eb",
+    "short": "cc78ec162bc3"
   },
   "backend": {
     "repo": "RanaAbdullah00/transpak-backend",
