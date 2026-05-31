@@ -1,23 +1,23 @@
 {
   "version": 1,
-  "updatedAt": "2026-05-31T04:09:36.561Z",
+  "updatedAt": "2026-05-31T04:18:10.824Z",
   "chainStatus": "synced",
   "fyp": {
-    "sha": "92e8bbe6a5dae2a3461825530ddb25ab94645a37",
-    "short": "92e8bbe6a5da"
+    "sha": "f113a5fea1a81e4d4dac803ef7300ded45dc7588",
+    "short": "f113a5fea1a8"
   },
   "backend": {
     "repo": "RanaAbdullah00/transpak-backend",
-    "repoSha": "89515f33e25e608c06a36207b981457b199e42a2",
-    "short": "89515f33e25e",
-    "contentHash": "ac08ad441a855959"
+    "repoSha": "3de975d5c555a9aa7b30e5ebbcf9c2d9015c181e",
+    "short": "3de975d5c555",
+    "contentHash": "be7a2d5ad28e7997"
   },
   "frontend": {
     "repo": "RanaAbdullah00/transpak-frontend",
     "repoSha": "6c54faddbc1c74f362f2e28b28da3adce2172ce3",
     "short": "6c54faddbc1c",
     "contentHash": "fd16423333676c40",
-    "assetFingerprint": "BlM3GADj",
+    "assetFingerprint": "BZ_Z3FQr",
     "buildMeta": "6c54faddbc1c"
   },
   "live": {
@@ -25,13 +25,6 @@
     "frontendUrls": [
       "https://transpak-frontend.pages.dev"
     ],
-    "lastVerifiedAt": "2026-05-31T04:15:56.644Z",
-    "renderCommit": "89515f33e25e608c06a36207b981457b199e42a2",
-    "frontendBundles": [
-      {
-        "url": "https://transpak-frontend.pages.dev",
-        "mainJs": "BlM3GADj"
-      }
-    ]
+    "lastVerifiedAt": null
   }
 }
