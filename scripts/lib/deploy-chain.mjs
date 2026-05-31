@@ -15,11 +15,8 @@ export const LOCK_PATH = path.join(MONOREPO_ROOT, 'deploy', '.sync-lock.json');
 export const STATE_PATH = path.join(MONOREPO_ROOT, 'deploy', '.sync-state.json');
 
 export const DEFAULT_API_ORIGIN = 'https://transpak-backend-1.onrender.com';
-export const DEFAULT_FRONTEND_URLS = [
-  'https://cb3857ee.transpak-frontend.pages.dev',
-  'https://626c52a8.transpak-frontend.pages.dev',
-  'https://20f26555.transpak-frontend.pages.dev'
-];
+/** Canonical production URL — preview *.pages.dev hashes are ephemeral and must not gate deploy-chain. */
+export const DEFAULT_FRONTEND_URLS = ['https://transpak-frontend.pages.dev'];
 
 export const DEPLOY_BACKEND_REPO =
   process.env.DEPLOY_BACKEND_REPO || 'RanaAbdullah00/transpak-backend';
