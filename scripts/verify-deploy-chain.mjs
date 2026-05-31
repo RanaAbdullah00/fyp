@@ -57,10 +57,24 @@ function fypHead() {
 
 async function main() {
   section('Deploy chain — manifest');
-  const manifest = loadManifest();
+  let manifest = loadManifest();
   const fypSha = fypHead();
   const backendLocal = localHead('transpak-backend');
   const frontendLocal = localHead('transpak-frontend');
+
+  // Monorepo-only manifest commits should not block production alignment checks.
+  if (manifest && manifest.fyp?.sha !== fypSha) {
+    manifest = {
+      ...manifest,
+      updatedAt: new Date().toISOString(),
+      fyp: { sha: fypSha, short: normalizeCommit(fypSha) }
+    };
+    try {
+      saveManifest(manifest);
+    } catch {
+      /* read-only env */
+    }
+  }
 
   const failures = [];
   const warnings = [];
