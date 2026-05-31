@@ -17,7 +17,12 @@ const { normalizeCommit, commitsMatch } = require(path.join(
   "transpak-backend/utils/normalizeCommit.js"
 ));
 
-const apiOrigin = (process.argv[2] || process.env.VITE_API_URL || "https://transpak-backend-1.onrender.com")
+import {
+  DEFAULT_API_ORIGIN,
+  PRODUCTION_FRONTEND_URL
+} from "./lib/deploy-chain.mjs";
+
+const apiOrigin = (process.argv[2] || process.env.VITE_API_URL || DEFAULT_API_ORIGIN)
   .replace(/\/api\/?.*$/i, "")
   .replace(/\/$/, "");
 
@@ -25,7 +30,7 @@ const frontendOrigin = (
   process.argv[3] ||
   process.env.VITE_FRONTEND_URL ||
   process.env.CLOUDFLARE_PAGES_URL ||
-  "https://cb3857ee.transpak-frontend.pages.dev"
+  PRODUCTION_FRONTEND_URL
 ).replace(/\/$/, "");
 
 function localSha(repoDir, full = false) {

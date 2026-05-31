@@ -11,11 +11,13 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(path.join(root, 'transpak-backend', 'package.json'));
 require('dotenv').config({ path: path.join(root, 'transpak-backend', '.env') });
 
-const apiOrigin = (process.argv[2] || process.env.VITE_API_URL || 'https://transpak-backend-1.onrender.com')
+import { DEFAULT_API_ORIGIN, PRODUCTION_FRONTEND_URL } from './lib/deploy-chain.mjs';
+
+const apiOrigin = (process.argv[2] || process.env.VITE_API_URL || DEFAULT_API_ORIGIN)
   .replace(/\/api\/?.*$/i, '')
   .replace(/\/$/, '');
 const frontendOrigin =
-  process.argv[3] || 'https://cb3857ee.transpak-frontend.pages.dev';
+  process.argv[3] || process.env.VITE_FRONTEND_URL || PRODUCTION_FRONTEND_URL;
 
 const results = [];
 

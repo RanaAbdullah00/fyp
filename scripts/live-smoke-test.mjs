@@ -10,10 +10,20 @@ import { createRequire } from 'node:module';
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(path.join(root, 'transpak-backend', 'package.json'));
 
-const apiOrigin = (process.argv[2] || 'https://transpak-backend-1.onrender.com')
+import {
+  DEFAULT_API_ORIGIN,
+  PRODUCTION_FRONTEND_URL
+} from './lib/deploy-chain.mjs';
+
+const apiOrigin = (process.argv[2] || process.env.VITE_API_URL || DEFAULT_API_ORIGIN)
   .replace(/\/api\/?.*$/i, '')
   .replace(/\/$/, '');
-const frontendOrigin = 'https://cb3857ee.transpak-frontend.pages.dev';
+const frontendOrigin = (
+  process.argv[3] ||
+  process.env.VITE_FRONTEND_URL ||
+  process.env.CLOUDFLARE_PAGES_URL ||
+  PRODUCTION_FRONTEND_URL
+).replace(/\/$/, '');
 
 const ADMIN_EMAIL = 'mrrajpoot.327@gmail.com';
 const ADMIN_PASSWORD = '11223344';

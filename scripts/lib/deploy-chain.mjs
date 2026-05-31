@@ -16,7 +16,8 @@ export const STATE_PATH = path.join(MONOREPO_ROOT, 'deploy', '.sync-state.json')
 
 export const DEFAULT_API_ORIGIN = 'https://transpak-backend-1.onrender.com';
 /** Canonical production URL — preview *.pages.dev hashes are ephemeral and must not gate deploy-chain. */
-export const DEFAULT_FRONTEND_URLS = ['https://transpak-frontend.pages.dev'];
+export const PRODUCTION_FRONTEND_URL = 'https://transpak-frontend.pages.dev';
+export const DEFAULT_FRONTEND_URLS = [PRODUCTION_FRONTEND_URL];
 
 export const DEPLOY_BACKEND_REPO =
   process.env.DEPLOY_BACKEND_REPO || 'RanaAbdullah00/transpak-backend';
