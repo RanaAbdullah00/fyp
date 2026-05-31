@@ -245,21 +245,28 @@ router.put(
         await query(`UPDATE loads SET status = $2, updated_at = now() WHERE id = $1`, [load.id, nextLoadStatus]);
       }
 
-      if (canonical === "delivered" || canonical === "closed") {
+      const statusNotifyMap = {
+        pickedup: { type: "SHIPMENT_PICKED_UP", title: "SHIPMENT_PICKED_UP" },
+        intransit: { type: "SHIPMENT_IN_TRANSIT", title: "SHIPMENT_IN_TRANSIT" },
+        delivered: { type: "DELIVERY_COMPLETED", title: "DELIVERY_COMPLETED" },
+        closed: { type: "DELIVERY_COMPLETED", title: "DELIVERY_COMPLETED" }
+      };
+      const notifyMeta = statusNotifyMap[canonical];
+      if (notifyMeta) {
         const { rows: parties } = await query(
           `SELECT shipper_id, assigned_carrier_id FROM loads WHERE id = $1`,
           [load.id]
         );
         const p = parties[0];
         const ref = load.code || String(load.id).slice(0, 8);
-        const msg = `Shipment ${ref} marked ${canonical}`;
+        const msg = `Shipment ${ref} — ${canonical}`;
         if (p?.shipper_id) {
           await notifyUser({
             receiverId: p.shipper_id,
             senderId: req.auth.userId,
-            roleType: "carrier",
-            title: "DELIVERY_COMPLETED",
-            type: "DELIVERY_COMPLETED",
+            roleType: "shipper",
+            title: notifyMeta.title,
+            type: notifyMeta.type,
             message: msg
           });
         }
@@ -267,9 +274,9 @@ router.put(
           await notifyUser({
             receiverId: p.assigned_carrier_id,
             senderId: req.auth.userId,
-            roleType: "shipper",
-            title: "DELIVERY_COMPLETED",
-            type: "DELIVERY_COMPLETED",
+            roleType: "carrier",
+            title: notifyMeta.title,
+            type: notifyMeta.type,
             message: msg
           });
         }
