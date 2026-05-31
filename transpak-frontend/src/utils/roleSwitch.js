@@ -1,4 +1,4 @@
-/** Shared helpers for dual-role (shipper ↔ carrier) account switching. */
+/** Role switching — add second commercial role or switch between shipper/carrier. */
 
 import { getUserRolesFromSession } from './authSession.js';
 
@@ -6,21 +6,19 @@ export function getUserRoles(user) {
   return getUserRolesFromSession(user);
 }
 
-/** Next commercial role when user has both shipper and carrier. */
+const COMMERCIAL = ['shipper', 'carrier'];
+
+function commercialRoles(user) {
+  return getUserRoles(user).filter((r) => COMMERCIAL.includes(r));
+}
+
 export function resolveCommercialSwitchTarget(user) {
-  const roles = getUserRoles(user);
-  if (!roles.includes('shipper') || !roles.includes('carrier')) return null;
-
-  const active = user?.activeRole;
-  let current =
-    active === 'shipper' || active === 'carrier'
-      ? active
-      : roles.includes('shipper')
-        ? 'shipper'
-        : 'carrier';
-
-  const target = current === 'shipper' ? 'carrier' : 'shipper';
-  return roles.includes(target) ? target : null;
+  const roles = commercialRoles(user);
+  if (roles.length < 2) return null;
+  const active = String(user?.activeRole || roles[0] || '')
+    .trim()
+    .toLowerCase();
+  return roles.find((r) => r !== active) || null;
 }
 
 export function emitRoleSwitchComplete(role) {
@@ -29,29 +27,24 @@ export function emitRoleSwitchComplete(role) {
   window.dispatchEvent(new CustomEvent('tp:realtime-refresh', { detail: { scope: 'all' } }));
 }
 
-/** Commercial shipper ↔ carrier only (never crosses accounts). */
 export function resolveWorkspaceSwitchTarget(user) {
-  if (!user) return null;
-  const roles = getUserRoles(user);
-  if (roles.includes('admin') && user.activeRole === 'admin') return null;
   return resolveCommercialSwitchTarget(user);
 }
 
-/** Show "Add role" when account has one commercial role; "Switch" when both. */
+/** Navbar action: switch workspace or add missing commercial role (single commercial role only). */
 export function resolveNavRoleAction(user) {
   if (!user) return { mode: 'none' };
-  const roles = getUserRoles(user).filter((r) => r === 'shipper' || r === 'carrier');
-  if (roles.includes('admin') && !roles.includes('shipper') && !roles.includes('carrier')) {
+  const commercial = commercialRoles(user);
+  const allRoles = getUserRoles(user);
+  if (allRoles.includes('admin') && !commercial.length) {
     return { mode: 'none' };
   }
-  if (roles.includes('admin') && user.activeRole === 'admin') return { mode: 'none' };
-  const hasBoth = roles.includes('shipper') && roles.includes('carrier');
-  if (hasBoth) {
+  if (commercial.length >= 2) {
     const target = resolveCommercialSwitchTarget(user);
     return target ? { mode: 'switch', target } : { mode: 'none' };
   }
-  if (roles.length === 1) {
-    const missing = roles.includes('shipper') ? 'carrier' : 'shipper';
+  const missing = COMMERCIAL.find((r) => !commercial.includes(r));
+  if (missing && commercial.length < 2) {
     return { mode: 'add', target: missing };
   }
   return { mode: 'none' };

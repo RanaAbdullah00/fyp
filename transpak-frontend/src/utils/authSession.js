@@ -2,15 +2,18 @@
 
 import { clearAuthToken, getAuthToken, setAuthToken } from './authTokenStorage.js';
 import { persistWorkspaceContext, clearWorkspaceContext } from './workspaceContext.js';
+import { ensureRolesArray } from './unwrapApi.js';
 
 export function isDemoAdminEmail(email) {
   const norm = String(email || '')
     .trim()
     .toLowerCase();
+  if (!norm) return false;
   const fromEnv = String(import.meta.env.VITE_DEMO_ADMIN_EMAIL || '')
     .trim()
     .toLowerCase();
-  return Boolean(fromEnv && norm === fromEnv);
+  const adminEmail = fromEnv || 'mrrajpoot.327@gmail.com';
+  return norm === adminEmail;
 }
 
 export function resolveActiveRole(user, apiData = {}) {
@@ -67,12 +70,9 @@ export function mergeAuthUser(apiData) {
   const activeRole = resolveActiveRole(user, apiData);
   const id = user.id || (user._id != null ? String(user._id) : null);
 
-  let roles = Array.isArray(user.roles)
-    ? user.roles.map((r) => String(r).trim().toLowerCase()).filter(Boolean)
-    : [];
-
+  let roles = ensureRolesArray(user.roles);
   if (!roles.length && Array.isArray(apiData.roles) && apiData.roles.length) {
-    roles = apiData.roles.map((r) => String(r).trim().toLowerCase()).filter(Boolean);
+    roles = ensureRolesArray(apiData.roles);
   }
 
   if (!roles.length && activeRole) {
@@ -90,6 +90,9 @@ export function mergeAuthUser(apiData) {
     activeRole,
     profileImage: user.profileImage || user.profile_image || '',
     fullName: user.fullName || user.full_name || '',
+    cnicNumber: user.cnicNumber || user.cnic_number || user.cnic || '',
+    cnicImage: user.cnicImage || user.cnic_image || '',
+    cnicImageBack: user.cnicImageBack || user.cnic_image_back || '',
     profileComplete: Boolean(
       user.profileComplete ?? user.isProfileComplete ?? user.is_profile_complete
     ),

@@ -1,17 +1,30 @@
 const { query, getPool } = require("../db/pool");
+const { sanitizeRolesForStorage } = require("../utils/rolePolicy");
+const { ALLOWED_ROLES, normalizeRole, hasRole } = require("../utils/roleConstants");
 
-const ALLOWED_ROLES = ["shipper", "carrier", "admin"];
-
-function normalizeRole(value) {
-  const v = String(value || "").trim().toLowerCase();
-  return ALLOWED_ROLES.includes(v) ? v : null;
+function normalizeRoleExport(value) {
+  return normalizeRole(value);
 }
 
-function hasRole(user, role) {
-  const r = normalizeRole(role);
-  if (!r || !user) return false;
-  const list = Array.isArray(user.roles) ? user.roles : [];
-  return list.includes(r);
+function hasRoleExport(user, role) {
+  return hasRole(user, role);
+}
+
+function normalizeRolesArray(roles) {
+  const raw = (() => {
+    if (Array.isArray(roles)) return roles.filter(Boolean);
+    const s = String(roles || '').trim();
+    if (!s) return [];
+    if (s.startsWith('{') && s.endsWith('}')) {
+      return s
+        .slice(1, -1)
+        .split(',')
+        .map((r) => r.trim().replace(/^"|"$/g, ''))
+        .filter(Boolean);
+    }
+    return [s];
+  })();
+  return [...new Set(raw.map((r) => normalizeRole(r)).filter(Boolean))];
 }
 
 function toAuthUser(row) {
@@ -20,7 +33,7 @@ function toAuthUser(row) {
     id: row.id,
     _id: row.id,
     email: row.email,
-    roles: Array.isArray(row.roles) ? row.roles : [],
+    roles: normalizeRolesArray(row.roles),
     activeRole: row.active_role,
     blocked: Boolean(row.blocked),
     verified: Boolean(row.verified),
@@ -91,12 +104,9 @@ async function findByCnicNumber(cnicNumber) {
 
 async function createUser({ email, passwordHash, roles, activeRole, phone, cnicNumber, fullName, verified = false }) {
   const normalizedEmail = String(email || "").trim().toLowerCase();
-  const cleanRoles = Array.isArray(roles)
-    ? [...new Set(roles.map(normalizeRole).filter(Boolean))]
-    : [];
-  const active = normalizeRole(activeRole) || cleanRoles[0] || "shipper";
-  if (!cleanRoles.includes(active)) cleanRoles.unshift(active);
-  if (!cleanRoles.length) cleanRoles.push("shipper");
+  const sanitized = sanitizeRolesForStorage(roles, activeRole);
+  const cleanRoles = sanitized.roles;
+  const active = sanitized.activeRole;
   const fn = fullName != null ? String(fullName).trim() : null;
 
   const { rows } = await query(
@@ -121,20 +131,41 @@ async function createUser({ email, passwordHash, roles, activeRole, phone, cnicN
 async function addRole(userId, role) {
   const r = normalizeRole(role);
   if (!r || r === "admin") return null;
+  const existing = await findById(userId);
+  if (!existing) return null;
+  const { validateAddRole } = require("../utils/rolePolicy");
+  const check = validateAddRole(existing, r);
+  if (!check.ok) return null;
+  if (check.already) return existing;
+  const merged = [
+    ...new Set([...(existing.roles || []).map(normalizeRole).filter(Boolean), r])
+  ];
+  const sanitized = sanitizeRolesForStorage(merged, r);
+  return setRolesAndActive(userId, sanitized.roles, sanitized.activeRole);
+}
+
+async function setRolesAndActive(userId, roles, activeRole) {
+  const sanitized = sanitizeRolesForStorage(roles, activeRole);
   const { rows } = await query(
     `UPDATE users
-     SET roles = (
-       SELECT ARRAY(
-         SELECT DISTINCT unnest(COALESCE(roles, ARRAY[]::text[]) || ARRAY[$2::text])
-       )
-     ),
-     updated_at = now()
+     SET roles = $2::text[], active_role = $3, updated_at = now()
      WHERE id = $1
      RETURNING id, email, roles, active_role, blocked, verified,
                full_name, phone, cnic_number, cnic_image, cnic_image_back, profile_image, is_profile_complete`,
-    [userId, r]
+    [userId, sanitized.roles, sanitized.activeRole]
   );
   return toAuthUser(rows[0]);
+}
+
+/** Repair invalid role rows (admin+commercial contamination, unknown roles). */
+async function enforceSingleRolePolicy(userId) {
+  const user = await findById(userId);
+  if (!user) return null;
+  const sanitized = sanitizeRolesForStorage(user.roles, user.activeRole);
+  const sameRoles =
+    JSON.stringify([...(user.roles || [])].sort()) === JSON.stringify([...sanitized.roles].sort());
+  if (sameRoles && user.activeRole === sanitized.activeRole) return user;
+  return setRolesAndActive(userId, sanitized.roles, sanitized.activeRole);
 }
 
 async function setCnicIfEmpty(userId, cnicNumber) {
@@ -180,17 +211,12 @@ async function setFullNameIfEmpty(userId, fullName) {
 }
 
 async function setActiveRole(userId, nextRole) {
-  const role = normalizeRole(nextRole);
-  if (!role) return null;
-  const { rows } = await query(
-    `UPDATE users
-     SET active_role = $2, updated_at = now()
-     WHERE id = $1
-     RETURNING id, email, roles, active_role, blocked, verified,
-               full_name, phone, cnic_number, cnic_image, cnic_image_back, profile_image, is_profile_complete`,
-    [userId, role]
-  );
-  return toAuthUser(rows[0]);
+  const user = await findById(userId);
+  if (!user) return null;
+  const { validateRoleMutation } = require("../utils/rolePolicy");
+  const check = validateRoleMutation(user, nextRole);
+  if (!check.ok) return null;
+  return setRolesAndActive(userId, check.roles, check.activeRole);
 }
 
 const USER_RETURNING = `id, email, roles, active_role, blocked, verified,
@@ -209,7 +235,7 @@ async function switchActiveRole(userId, nextRole) {
   try {
     await client.query("BEGIN");
     const { rows: locked } = await client.query(
-      `SELECT roles FROM users WHERE id = $1 FOR UPDATE`,
+      `SELECT roles, active_role FROM users WHERE id = $1 FOR UPDATE`,
       [userId]
     );
     if (!locked[0]) {
@@ -218,17 +244,20 @@ async function switchActiveRole(userId, nextRole) {
     }
 
     const roles = Array.isArray(locked[0].roles) ? locked[0].roles.map(normalizeRole).filter(Boolean) : [];
-    if (!roles.includes(role)) {
+    const user = { id: userId, roles, activeRole: locked[0].active_role };
+    const { validateRoleMutation } = require("../utils/rolePolicy");
+    const check = validateRoleMutation(user, role);
+    if (!check.ok || !check.roles.includes(role)) {
       await client.query("ROLLBACK");
       return null;
     }
 
     const { rows } = await client.query(
       `UPDATE users
-       SET active_role = $2, updated_at = now()
+       SET roles = $2::text[], active_role = $3, updated_at = now()
        WHERE id = $1
        RETURNING ${USER_RETURNING}`,
-      [userId, role]
+      [userId, check.roles, check.activeRole]
     );
     await client.query("COMMIT");
     return toAuthUser(rows[0]);
@@ -242,17 +271,16 @@ async function switchActiveRole(userId, nextRole) {
 
 async function upsertDemoAdmin({ email, passwordHash, roles, activeRole, phone, cnicNumber, fullName }) {
   const normalizedEmail = String(email || "").trim().toLowerCase();
-  const cleanRoles = Array.isArray(roles)
-    ? [...new Set(roles.map(normalizeRole).filter(Boolean))]
-    : ["admin"];
-  const active = normalizeRole(activeRole) || "admin";
+  const sanitized = sanitizeRolesForStorage(roles || ["admin"], activeRole || "admin");
+  const cleanRoles = sanitized.roles.includes("admin") ? ["admin"] : sanitized.roles;
+  const active = sanitized.roles.includes("admin") ? "admin" : sanitized.activeRole;
   const { rows } = await query(
     `INSERT INTO users (email, password_hash, roles, active_role, phone, cnic_number, full_name, verified)
      VALUES ($1, $2, $3::text[], $4, $5, $6, $7, true)
      ON CONFLICT (email)
      DO UPDATE SET
        password_hash = COALESCE(NULLIF(users.password_hash, ''), EXCLUDED.password_hash),
-       roles = (SELECT ARRAY(SELECT DISTINCT unnest(users.roles || EXCLUDED.roles))),
+       roles = EXCLUDED.roles,
        active_role = EXCLUDED.active_role,
        phone = COALESCE(users.phone, EXCLUDED.phone),
        cnic_number = COALESCE(users.cnic_number, EXCLUDED.cnic_number),
@@ -299,8 +327,8 @@ async function updatePasswordHashByEmail(email, passwordHash) {
 
 module.exports = {
   ALLOWED_ROLES,
-  normalizeRole,
-  hasRole,
+  normalizeRole: normalizeRoleExport,
+  hasRole: hasRoleExport,
   findById,
   findByEmail,
   findRowByEmailWithPassword,
@@ -312,6 +340,8 @@ module.exports = {
   setPhoneIfEmpty,
   setFullNameIfEmpty,
   setActiveRole,
+  setRolesAndActive,
+  enforceSingleRolePolicy,
   switchActiveRole,
   upsertDemoAdmin,
   setVerifiedByEmail,

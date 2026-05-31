@@ -6,17 +6,12 @@ import RoleSelector from './RoleSelector.jsx';
 import { useAuth } from '../../hooks/useAuth.js';
 import { loginApi, fetchProfileApi, patchActiveRoleApi } from '../../services/authService.js';
 import PasswordField from '../ui/PasswordField.jsx';
-import { notifySuccess } from '../ui/ToastProvider.jsx';
 import { notifyAuthError, notifyUserError } from '../../utils/notifySystem.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { unwrapErrorCode } from '../../utils/unwrapApi.js';
 import { safeUnwrapAuthResponse, blockNativeFormSubmit, safeDashboardPath } from '../../utils/authApiSafe.js';
-import { applyDemoAdminSession } from '../../utils/authSession.js';
+import { applyDemoAdminSession, canAccessAdminRoutes, isDemoAdminEmail } from '../../utils/authSession.js';
 import { FaEnvelope } from 'react-icons/fa';
-
-const DEMO_ADMIN_EMAIL = String(import.meta.env.VITE_DEMO_ADMIN_EMAIL || '')
-  .trim()
-  .toLowerCase();
 
 const LoginForm = () => {
   const navigate = useNavigate();
@@ -44,11 +39,15 @@ const LoginForm = () => {
   };
 
   const emailNorm = form.email.trim().toLowerCase();
-  const isDemoAdmin = DEMO_ADMIN_EMAIL.length > 0 && emailNorm === DEMO_ADMIN_EMAIL;
+  const isAdminLogin = isDemoAdminEmail(emailNorm);
+
+  React.useEffect(() => {
+    if (isAdminLogin) setUiRolePref('');
+  }, [isAdminLogin]);
 
   const handleSubmit = async (e) => {
     blockNativeFormSubmit(e);
-    if (!uiRolePref && !isDemoAdmin) {
+    if (!isAdminLogin && !uiRolePref) {
       notifyUserError(t('errors.roleRequired'));
       return;
     }
@@ -57,7 +56,7 @@ const LoginForm = () => {
       const res = await loginApi({
         email: form.email,
         password: form.password,
-        ...(isDemoAdmin ? {} : { roleHint: uiRolePref })
+        roleHint: isAdminLogin ? undefined : uiRolePref
       });
       const payload = safeUnwrapAuthResponse(res);
       const { token, user, currentRole } = payload;
@@ -79,7 +78,7 @@ const LoginForm = () => {
       } catch {
         /* use login payload */
       }
-      if (isDemoAdmin && session?.user?.activeRole !== 'admin') {
+      if (canAccessAdminRoutes(session?.user) && session?.user?.activeRole !== 'admin') {
         try {
           const syncRes = await patchActiveRoleApi('admin');
           const synced = safeUnwrapAuthResponse(syncRes);
@@ -89,12 +88,11 @@ const LoginForm = () => {
           }
           if (synced?.user) session = { ...synced, token: synced.token || session.token };
         } catch {
-          /* keep login session */
+          /* backend forces admin regardless of roleHint */
         }
       }
       const sessionToStore = applyDemoAdminSession(session, emailNorm);
       if (sessionToStore?.user) login(sessionToStore);
-      notifySuccess(t('auth.welcomeBack'));
       const activeRole =
         sessionToStore?.user?.activeRole ??
         sessionToStore?.currentRole ??
@@ -119,7 +117,7 @@ const LoginForm = () => {
 
   return (
     <form action="#" method="post" noValidate onSubmit={handleSubmit} className="tp-auth-login-form mt-3">
-      {!isDemoAdmin ? <RoleSelector value={uiRolePref} onChange={setUiRolePref} /> : null}
+      {!isAdminLogin ? <RoleSelector value={uiRolePref} onChange={setUiRolePref} /> : null}
       <div className="mb-2">
         <label className="form-label small">{t('auth.email')}</label>
         <div className="input-group input-group-sm">
@@ -153,7 +151,7 @@ const LoginForm = () => {
         variant="primary"
         className="w-100 py-2 d-flex justify-content-center align-items-center rounded-lg"
         type="submit"
-        disabled={loading || (!isDemoAdmin && !uiRolePref)}
+        disabled={loading}
       >
         {loading ? <Loader light /> : t('auth.signInButton')}
       </Button>
