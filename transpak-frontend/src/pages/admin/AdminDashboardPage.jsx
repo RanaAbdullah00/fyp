@@ -77,8 +77,18 @@ const AdminDashboardPage = () => {
   }, [loadAll, adminReady]);
 
   useEffect(() => {
+    const onAudit = () => loadAll();
+    window.addEventListener('tp:admin-audit-sync', onAudit);
+    return () => window.removeEventListener('tp:admin-audit-sync', onAudit);
+  }, [loadAll]);
+
+  useEffect(() => {
     let timer = null;
-    const onRefresh = () => {
+    const onRefresh = (e) => {
+      const scope = e?.detail?.scope;
+      if (scope && scope !== 'all' && scope !== 'loads' && scope !== 'bids' && scope !== 'shipments' && scope !== 'space') {
+        return;
+      }
       if (timer) window.clearTimeout(timer);
       timer = window.setTimeout(() => loadAll(), 1200);
     };

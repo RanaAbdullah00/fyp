@@ -15,9 +15,8 @@ Most common causes (check Dashboard → **transpak-backend-1**):
 
 **Fix:** Manual Deploy → Deploy latest commit. Confirm **Environment** includes:
 
-- `ENABLE_TRANSPAK_DEMO_ADMIN=true`
-- `TRANSPAK_DEMO_ADMIN_EMAIL=mrrajpoot.327@gmail.com`
-- `TRANSPAK_DEMO_ADMIN_PASSWORD=11223344` (Dashboard only — do not commit)
+- `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN` (frontend origins)
+- `ORS_API_KEY` (optional — route proxy)
 
 Optional: Settings → Deploy Hook → copy URL → `RENDER_DEPLOY_HOOK_URL=... node scripts/trigger-render-deploy.mjs`
 

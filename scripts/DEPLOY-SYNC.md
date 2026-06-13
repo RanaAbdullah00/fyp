@@ -18,7 +18,7 @@ When `npm run deploy:qa` fails on **build sync** or **favicon v6**, live CDN/API
 4. Logs should show `[db] applying migration: 015_load_deadline_minutes.sql` and `[db] connected successfully`.
 5. Verify: `/api/health` returns `"build":"7e96c1e..."`.
 
-**Environment:** `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN` (include `https://cb3857ee.transpak-frontend.pages.dev`), `ENABLE_TRANSPAK_DEMO_ADMIN=true` for demo admin.
+**Environment:** `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN` (include `https://cb3857ee.transpak-frontend.pages.dev`).
 
 ## 2. Cloudflare Pages
 

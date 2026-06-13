@@ -6,8 +6,9 @@ const { query } = require("../db/pool");
 const userRepo = require("../repositories/userRepo");
 const loadController = require("../src/controllers/loadController");
 const { estimateDistanceKm, calculateSuggestedFare, calculateFareBreakdown } = require("../utils/loadFare");
-const { notifyUser, notifyLoadPostedToCarriers } = require("../utils/notifyEvent");
-const { apiLoadStatus } = require("../utils/bidStateMachine");
+const { notifyUser, notifyLoadPostedToCarriers, notifyAdmins } = require("../utils/notifyEvent");
+const { buildDedupeKey } = require("../utils/realtimeDispatch");
+const { apiLoadStatus, COMMERCIAL_LOAD_VISIBLE_SQL } = require("../utils/bidStateMachine");
 const { parseDeadlineMinutesFromBody } = require("../utils/loadDeadline");
 const { asyncHandler } = require("../utils/asyncHandler");
 const { persistLoadRouteSnapshot } = require("../utils/loadRouteSnapshot");
@@ -82,7 +83,7 @@ router.get("/mine", protect, requireRole("shipper"), async (req, res) => {
               l.created_at AS "createdAt", l.updated_at AS "updatedAt",
               (SELECT COUNT(*)::int FROM bids b WHERE b.load_id = l.id AND b.status IN ('pending_shipper_confirmation','counter_offered','pending','suggested')) AS "bidCount"
        FROM loads l
-       WHERE l.shipper_id = $1
+       WHERE l.shipper_id = $1 AND ${COMMERCIAL_LOAD_VISIBLE_SQL}
        ORDER BY l.created_at DESC
        LIMIT 200`,
       [req.auth.userId]
@@ -215,6 +216,13 @@ router.get(
   requireLoadRead("id"),
   async (req, res) => {
     const load = req.loadRow;
+    const { rows: bidRows } = await query(
+      `SELECT COUNT(*)::int AS c
+       FROM bids b
+       WHERE b.load_id = $1
+         AND b.status IN ('pending_shipper_confirmation','counter_offered','pending','suggested')`,
+      [load.id]
+    );
     return sendSuccess(res, 200, {
       id: load.id,
       code: load.code,
@@ -229,6 +237,7 @@ router.get(
       status: load.status,
       shipperId: load.shipper_id,
       assignedCarrierId: load.assigned_carrier_id,
+      bidCount: bidRows[0]?.c ?? 0,
       createdAt: load.created_at,
       updatedAt: load.updated_at
     });
@@ -324,37 +333,42 @@ async function createLoad(req, res) {
   );
   const load = { ...rows[0], flowStatus: apiLoadStatus(rows[0].status) };
   // ensure shipment row exists for tracking lifecycle
-  await query(
-    `INSERT INTO shipments (load_id, status, location_unavailable)
-     VALUES ($1, 'posted', true)
-     ON CONFLICT (load_id) DO NOTHING`,
-    [load.id]
-  );
-  try {
-    await persistLoadRouteSnapshot(load.id, pickupLoc, dropLoc);
-  } catch (routeErr) {
-    // eslint-disable-next-line no-console
-    console.error("[loads.create] route snapshot failed:", routeErr?.message || routeErr);
-  }
-  try {
-    await notifyUser({
-      receiverId: req.auth.userId,
-      senderId: req.auth.userId,
-      roleType: "shipper",
-      title: "LOAD_POSTED",
-      type: "LOAD_POSTED",
-      message: `Load ${code} posted: ${pickupLoc} → ${dropLoc}`
-    });
-    await notifyLoadPostedToCarriers({
-      shipperId: req.auth.userId,
-      loadCode: code,
-      origin: pickupLoc,
-      destination: dropLoc
-    });
-  } catch (notifyErr) {
-    // eslint-disable-next-line no-console
-    console.error("[loads.create] notification dispatch failed:", notifyErr?.message || notifyErr);
-  }
+  const { createShipmentUnified } = require("../utils/shipmentFactory");
+  await createShipmentUnified(null, { loadId: load.id, mode: "posted_placeholder" });
+  void (async () => {
+    try {
+      await persistLoadRouteSnapshot(load.id, pickupLoc, dropLoc);
+    } catch (routeErr) {
+      // eslint-disable-next-line no-console
+      console.error("[loads.create] route snapshot failed:", routeErr?.message || routeErr);
+    }
+    try {
+      await notifyUser({
+        receiverId: req.auth.userId,
+        senderId: req.auth.userId,
+        roleType: "shipper",
+        title: "LOAD_POSTED",
+        type: "LOAD_POSTED",
+        message: `Load ${code} posted: ${pickupLoc} → ${dropLoc}`
+      });
+      await notifyLoadPostedToCarriers({
+        shipperId: req.auth.userId,
+        loadCode: code,
+        origin: pickupLoc,
+        destination: dropLoc
+      });
+      await notifyAdmins({
+        senderId: req.auth.userId,
+        title: "LOAD_POSTED",
+        type: "LOAD_POSTED",
+        message: `[Platform] Load ${code} posted: ${pickupLoc} → ${dropLoc}`,
+        idempotencyKey: buildDedupeKey(["ADMIN", "LOAD_POSTED", code])
+      });
+    } catch (notifyErr) {
+      // eslint-disable-next-line no-console
+      console.error("[loads.create] notification dispatch failed:", notifyErr?.message || notifyErr);
+    }
+  })();
   void writeAudit({
     actorUserId: req.auth.userId,
     action: "load.created",

@@ -30,6 +30,16 @@ const AdminLoads = () => {
     refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    const onRefresh = (e) => {
+      const scope = e?.detail?.scope;
+      if (scope && scope !== 'all' && scope !== 'loads' && scope !== 'bids' && scope !== 'shipments') return;
+      refresh();
+    };
+    window.addEventListener('tp:realtime-refresh', onRefresh);
+    return () => window.removeEventListener('tp:realtime-refresh', onRefresh);
+  }, [refresh]);
+
   const del = async (id) => {
     try {
       await request({ method: 'DELETE', url: `/admin/loads/${id}` });
@@ -51,7 +61,7 @@ const AdminLoads = () => {
   };
 
   return (
-    <div className="container py-3">
+    <div className="container py-3 tp-dashboard tp-dashboard--admin">
       <h5 className="mb-3">{t('pages.admin.loadsTitle')}</h5>
       {loading ? (
         <SkeletonTable cols={6} rows={8} />
@@ -61,7 +71,7 @@ const AdminLoads = () => {
         <Card className="p-0 overflow-hidden">
           <div className="table-responsive">
             <table className="table table-hover table-sm mb-0 align-middle">
-              <thead className="table-light">
+              <thead>
                 <tr>
                   <th className="ps-3 py-3">{t('pages.admin.tableCode')}</th>
                   <th className="py-3">{t('pages.admin.tableCargo')}</th>

@@ -14,7 +14,8 @@ import {
 } from '../components/ui/ToastProvider.jsx';
 import { unwrapErrorDetail } from './unwrapApi.js';
 import { AUTH_NETWORK_ERROR, AUTH_UNEXPECTED_ERROR } from './authApiSafe.js';
-import { formatUserError } from './userErrors.js';
+import { sanitizeProductText } from './userErrors.js';
+import { mapError } from './mapError.js';
 
 export const SystemNotifyType = {
   SUCCESS: 'success',
@@ -111,8 +112,32 @@ export function notifySystem(type, message, opts = {}) {
 export function routeRealtimeNotification(normalized) {
   const msg = String(normalized?.message || '').trim();
   if (!msg) return;
-  const type = String(normalized?.type || normalized?.title || '').toUpperCase();
+  const rawType = String(normalized?.type || normalized?.title || '').toUpperCase();
+  const type =
+    {
+      CONTRACT_CREATED: 'CONTRACT_STARTED',
+      CONTRACT_ACCEPTED: 'CONTRACT_STARTED',
+      CONTRACT_REJECTED: 'BID_REJECTED',
+      CONTRACT_COMPLETED: 'DELIVERY_COMPLETED',
+      COUNTER_OFFER_SENT: 'COUNTER_OFFERED',
+      COUNTER_OFFER_ACCEPTED: 'BID_ACCEPTED',
+      REQUEST_SENT: 'SPACE_REQUEST_SENT',
+      REQUEST_ACCEPTED: 'SPACE_ACCEPTED',
+      REQUEST_REJECTED: 'SPACE_REJECTED'
+    }[rawType] || rawType;
 
+  if (type.includes('CONTRACT_CREATED') || type.includes('CONTRACT_ACCEPTED')) {
+    notifySystem(SystemNotifyType.SHIPMENT_ASSIGNED, msg);
+    return;
+  }
+  if (type.includes('CONTRACT_REJECTED')) {
+    notifySystem(SystemNotifyType.BID_REJECTED, msg);
+    return;
+  }
+  if (type.includes('CONTRACT_COMPLETED')) {
+    notifySystem(SystemNotifyType.SUCCESS, msg);
+    return;
+  }
   if (type.includes('BID_ACCEPTED') || (type.includes('ACCEPTED') && type.includes('BID'))) {
     notifySystem(SystemNotifyType.BID_ACCEPTED, msg);
     return;
@@ -140,8 +165,28 @@ export function routeRealtimeNotification(normalized) {
     notifySystem(SystemNotifyType.LOAD_POSTED, msg);
     return;
   }
-  if (type.includes('SPACE_REQUEST') || type.includes('SPACE_ACCEPTED')) {
+  if (type.includes('CONTRACT_STARTED')) {
+    notifySystem(SystemNotifyType.SHIPMENT_ASSIGNED, msg);
+    return;
+  }
+  if (type.includes('SPACE_REQUEST_SENT') || type.includes('REQUEST_SENT')) {
     notifySystem(SystemNotifyType.BID_RECEIVED, msg);
+    return;
+  }
+  if (type.includes('SPACE_REQUEST')) {
+    notifySystem(SystemNotifyType.BID_RECEIVED, msg);
+    return;
+  }
+  if (type.includes('SPACE_ACCEPTED') || type.includes('REQUEST_ACCEPTED')) {
+    notifySystem(SystemNotifyType.BID_ACCEPTED, msg);
+    return;
+  }
+  if (type.includes('COUNTER_OFFER_ACCEPTED') || (type.includes('COUNTER') && type.includes('ACCEPTED'))) {
+    notifySystem(SystemNotifyType.BID_ACCEPTED, msg);
+    return;
+  }
+  if (type.includes('STATUS_UPDATED')) {
+    notifySystem(SystemNotifyType.LOCATION_UPDATED, msg);
     return;
   }
   if (type.includes('SPACE_REJECTED')) {
@@ -156,16 +201,60 @@ export function routeRealtimeNotification(normalized) {
     notifySystem(SystemNotifyType.SUCCESS, msg);
     return;
   }
+  if (type.includes('TRUCK_PENDING') || type.includes('VERIFICATION_PENDING')) {
+    notifySystem(SystemNotifyType.WARNING, msg);
+    return;
+  }
+  if (type.includes('VERIFICATION_APPROVED')) {
+    notifySystem(SystemNotifyType.SUCCESS, msg);
+    return;
+  }
+  if (type.includes('VERIFICATION_REJECTED')) {
+    notifySystem(SystemNotifyType.WARNING, msg);
+    return;
+  }
   if (type.includes('TRUCK_REJECTED') || type.includes('TRUCK_SUSPENDED')) {
     notifySystem(SystemNotifyType.WARNING, msg);
     return;
   }
-  if (type.includes('DELIVERED') || type.includes('COMPLETED')) {
+  if (type.includes('CONTRACT_STARTED')) {
+    notifySystem(SystemNotifyType.SHIPMENT_ASSIGNED, msg);
+    return;
+  }
+  if (type.includes('REVIEW_RECEIVED')) {
+    notifySystem(SystemNotifyType.SUCCESS, msg);
+    return;
+  }
+  if (type.includes('SHIPMENT_PICKED_UP') || type.includes('PICKED_UP')) {
+    notifySystem(SystemNotifyType.SHIPMENT_ASSIGNED, msg);
+    return;
+  }
+  if (type.includes('SHIPMENT_IN_TRANSIT') || type.includes('IN_TRANSIT')) {
+    notifySystem(SystemNotifyType.LOCATION_UPDATED, msg);
+    return;
+  }
+  if (type.includes('DELIVERED') || type.includes('DELIVERY_COMPLETED')) {
+    notifySystem(SystemNotifyType.SUCCESS, msg);
+    return;
+  }
+  if (type.includes('RATING') || type.includes('REVIEW_SUBMITTED')) {
+    notifySystem(SystemNotifyType.SUCCESS, msg);
+    return;
+  }
+  if (type.includes('COMPLETED')) {
     notifySystem(SystemNotifyType.SHIPMENT_ASSIGNED, msg);
     return;
   }
   if (type.includes('SPACE_LISTED') || type.includes('CAPACITY')) {
     notifySystem(SystemNotifyType.LOAD_POSTED, msg);
+    return;
+  }
+  if (type.includes('SPACE_CLOSED')) {
+    notifySystem(SystemNotifyType.WARNING, msg);
+    return;
+  }
+  if (type.includes('USER_REGISTERED')) {
+    notifySystem(SystemNotifyType.SUCCESS, msg);
     return;
   }
   if (type.includes('LOGIN_SUCCESS')) {
@@ -207,8 +296,18 @@ export function mapAuthError(err, t, flow = 'login') {
     if (code === 'OTP_COOLDOWN') return msg || t('errors.generic');
   }
 
-  if (code === 'INVALID_CREDENTIALS') return t('errors.invalidCredentials');
-  if (code === 'WRONG_ROLE') return t('errors.wrongRoleForAccount');
+  if (code === 'INVALID_CREDENTIALS') {
+    return sanitizeProductText(msg) || t('errors.invalidPassword');
+  }
+  if (code === 'USER_NOT_FOUND') {
+    return sanitizeProductText(msg) || t('errors.invalidUsername');
+  }
+  if (code === 'WRONG_ROLE') {
+    return sanitizeProductText(msg) || t('errors.wrongRoleForAccount');
+  }
+  if (code === 'ROLE_SELECTION_REQUIRED') {
+    return sanitizeProductText(msg) || t('errors.roleSelectionRequired');
+  }
   if (code === 'ACCOUNT_BLOCKED') return t('errors.accountBlocked');
   if (code === 'EMAIL_NOT_VERIFIED') return t('errors.emailNotVerified');
   if (code === 'INVALID_ROLE' || code === 'ROLE_NOT_AVAILABLE') return t('errors.invalidRole');
@@ -231,13 +330,18 @@ export function notifyAuthError(err, t, flow = 'login') {
 
 /** Show a user-facing API error via the global toast router. */
 export function notifyApiError(err, fallback = '') {
-  const msg = formatUserError(err) || String(fallback || '').trim();
+  const mapped = mapError(err);
+  const msg = mapped.message || sanitizeProductText(fallback);
   if (msg) notifySystem(SystemNotifyType.ERROR, msg);
+  if (mapped.debug) {
+    // eslint-disable-next-line no-console
+    console.error('[api] notifyApiError', mapped);
+  }
 }
 
 /** Client-side validation / UX message (non-API). */
 export function notifyUserError(message, opts = {}) {
-  const text = String(message || '').trim();
+  const text = sanitizeProductText(message);
   if (text) notifySystem(SystemNotifyType.ERROR, text, opts);
 }
 

@@ -7,12 +7,13 @@ import { useApi } from '../../hooks/useApi.js';
 import { useAuth } from '../../hooks/useAuth.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { notifyError, notifySuccess } from '../../components/ui/ToastProvider.jsx';
-import { unwrapErrorMessage } from '../../utils/unwrapApi.js';
+import { formatUserError } from '../../utils/userErrors.js';
 import { uploadMediaFile } from '../../services/uploadMedia.js';
 import { fleetStatusBadgeClass, isTruckMatchingEligible, normalizeTrucksResponse } from '../../utils/fleetApi.js';
 import VehicleTypeDropdown from '../../components/loadboard/VehicleTypeDropdown.jsx';
 import SafeImage from '../../components/ui/SafeImage.jsx';
 import { syncTrucksAfterCreate } from '../../utils/truckListSync.js';
+import { emitRealtimeRefresh } from '../../utils/realtimeRefresh.js';
 
 const emptyForm = {
   id: null,
@@ -33,7 +34,8 @@ const TruckDetails = () => {
   const { request } = useApi();
   const [trucks, setTrucks] = useState([]);
   const [form, setForm] = useState(emptyForm);
-  const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadingFront, setUploadingFront] = useState(false);
+  const [uploadingBack, setUploadingBack] = useState(false);
   const [saving, setSaving] = useState(false);
   const [listLoading, setListLoading] = useState(true);
   const editing = useMemo(() => Boolean(form.id), [form.id]);
@@ -41,6 +43,7 @@ const TruckDetails = () => {
   const activeRole = user?.activeRole ?? user?.roles?.[0];
   const [profileReady, setProfileReady] = useState(user?.profileComplete === true);
   const isCarrier = activeRole === 'carrier';
+  const uploadingImage = uploadingFront || uploadingBack;
   const canSubmit = profileReady && isCarrier && !uploadingImage && !saving;
 
   useEffect(() => {
@@ -68,7 +71,7 @@ const TruckDetails = () => {
       const data = await request({ method: 'GET', url: '/trucks/mine' });
       setTrucks(normalizeTrucksResponse(data));
     } catch (err) {
-      notifyError(unwrapErrorMessage(err) || t('pages.truckDetailsPage.saveFailed'));
+      notifyError(formatUserError(err, t, { fallback: t('pages.truckDetailsPage.saveFailed') }));
       setTrucks([]);
     } finally {
       setListLoading(false);
@@ -79,21 +82,36 @@ const TruckDetails = () => {
     refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    const onRefresh = (e) => {
+      const scope = e?.detail?.scope;
+      if (scope && scope !== 'all' && scope !== 'space') return;
+      refresh();
+    };
+    window.addEventListener('tp:realtime-refresh', onRefresh);
+    return () => window.removeEventListener('tp:realtime-refresh', onRefresh);
+  }, [refresh]);
+
   const onChange = (e) => setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
 
   const uploadCardImage = async (file, field) => {
-    setUploadingImage(true);
+    const isFront = field === 'truckCardFrontImage';
+    if (isFront) setUploadingFront(true);
+    else setUploadingBack(true);
     try {
       const url = await uploadMediaFile(file, { retries: 1 });
       setForm((p) => ({ ...p, [field]: url }));
     } catch (err) {
-      notifyError(unwrapErrorMessage(err) || t('pages.truckDetailsPage.uploadFailed'));
+      notifyError(formatUserError(err, t, { fallback: t('pages.truckDetailsPage.uploadFailed') }));
     } finally {
-      setUploadingImage(false);
+      if (isFront) setUploadingFront(false);
+      else setUploadingBack(false);
     }
   };
 
   const startEdit = (row) => {
+    const statusKey = String(row.statusLabel || row.status || '').toUpperCase();
+    if (statusKey === 'APPROVED') return;
     setForm({
       id: row.id,
       engineNumber: row.engineNumber || row.truckNumber || '',
@@ -113,7 +131,7 @@ const TruckDetails = () => {
       notifySuccess(t('pages.truckDetailsPage.defaultSet'));
       await refresh();
     } catch (err) {
-      notifyError(unwrapErrorMessage(err) || t('pages.truckDetailsPage.saveFailed'));
+      notifyError(formatUserError(err, t, { fallback: t('pages.truckDetailsPage.saveFailed') }));
     }
   };
 
@@ -125,7 +143,7 @@ const TruckDetails = () => {
       if (String(form.id) === String(row.id)) reset();
       await refresh();
     } catch (err) {
-      notifyError(unwrapErrorMessage(err) || t('pages.truckDetailsPage.saveFailed'));
+      notifyError(formatUserError(err, t, { fallback: t('pages.truckDetailsPage.saveFailed') }));
     }
   };
 
@@ -184,8 +202,9 @@ const TruckDetails = () => {
       } else {
         await fetchList();
       }
+      emitRealtimeRefresh('all');
     } catch (err) {
-      notifyError(unwrapErrorMessage(err) || t('pages.truckDetailsPage.saveFailed'));
+      notifyError(formatUserError(err, t, { fallback: t('pages.truckDetailsPage.saveFailed') }));
     } finally {
       setSaving(false);
     }
@@ -268,7 +287,7 @@ const TruckDetails = () => {
                     e.target.value = '';
                   }}
                 />
-                {uploadingImage && !form.truckCardFrontImage ? (
+                {uploadingFront && !form.truckCardFrontImage ? (
                   <div className="mt-2 small text-muted d-flex align-items-center gap-2">
                     <Loader size="sm" /> {t('pages.truckDetailsPage.uploading')}
                   </div>
@@ -300,6 +319,11 @@ const TruckDetails = () => {
                     e.target.value = '';
                   }}
                 />
+                {uploadingBack && !form.truckCardBackImage ? (
+                  <div className="mt-2 small text-muted d-flex align-items-center gap-2">
+                    <Loader size="sm" /> {t('pages.truckDetailsPage.uploading')}
+                  </div>
+                ) : null}
                 {form.truckCardBackImage ? (
                   <SafeImage
                     src={form.truckCardBackImage}
@@ -314,11 +338,11 @@ const TruckDetails = () => {
                 ) : null}
               </div>
               <div className="d-flex gap-2 flex-wrap">
-                <Button variant="primary" type="submit" className="tp-touch-target" disabled={!canSubmit}>
+                <Button variant="primary" type="submit" className="tp-touch-target d-inline-flex align-items-center gap-2" disabled={!canSubmit}>
                   {saving ? (
-                    <Loader light size="sm" />
-                  ) : uploadingImage ? (
-                    t('pages.truckDetailsPage.uploading')
+                    <>
+                      <Loader light size="sm" /> {t('pages.truckDetailsPage.saving')}
+                    </>
                   ) : editing ? (
                     t('pages.truckDetailsPage.saveChanges')
                   ) : (
@@ -348,6 +372,7 @@ const TruckDetails = () => {
                   const thumb = row.truckCardFrontImage || row.truckFrontImage || '';
                   const statusKey = String(row.statusLabel || row.status || '').toUpperCase();
                   const isSuspended = statusKey === 'SUSPENDED';
+                  const isApproved = statusKey === 'APPROVED';
                   return (
                     <div key={row.id} className="list-group-item px-0 border-0 border-bottom py-3">
                       <div className="d-flex flex-row align-items-start gap-3">
@@ -400,6 +425,7 @@ const TruckDetails = () => {
                           )}
                         </div>
                         <div className="d-flex flex-column gap-1 flex-shrink-0">
+                          {!isApproved ? (
                           <Button
                             variant="outline-primary"
                             size="sm"
@@ -408,6 +434,11 @@ const TruckDetails = () => {
                           >
                             {t('pages.truckDetailsPage.edit')}
                           </Button>
+                          ) : (
+                            <span className="small text-muted text-center px-1" title={t('pages.truckDetailsPage.verifiedNoEdit')}>
+                              {t('pages.truckDetailsPage.verifiedLocked')}
+                            </span>
+                          )}
                           {isTruckMatchingEligible(row) && !row.isDefault ? (
                             <Button
                               variant="outline-secondary"

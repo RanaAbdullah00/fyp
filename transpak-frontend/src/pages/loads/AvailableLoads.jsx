@@ -6,8 +6,10 @@ import { useAuth } from '../../hooks/useAuth.js';
 import { useApi } from '../../hooks/useApi.js';
 import Loader from '../../components/ui/Loader.jsx';
 import { notifyError, notifySuccess } from '../../components/ui/ToastProvider.jsx';
-import { unwrapErrorMessage } from '../../utils/unwrapApi.js';
+import { notifySystem, SystemNotifyType } from '../../utils/notifySystem.js';
+import { formatUserError } from '../../utils/userErrors.js';
 import { acceptLoadAtListedFare, submitCounterOffer, rejectLoadForCarrier } from '../../services/carrierLoadOffer.js';
+import { commitOptimisticBidSuggest } from '../../utils/contractActivationLayer.js';
 import { normalizeLoads } from '../../adapters/normalize.js';
 import { ensureArray } from '../../utils/unwrapApi.js';
 import VehicleTypeDropdown from '../../components/loadboard/VehicleTypeDropdown.jsx';
@@ -63,7 +65,7 @@ const AvailableLoads = ({ embedded = false }) => {
       });
       setLoads(normalizeLoads(ensureArray(data)));
     } catch (err) {
-      notifyError(unwrapErrorMessage(err) || t('pages.loads.failedLoadDetail'));
+      notifyError(formatUserError(err, t, { fallback: t('pages.loads.failedLoadDetail') }));
       setLoads([]);
     }
   }, [debouncedFilters, request, t]);
@@ -75,7 +77,7 @@ const AvailableLoads = ({ embedded = false }) => {
   useEffect(() => {
     const onRefresh = (e) => {
       const scope = e?.detail?.scope;
-      if (scope && scope !== 'all' && scope !== 'loads') return;
+      if (scope && scope !== 'all' && scope !== 'loads' && scope !== 'bids') return;
       fetchAvailableLoads().catch(() => {});
     };
     window.addEventListener('tp:realtime-refresh', onRefresh);
@@ -90,11 +92,14 @@ const AvailableLoads = ({ embedded = false }) => {
   const handleCarrierAccept = async (load) => {
     setOfferBusyId(load.id);
     try {
-      await acceptLoadAtListedFare(request, load);
+      await acceptLoadAtListedFare(request, load, {
+        t,
+        notifyWarn: (msg) => notifySystem(SystemNotifyType.WARNING, msg)
+      });
       notifySuccess(t('pages.loads.carrierAcceptSuccess'));
       await fetchAvailableLoads();
     } catch (err) {
-      notifyError(unwrapErrorMessage(err) || t('pages.loads.failedLoadDetail'));
+      notifyError(formatUserError(err, t, { fallback: t('pages.loads.failedLoadDetail') }));
     } finally {
       setOfferBusyId(null);
     }
@@ -107,7 +112,7 @@ const AvailableLoads = ({ embedded = false }) => {
       notifySuccess(t('pages.loads.carrierRejectSuccess'));
       await fetchAvailableLoads();
     } catch (err) {
-      notifyError(unwrapErrorMessage(err) || t('pages.loads.failedLoadDetail'));
+      notifyError(formatUserError(err, t, { fallback: t('pages.loads.failedLoadDetail') }));
     } finally {
       setOfferBusyId(null);
     }
@@ -116,11 +121,20 @@ const AvailableLoads = ({ embedded = false }) => {
   const handleCarrierCounter = async (load, amount) => {
     setOfferBusyId(load.id);
     try {
-      await submitCounterOffer(request, load, amount);
+      const updated = await submitCounterOffer(request, load, amount, {
+        t,
+        notifyWarn: (msg) => notifySystem(SystemNotifyType.WARNING, msg)
+      });
+      if (updated?.id) {
+        commitOptimisticBidSuggest(updated.id, amount, {
+          suggestedBy: 'carrier',
+          loadCode: load?.code
+        });
+      }
       notifySuccess(t('pages.loads.carrierCounterSuccess'));
       await fetchAvailableLoads();
     } catch (err) {
-      notifyError(unwrapErrorMessage(err) || t('pages.loads.failedLoadDetail'));
+      notifyError(formatUserError(err, t, { fallback: t('pages.loads.failedLoadDetail') }));
     } finally {
       setOfferBusyId(null);
     }
@@ -164,16 +178,6 @@ const AvailableLoads = ({ embedded = false }) => {
             />
           </div>
           <div className="col-6 col-md-3">
-            <input
-              name="pickupTo"
-              type="date"
-              className="form-control form-control-sm rounded-3"
-              aria-label={t('pages.loads.pickupTo')}
-              value={filters.pickupTo}
-              onChange={handleFilterChange}
-            />
-          </div>
-          <div className="col-6 col-md-3">
             <VehicleTypeDropdown
               name="vehicleType"
               value={filters.vehicleType}
@@ -181,46 +185,60 @@ const AvailableLoads = ({ embedded = false }) => {
               includeAllOption
             />
           </div>
-          <div className="col-6 col-md-3">
-            <input
-              name="minWeight"
-              type="number"
-              className="form-control form-control-sm rounded-3"
-              placeholder={t('pages.loads.minWeight')}
-              value={filters.minWeight}
-              onChange={handleFilterChange}
-            />
-          </div>
-          <div className="col-6 col-md-3">
-            <input
-              name="maxWeight"
-              type="number"
-              className="form-control form-control-sm rounded-3"
-              placeholder={t('pages.loads.maxWeight')}
-              value={filters.maxWeight}
-              onChange={handleFilterChange}
-            />
-          </div>
-          <div className="col-6 col-md-3">
-            <input
-              name="minPrice"
-              type="number"
-              className="form-control form-control-sm rounded-3"
-              placeholder={t('pages.loads.minFare')}
-              value={filters.minPrice}
-              onChange={handleFilterChange}
-            />
-          </div>
-          <div className="col-6 col-md-3">
-            <input
-              name="maxPrice"
-              type="number"
-              className="form-control form-control-sm rounded-3"
-              placeholder={t('pages.loads.maxFare')}
-              value={filters.maxPrice}
-              onChange={handleFilterChange}
-            />
-          </div>
+          {!embedded ? (
+            <>
+              <div className="col-6 col-md-3">
+                <input
+                  name="pickupTo"
+                  type="date"
+                  className="form-control form-control-sm rounded-3"
+                  aria-label={t('pages.loads.pickupTo')}
+                  value={filters.pickupTo}
+                  onChange={handleFilterChange}
+                />
+              </div>
+              <div className="col-6 col-md-3">
+                <input
+                  name="minWeight"
+                  type="number"
+                  className="form-control form-control-sm rounded-3"
+                  placeholder={t('pages.loads.minWeight')}
+                  value={filters.minWeight}
+                  onChange={handleFilterChange}
+                />
+              </div>
+              <div className="col-6 col-md-3">
+                <input
+                  name="maxWeight"
+                  type="number"
+                  className="form-control form-control-sm rounded-3"
+                  placeholder={t('pages.loads.maxWeight')}
+                  value={filters.maxWeight}
+                  onChange={handleFilterChange}
+                />
+              </div>
+              <div className="col-6 col-md-3">
+                <input
+                  name="minPrice"
+                  type="number"
+                  className="form-control form-control-sm rounded-3"
+                  placeholder={t('pages.loads.minFare')}
+                  value={filters.minPrice}
+                  onChange={handleFilterChange}
+                />
+              </div>
+              <div className="col-6 col-md-3">
+                <input
+                  name="maxPrice"
+                  type="number"
+                  className="form-control form-control-sm rounded-3"
+                  placeholder={t('pages.loads.maxFare')}
+                  value={filters.maxPrice}
+                  onChange={handleFilterChange}
+                />
+              </div>
+            </>
+          ) : null}
           <div className="col-12 col-md-4">
             <select
               name="sort"

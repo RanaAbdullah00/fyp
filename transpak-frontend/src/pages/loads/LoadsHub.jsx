@@ -4,6 +4,7 @@ import SegmentTabs from '../../components/ui/SegmentTabs.jsx';
 import ManageLoads from './ManageLoads.jsx';
 import AvailableLoads from './AvailableLoads.jsx';
 import CapacityMarketplace from '../../components/carrier/CapacityMarketplace.jsx';
+import SpaceSentRequestsPanel from '../../components/carrier/SpaceSentRequestsPanel.jsx';
 import MySpaceListings from '../../components/carrier/MySpaceListings.jsx';
 import Button from '../../components/ui/Button.jsx';
 import { useAuth } from '../../hooks/useAuth.js';
@@ -111,7 +112,21 @@ const LoadsHub = () => {
       </div>
 
       {tab === 'posted' ? <ManageLoads embedded /> : null}
-      {tab === 'market' ? <CapacityMarketplace /> : null}
+      {tab === 'market' ? (
+        <>
+          <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <p className="text-muted small mb-0">{t('loadsHub.subtitle')}</p>
+            <a href="#my-capacity-requests" className="btn btn-sm btn-outline-primary">
+              {t('loadsHub.mySpaceRequests')}
+            </a>
+          </div>
+          <CapacityMarketplace hubLayout>
+            <div id="my-capacity-requests">
+              <SpaceSentRequestsPanel embedded />
+            </div>
+          </CapacityMarketplace>
+        </>
+      ) : null}
     </div>
   );
 };

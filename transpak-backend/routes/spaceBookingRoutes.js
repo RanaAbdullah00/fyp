@@ -3,9 +3,14 @@ const { body, param, validationResult } = require("express-validator");
 const { protect, requireAnyRole, requireRole } = require("../middleware/authMiddleware");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
 const { query, getPool } = require("../db/pool");
-const { notifyUser } = require("../utils/notifyEvent");
+const { notifyUser, notifyAdmins } = require("../utils/notifyEvent");
+const { buildDedupeKey } = require("../utils/realtimeDispatch");
 const { assertSpaceTransition } = require("../utils/spaceRequestState");
+const { createShipmentFromCapacityAccept } = require("../utils/capacityShipmentBridge");
 const { asyncHandler } = require("../utils/asyncHandler");
+const { writeAudit } = require("../utils/auditLog");
+const { newEventId } = require("../utils/realtimeDispatch");
+const { emitContractDispatch, emitContractEntityDispatch } = require("../utils/eventContractRegistry");
 const {
   canActOnSpaceRequestAsCarrier,
   canActOnSpaceRequestAsParty,
@@ -74,7 +79,42 @@ router.post(
       roleType: "carrier",
       title: "SPACE_REQUEST",
       type: "SPACE_REQUEST",
-      message: `Capacity request: ${listing.origin} → ${listing.destination} (${requestedKg} kg)`
+      message: `Capacity request: ${listing.origin} → ${listing.destination} (${requestedKg} kg)`,
+      idempotencyKey: buildDedupeKey(["SPACE_REQUEST", rows[0].id, listing.carrier_id])
+    });
+
+    await notifyUser({
+      receiverId: req.auth.userId,
+      senderId: req.auth.userId,
+      roleType: "shipper",
+      title: "SPACE_REQUEST_SENT",
+      type: "SPACE_REQUEST_SENT",
+      message: `Request sent: ${listing.origin} → ${listing.destination} (${requestedKg} kg)`,
+      idempotencyKey: buildDedupeKey(["SPACE_REQUEST_SENT", rows[0].id])
+    });
+
+    void notifyAdmins({
+      senderId: req.auth.userId,
+      title: "SPACE_REQUEST",
+      type: "SPACE_REQUEST",
+      message: `[Platform] Capacity request ${requestedKg} kg: ${listing.origin} → ${listing.destination}`,
+      idempotencyKey: buildDedupeKey(["ADMIN", "SPACE_REQUEST", rows[0].id])
+    });
+
+    void writeAudit({
+      actorUserId: req.auth.userId,
+      action: "space.request_sent",
+      targetEntity: "space_request",
+      targetId: rows[0].id,
+      metadata: { listingId, requestedKg, origin: listing.origin, destination: listing.destination }
+    });
+
+    emitContractEntityDispatch({
+      entityType: "space",
+      entityId: rows[0].id,
+      type: "SPACE_REQUEST",
+      eventId: newEventId(),
+      payload: { requestId: rows[0].id, listingId, status: "request_sent" }
     });
 
     return sendSuccess(res, 201, rows[0], "Request sent");
@@ -85,12 +125,15 @@ router.get("/requests/incoming", protect, requireRole("carrier"), async (req, re
   const { rows } = await query(
     `SELECT r.id, r.listing_id AS "listingId", r.shipper_id AS "shipperId",
             r.requested_kg AS "requestedKg", r.message, r.status, r.created_at AS "createdAt",
-            l.origin, l.destination, l.remaining_space_kg AS "remainingSpaceKg",
+            r.load_id AS "loadId", l.code AS "loadCode",
+            sl.origin, sl.destination, sl.remaining_space_kg AS "remainingSpaceKg",
+            sl.rate_per_kg AS "ratePerKg", sl.available_from AS "availableFrom", sl.notes AS "listingNotes",
             COALESCE(u.full_name, u.email, 'Shipper') AS "shipperName"
      FROM carrier_space_requests r
-     JOIN carrier_space_listings l ON l.id = r.listing_id
+     JOIN carrier_space_listings sl ON sl.id = r.listing_id
      JOIN users u ON u.id = r.shipper_id
-     WHERE l.carrier_id = $1 AND r.status NOT IN ('rejected', 'completed')
+     LEFT JOIN loads l ON l.id = r.load_id
+     WHERE sl.carrier_id = $1 AND r.status NOT IN ('rejected', 'completed')
      ORDER BY r.created_at DESC
      LIMIT 100`,
     [req.auth.userId]
@@ -102,11 +145,14 @@ router.get("/requests/sent", protect, requireRole("shipper"), async (req, res) =
   const { rows } = await query(
     `SELECT r.id, r.listing_id AS "listingId", r.requested_kg AS "requestedKg",
             r.message, r.status, r.created_at AS "createdAt",
+            r.load_id AS "loadId", ld.code AS "loadCode",
             l.origin, l.destination, l.carrier_id AS "carrierId",
+            l.rate_per_kg AS "ratePerKg", l.available_from AS "availableFrom",
             COALESCE(u.full_name, u.email, 'Carrier') AS "carrierName"
      FROM carrier_space_requests r
      JOIN carrier_space_listings l ON l.id = r.listing_id
      JOIN users u ON u.id = l.carrier_id
+     LEFT JOIN loads ld ON ld.id = r.load_id
      WHERE r.shipper_id = $1
      ORDER BY r.created_at DESC
      LIMIT 100`,
@@ -122,8 +168,9 @@ async function transitionRequest(req, res, nextStatus) {
   try {
     await client.query("BEGIN");
     const { rows: reqRows } = await client.query(
-      `SELECT r.id, r.listing_id, r.shipper_id, r.requested_kg, r.status,
-              l.carrier_id, l.remaining_space_kg, l.origin, l.destination
+      `SELECT r.id, r.listing_id, r.shipper_id, r.requested_kg, r.status, r.message, r.load_id,
+              l.carrier_id, l.remaining_space_kg, l.origin, l.destination,
+              l.vehicle_type, l.rate_per_kg, l.available_from
        FROM carrier_space_requests r
        JOIN carrier_space_listings l ON l.id = r.listing_id
        WHERE r.id = $1
@@ -155,11 +202,23 @@ async function transitionRequest(req, res, nextStatus) {
       await client.query(
         `UPDATE carrier_space_listings
          SET remaining_space_kg = remaining_space_kg - $2,
-             status = CASE WHEN remaining_space_kg - $2 <= 0 THEN 'booked' ELSE status END,
+             status = CASE WHEN remaining_space_kg - $2 <= 0 THEN 'closed' ELSE status END,
              updated_at = now()
          WHERE id = $1`,
         [row.listing_id, row.requested_kg]
       );
+    }
+
+    let shipmentBridge = null;
+    if (nextStatus === "accepted" && !row.load_id) {
+      shipmentBridge = await createShipmentFromCapacityAccept(client, row, {
+        carrier_id: row.carrier_id,
+        origin: row.origin,
+        destination: row.destination,
+        vehicle_type: row.vehicle_type,
+        rate_per_kg: row.rate_per_kg,
+        available_from: row.available_from
+      });
     }
 
     const dbStatus = nextStatus === "accepted" ? "active" : nextStatus;
@@ -186,16 +245,108 @@ async function transitionRequest(req, res, nextStatus) {
       completed: ["SPACE_COMPLETED", "Capacity contract completed — leave a review"]
     };
     const [title, msgBase] = notifyMap[nextStatus] || ["SPACE_UPDATE", "Request updated"];
+    const dispatchType = shipmentBridge ? "CONTRACT_STARTED" : title;
+    const refSuffix = shipmentBridge?.loadCode ? ` (${shipmentBridge.loadCode})` : '';
     await notifyUser({
       receiverId: row.shipper_id,
       senderId: row.carrier_id,
       roleType: "shipper",
-      title,
-      type: title,
-      message: `${msgBase}: ${row.origin} → ${row.destination}`
+      title: dispatchType,
+      type: dispatchType,
+      message: `${msgBase}${refSuffix}: ${row.origin} → ${row.destination}`
     });
 
-    return sendSuccess(res, 200, { ok: true, status: dbStatus.toUpperCase() });
+    if (shipmentBridge) {
+      const contractPayload = {
+        requestId,
+        loadId: shipmentBridge.loadId,
+        loadCode: shipmentBridge.loadCode,
+        shipmentId: shipmentBridge.shipmentId
+      };
+      emitContractDispatch({
+        eventId: newEventId(),
+        type: "CONTRACT_STARTED",
+        receiverId: row.shipper_id,
+        roleType: "shipper",
+        entityType: "space",
+        entityId: requestId,
+        payload: contractPayload
+      });
+      void notifyUser({
+        receiverId: row.carrier_id,
+        senderId: row.shipper_id,
+        roleType: "carrier",
+        title: "CONTRACT_STARTED",
+        type: "CONTRACT_STARTED",
+        message: `Capacity contract is now active${refSuffix}: ${row.origin} → ${row.destination}`,
+        idempotencyKey: buildDedupeKey(["CONTRACT_STARTED", "carrier", requestId, shipmentBridge.loadId])
+      });
+      emitContractDispatch({
+        eventId: newEventId(),
+        type: "CONTRACT_STARTED",
+        receiverId: row.carrier_id,
+        roleType: "carrier",
+        entityType: "space",
+        entityId: requestId,
+        payload: contractPayload
+      });
+    }
+
+    void notifyAdmins({
+      senderId: req.auth.userId,
+      title,
+      type: title,
+      message: `[Platform] Capacity request ${requestId} → ${nextStatus}: ${row.origin} → ${row.destination}`,
+      idempotencyKey: buildDedupeKey(["ADMIN", title, requestId, nextStatus])
+    });
+
+    void writeAudit({
+      actorUserId: req.auth.userId,
+      action: `space.${nextStatus}`,
+      targetEntity: "space_request",
+      targetId: requestId,
+      metadata: {
+        listingId: row.listing_id,
+        shipperId: row.shipper_id,
+        loadId: shipmentBridge?.loadId || row.load_id || null
+      }
+    });
+
+    emitContractEntityDispatch({
+      entityType: "space",
+      entityId: requestId,
+      type: dispatchType,
+      eventId: newEventId(),
+      payload: {
+        requestId,
+        status: dbStatus,
+        loadId: shipmentBridge?.loadId || row.load_id || null,
+        loadCode: shipmentBridge?.loadCode || null
+      }
+    });
+
+    if (shipmentBridge?.shipmentId) {
+      emitContractEntityDispatch({
+        entityType: "shipment",
+        entityId: shipmentBridge.shipmentId,
+        type: "CONTRACT_STARTED",
+        eventId: newEventId(),
+        payload: {
+          requestId,
+          loadId: shipmentBridge.loadId,
+          loadCode: shipmentBridge.loadCode,
+          shipmentId: shipmentBridge.shipmentId
+        }
+      });
+    }
+
+    return sendSuccess(res, 200, {
+      ok: true,
+      status: dbStatus.toUpperCase(),
+      loadId: shipmentBridge?.loadId || row.load_id || null,
+      loadCode: shipmentBridge?.loadCode || null,
+      shipmentId: shipmentBridge?.shipmentId || null
+    });
   } catch (err) {
     try {
       await client.query("ROLLBACK");
@@ -245,6 +396,27 @@ async function partyTransition(req, res, nextStatus) {
     title: nextStatus === "in_transit" ? "SPACE_IN_TRANSIT" : "SPACE_COMPLETED",
     type: nextStatus === "in_transit" ? "SPACE_IN_TRANSIT" : "SPACE_COMPLETED",
     message: `Status: ${nextStatus} — ${row.origin} → ${row.destination}`
+  });
+  void notifyAdmins({
+    senderId: uid,
+    title: nextStatus === "in_transit" ? "SPACE_IN_TRANSIT" : "SPACE_COMPLETED",
+    type: nextStatus === "in_transit" ? "SPACE_IN_TRANSIT" : "SPACE_COMPLETED",
+    message: `[Platform] Capacity request ${nextStatus}: ${row.origin} → ${row.destination}`,
+    idempotencyKey: buildDedupeKey(["ADMIN", "SPACE", requestId, nextStatus])
+  });
+  void writeAudit({
+    actorUserId: uid,
+    action: `space.${nextStatus}`,
+    targetEntity: "space_request",
+    targetId: requestId,
+    metadata: { origin: row.origin, destination: row.destination }
+  });
+  emitContractEntityDispatch({
+    entityType: "space",
+    entityId: requestId,
+    type: nextStatus === "in_transit" ? "SPACE_IN_TRANSIT" : "SPACE_COMPLETED",
+    eventId: newEventId(),
+    payload: { requestId, status: nextStatus }
   });
   return sendSuccess(res, 200, { ok: true, status: nextStatus.toUpperCase() });
 }

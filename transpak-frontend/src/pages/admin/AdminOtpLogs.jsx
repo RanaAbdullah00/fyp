@@ -5,6 +5,7 @@ import { useApi } from '../../hooks/useApi.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { ensureArray } from '../../utils/unwrapApi.js';
 import { formatUserError } from '../../utils/userErrors.js';
+import TranslatedText from '../../components/ui/TranslatedText.jsx';
 
 const AdminOtpLogs = () => {
   const { request } = useApi();
@@ -34,7 +35,7 @@ const AdminOtpLogs = () => {
   }, [request, t]);
 
   return (
-    <div className="container py-3">
+    <div className="container py-3 tp-dashboard tp-dashboard--admin">
       <h5 className="mb-2">{t('pages.admin.otpLogsTitle')}</h5>
       <p className="small text-muted mb-3">{t('pages.admin.otpLogsLead')}</p>
       <form
@@ -59,14 +60,18 @@ const AdminOtpLogs = () => {
           </button>
         </div>
       </form>
-      {error && <div className="alert alert-warning rounded-3">{error}</div>}
+      {error && (
+        <div className="alert alert-warning rounded-3">
+          <TranslatedText text={error} as="span" />
+        </div>
+      )}
       {loading ? (
         <SkeletonTable cols={5} rows={6} />
       ) : (
         <Card className="p-0 overflow-hidden border-0 shadow-sm">
           <div className="table-responsive">
             <table className="table table-sm table-hover mb-0">
-              <thead className="table-light">
+              <thead>
                 <tr>
                   <th className="ps-3">{t('auth.email')}</th>
                   <th>{t('pages.admin.otpPurpose')}</th>

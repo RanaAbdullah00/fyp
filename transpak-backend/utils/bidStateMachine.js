@@ -22,11 +22,18 @@ const LOAD = {
   CANCELLED: "cancelled"
 };
 
-const MAX_COUNTER_ROUNDS = Number(process.env.BID_MAX_COUNTER_ROUNDS || 5);
+/** One counter round per bid (carrier suggest once → shipper accept/reject). */
+const MAX_COUNTER_ROUNDS = Number(process.env.BID_MAX_COUNTER_ROUNDS || 1);
 
 /** SQL fragment for open/active bids on a load */
 const ACTIVE_BID_STATUSES_SQL =
   "('pending_shipper_confirmation','counter_offered','pending','suggested')";
+
+/** Commercial APIs hide expired/cancelled/rejected bids; admin retains full history */
+const COMMERCIAL_BID_VISIBLE_SQL = "b.status NOT IN ('cancelled','rejected')";
+
+/** Commercial load lists hide cancelled/expired loads; admin retains full history */
+const COMMERCIAL_LOAD_VISIBLE_SQL = "l.status NOT IN ('cancelled')";
 
 const ALLOWED_BID_TRANSITIONS = {
   pending_shipper_confirmation: new Set(["counter_offered", "accepted", "rejected"]),
@@ -115,6 +122,8 @@ module.exports = {
   BID,
   LOAD,
   ACTIVE_BID_STATUSES_SQL,
+  COMMERCIAL_BID_VISIBLE_SQL,
+  COMMERCIAL_LOAD_VISIBLE_SQL,
   MAX_COUNTER_ROUNDS,
   assertBidTransition,
   assertCounterLimit,

@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import LoadCard from '../../components/loadboard/LoadCard.jsx';
-import ProfileLink from '../../components/profile/ProfileLink.jsx';
 import BidTimeline from '../../components/bids/BidTimeline.jsx';
 import BidList from '../../components/loadboard/BidList.jsx';
 import { SkeletonCard } from '../../components/ui/Skeleton.jsx';
@@ -14,15 +13,20 @@ import { useLanguage } from '../../hooks/useLanguage.js';
 import {
   notifyError,
   notifySuccess,
-  notifyBidAccepted,
   notifyBidRejected,
   notifyCounterOffer
 } from '../../components/ui/ToastProvider.jsx';
 import { normalizeLoads, normalizeBids } from '../../adapters/normalize.js';
 import { formatUserError } from '../../utils/userErrors.js';
 import { mergeWorkspaceParams } from '../../utils/workspaceApi.js';
-import { isActiveBidStatus, normalizeBidStatus, BID_STATUS } from '../../utils/bidStatus.js';
-import { emitRealtimeRefresh } from '../../utils/realtimeRefresh.js';
+import { triggerAcceptActivationSync } from '../../utils/contractActivation.js';
+import {
+  commitOptimisticBidAccept,
+  commitOptimisticBidReject,
+  commitOptimisticBidSuggest,
+  emitScopedRefresh
+} from '../../utils/contractActivationLayer.js';
+import { ensureArray } from '../../utils/unwrapApi.js';
 
 const LoadDetails = () => {
   const { id } = useParams();
@@ -35,6 +39,7 @@ const LoadDetails = () => {
   const [bids, setBids] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showDelete, setShowDelete] = useState(false);
+  const [activeShipmentRow, setActiveShipmentRow] = useState(null);
 
   const activeRole = user?.activeRole ?? user?.roles?.[0];
   const uid = user?.id || user?._id;
@@ -53,7 +58,7 @@ const LoadDetails = () => {
       const ownsLoad = loadRow && uid && String(loadRow.shipperId) === String(uid);
       if (ownsLoad) {
         const bidRows = await request({ url: '/bids', params: { loadId: id, ...mergeWorkspaceParams(user) } });
-        setBids(normalizeBids(bidRows));
+        setBids(normalizeBids(ensureArray(bidRows)));
       } else {
         setBids([]);
       }
@@ -72,21 +77,48 @@ const LoadDetails = () => {
   }, [id, user?.id, fetchData]);
 
   useEffect(() => {
-    const onRefresh = (e) => {
-      const scope = e?.detail?.scope;
-      if (scope && scope !== 'all' && scope !== 'bids' && scope !== 'loads') return;
-      fetchData();
+    const reconcile = () => {
+      void fetchData();
     };
-    window.addEventListener('tp:realtime-refresh', onRefresh);
-    return () => window.removeEventListener('tp:realtime-refresh', onRefresh);
+    const onBidsRefresh = () => reconcile();
+    const onLegacyRefresh = (e) => {
+      const scope = e?.detail?.scope;
+      if (!scope || scope === 'all') return;
+      if (scope === 'bids' || scope === 'loads' || scope === 'shipments' || scope === 'space') {
+        reconcile();
+      }
+    };
+    window.addEventListener('tp:bids-refresh', onBidsRefresh);
+    window.addEventListener('tp:bid-updated', onBidsRefresh);
+    window.addEventListener('tp:contract-activated', onBidsRefresh);
+    window.addEventListener('tp:realtime-refresh', onLegacyRefresh);
+    return () => {
+      window.removeEventListener('tp:bids-refresh', onBidsRefresh);
+      window.removeEventListener('tp:bid-updated', onBidsRefresh);
+      window.removeEventListener('tp:contract-activated', onBidsRefresh);
+      window.removeEventListener('tp:realtime-refresh', onLegacyRefresh);
+    };
   }, [fetchData]);
 
   const handleAccept = async (bid) => {
     try {
-      await request({ method: 'PUT', url: `/bids/${bid.id}/accept` });
-      notifyBidAccepted(t('pages.bids.bidAccepted'));
-      emitRealtimeRefresh('bids');
-      await fetchData();
+      const res = await request({ method: 'PUT', url: `/bids/${bid.id}/accept` });
+      const loadCode = res?.loadCode || bid.loadCode || load?.code || null;
+      const payload = { ...res, loadCode };
+      commitOptimisticBidAccept(bid.id, payload, {
+        loadCode,
+        carrierId: bid.carrierId,
+        origin: load?.origin || bid.origin || null,
+        destination: load?.destination || bid.destination || null,
+        userId: user?.id,
+        role: user?.activeRole
+      });
+      await triggerAcceptActivationSync(payload, {
+        userId: user?.id,
+        role: user?.activeRole
+      });
+      notifySuccess(t('flowSession.bidFlowStarted'));
+      void fetchData();
     } catch (error) {
       notifyError(formatUserError(error, t, { fallback: t('pages.bids.acceptFailed') }));
     }
@@ -94,10 +126,10 @@ const LoadDetails = () => {
 
   const handleReject = async (bid) => {
     try {
+      commitOptimisticBidReject(bid.id, { loadCode: bid.loadCode || load?.code });
       await request({ method: 'PUT', url: `/bids/${bid.id}/reject` });
       notifyBidRejected(t('pages.bids.bidRejected'));
-      emitRealtimeRefresh('bids');
-      await fetchData();
+      void fetchData();
     } catch (error) {
       notifyError(formatUserError(error, t, { fallback: t('pages.bids.rejectFailed') }));
     }
@@ -105,10 +137,13 @@ const LoadDetails = () => {
 
   const handleSuggest = async (bid, amount) => {
     try {
+      commitOptimisticBidSuggest(bid.id, amount, {
+        suggestedBy: 'shipper',
+        loadCode: bid.loadCode || load?.code
+      });
       await request({ method: 'PUT', url: `/bids/${bid.id}/suggest`, data: { amount } });
       notifyCounterOffer(t('pages.bids.suggestSent', { amount: Number(amount).toLocaleString() }));
-      emitRealtimeRefresh('bids');
-      await fetchData();
+      void fetchData();
     } catch (error) {
       notifyError(formatUserError(error, t, { fallback: t('pages.bids.suggestFailed') }));
     }
@@ -137,7 +172,6 @@ const LoadDetails = () => {
   if (!load) return <div className="container py-3 text-muted">{t('pages.loads.failedLoadDetail')}</div>;
 
   const isOpen = load.status === 'open';
-  const approvedBid = bids.find((b) => normalizeBidStatus(b.status) === BID_STATUS.ACCEPTED);
 
   return (
     <div className="container py-3">
@@ -155,6 +189,15 @@ const LoadDetails = () => {
         <h5 className="mb-0">
           {t('pages.loads.loadDetails')} {load.code}
         </h5>
+        {isOwner ? (
+          <span className="badge text-bg-primary align-self-center">
+            {t('pages.bids.bidManagementTitle')} · {bids.length}
+          </span>
+        ) : Number(load?.bidCount ?? 0) > 0 ? (
+          <span className="badge text-bg-secondary align-self-center">
+            {load.bidCount} bids
+          </span>
+        ) : null}
         {isOwner && isOpen && (
           <div className="d-flex gap-2 flex-wrap">
             <Link to={`/loads/${load.id}/edit`}>
@@ -168,7 +211,12 @@ const LoadDetails = () => {
           </div>
         )}
       </div>
-      <LoadCard load={load} />
+      <LoadCard
+        load={{
+          ...load,
+          bidCount: isOwner ? (bids?.length ?? 0) : Number(load?.bidCount ?? load?.bid_count ?? 0)
+        }}
+      />
       <Card className="p-3 mt-3 tp-pipeline-card">
         <h6 className="small text-muted text-uppercase mb-2">{t('bidTimeline.title')}</h6>
         <BidTimeline
@@ -181,26 +229,15 @@ const LoadDetails = () => {
       {isOwner && (
         <>
           <h6 className="mt-4 mb-2">
-            {t('pages.bids.bidManagementTitle')} ({bids.length})
+            {t('pages.bids.bidManagementTitle')} ({(bids || []).length})
           </h6>
           <BidList
-            bids={bids}
+            bids={bids || []}
             mode="shipper"
             onAccept={handleAccept}
             onReject={handleReject}
             onSuggest={handleSuggest}
           />
-          {approvedBid && (
-            <div className="alert alert-success mt-3 rounded-lg border-0">
-              {t('pages.bids.shipmentAssignedPrefix')}{' '}
-              <ProfileLink
-                userId={approvedBid.carrierId}
-                name={approvedBid.carrierName || t('auth.carrier')}
-                showBadge
-                role={t('auth.carrier')}
-              />
-            </div>
-          )}
         </>
       )}
 

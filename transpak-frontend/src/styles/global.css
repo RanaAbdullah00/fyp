@@ -1258,6 +1258,27 @@ body.dark-theme .tp-brand-mark__p {
 
 body.tp-role-admin .tp-main-shell {
   --tp-role-accent: #334155;
+  --tp-surface: var(--pak-card-bg);
+  --tp-surface-muted: color-mix(in srgb, var(--pak-card-bg) 72%, var(--pak-light-green-bg) 28%);
+  --tp-text: var(--text-primary);
+  --tp-text-muted: var(--muted-text);
+  --tp-border: var(--pak-border);
+}
+
+body.tp-role-admin:not(.dark-theme) .table-light,
+body.tp-role-admin:not(.dark-theme) thead.table-light th,
+.tp-dashboard--admin:not(.dark-theme) .table-light,
+.tp-dashboard--admin .table-light {
+  background-color: var(--tp-surface-muted, #f8fafc) !important;
+  color: var(--tp-text-muted, #64748b) !important;
+  border-color: var(--tp-border, var(--pak-border)) !important;
+}
+
+body.tp-role-admin:not(.dark-theme) .alert-light,
+.tp-dashboard--admin .alert-light {
+  background: var(--tp-surface-muted, #f8fafc);
+  color: var(--tp-text, var(--text-primary));
+  border-color: var(--tp-border, var(--pak-border));
 }
 
 /* Navbar notification dropdown */
@@ -2990,9 +3011,9 @@ body.dark-theme .tp-auth-v2__glass .tp-auth-role-field--primary {
 }
 
 .tp-progress-lane__label--current {
-  color: #ca8a04;
+  color: var(--tp-primary, var(--pak-primary, #2563eb));
   font-weight: 700;
-  text-shadow: 0 0 14px rgba(234, 179, 8, 0.55);
+  text-shadow: 0 0 14px color-mix(in srgb, var(--tp-primary, var(--pak-primary, #2563eb)) 45%, transparent);
 }
 
 .tp-progress-lane__label--upcoming {
@@ -3010,7 +3031,7 @@ body.dark-theme .tp-progress-lane__label--done {
 }
 
 body.dark-theme .tp-progress-lane__label--current {
-  color: #facc15;
+  color: var(--tp-primary, var(--pak-primary, #60a5fa));
   text-shadow: none;
 }
 
@@ -3066,9 +3087,9 @@ body.dark-theme .tp-progress-lane__bar-bg {
 }
 
 .tp-progress-lane__node--current {
-  background: #eab308;
-  border-color: #a16207;
-  box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.45);
+  background: var(--tp-primary, var(--pak-primary, #2563eb));
+  border-color: color-mix(in srgb, var(--tp-primary, var(--pak-primary, #2563eb)) 75%, #000);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tp-primary, var(--pak-primary, #2563eb)) 40%, transparent);
   animation: tpProgressPulse 1.6s ease-in-out infinite;
 }
 

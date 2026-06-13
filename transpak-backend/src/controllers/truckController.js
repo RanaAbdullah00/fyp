@@ -4,7 +4,8 @@ const { canMutateTruck, sendForbidden, FORBIDDEN_CODES } = require("../../utils/
 const { query } = require("../../db/pool");
 const { safeDestroyReplacedUrl } = require("../../utils/cloudinaryUrl");
 const { isAllowedImageUrl } = require("../../utils/imageUrl");
-const { notifyUser } = require("../../utils/notifyEvent");
+const { notifyUser, notifyAdmins } = require("../../utils/notifyEvent");
+const { buildDedupeKey } = require("../../utils/realtimeDispatch");
 const { validateLicensePlate, validateCapacity, validateEngineNumber } = require("../../utils/truckValidation");
 const { writeAudit } = require("../../utils/auditLog");
 const fleetRepo = require("../../utils/fleetRepo");
@@ -133,6 +134,13 @@ async function create(req, res) {
       roleType: "carrier",
       title: "TRUCK_UPDATED",
       message: "Truck submitted — awaiting admin approval"
+    });
+    void notifyAdmins({
+      senderId: req.auth.userId,
+      title: "TRUCK_PENDING",
+      type: "TRUCK_PENDING",
+      message: `[Platform] Truck ${plate} submitted for approval`,
+      idempotencyKey: buildDedupeKey(["ADMIN", "TRUCK_PENDING", truck?.id || plate])
     });
     return sendSuccess(res, 201, truck, "Created");
   } catch (err) {
@@ -269,6 +277,13 @@ async function update(req, res) {
           roleType: "carrier",
           title: "TRUCK_UPDATED",
           message: "Truck details changed — pending admin re-approval"
+        });
+        void notifyAdmins({
+          senderId: req.auth.userId,
+          title: "TRUCK_PENDING",
+          type: "TRUCK_PENDING",
+          message: `[Platform] Truck re-submitted for verification (${updated.engineNumber || id})`,
+          idempotencyKey: buildDedupeKey(["ADMIN", "TRUCK_PENDING", id])
         });
       }
     }

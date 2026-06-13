@@ -12,9 +12,12 @@ const {
   buildFailedRegisterEmailVerification
 } = require("../utils/otpDelivery");
 
-const { isDemoAdminEmail } = require("../utils/demoAdmin");
-const { resolveAuthUserForSession } = require("../utils/resolveAuthUser");
-const { resolveLoginActiveRole, canChangeActiveRole, isAdminAccount } = require("../utils/authSessionPolicy");
+const {
+  isAdminAccount,
+  resolveAuthUserForSession,
+  resolveLoginActiveRole,
+  canChangeActiveRole
+} = require("../utils/authSessionPolicy");
 const { notifyUser } = require("../utils/notifyEvent");
 const { isTransientDbError, classifyDbError } = require("../utils/dbErrors");
 const { writeAudit } = require("../utils/auditLog");
@@ -287,7 +290,7 @@ async function login(req, res) {
 
     const row = await withDbRetry(() => userRepo.findRowByEmailWithPassword(normalizedEmail));
     if (!row) {
-      return sendError(res, 401, "Invalid credentials", null, "INVALID_CREDENTIALS");
+      return sendError(res, 401, "Invalid username", null, "USER_NOT_FOUND");
     }
 
     if (row.blocked) {
@@ -310,10 +313,10 @@ async function login(req, res) {
       return sendError(res, 401, "Invalid credentials", null, "INVALID_CREDENTIALS");
     }
     if (!passwordOk) {
-      return sendError(res, 401, "Invalid credentials", null, "INVALID_CREDENTIALS");
+      return sendError(res, 401, "Invalid password", null, "INVALID_CREDENTIALS");
     }
 
-    if (!row.verified && !isDemoAdminEmail(normalizedEmail)) {
+    if (!row.verified) {
       return sendError(
         res,
         403,
@@ -327,13 +330,10 @@ async function login(req, res) {
     if (!authUser) return sendError(res, 401, "Invalid credentials", null, "INVALID_CREDENTIALS");
 
     const { sanitizeRolesForStorage } = require("../utils/rolePolicy");
-    if (!isAdminAccount(authUser) && !isDemoAdminEmail(normalizedEmail)) {
-      if (roleHint && !["shipper", "carrier"].includes(roleHint)) {
-        return sendError(res, 400, "Invalid role", null, "INVALID_ROLE");
-      }
-      if (roleHint && !authUser.roles.map((r) => String(r).toLowerCase()).includes(roleHint)) {
-        return sendError(res, 403, "Invalid credentials for selected role", null, "WRONG_ROLE");
-      }
+    const { validateLoginRoleHint } = require("../utils/policyEngine");
+    const roleCheck = validateLoginRoleHint(authUser, roleHint);
+    if (!roleCheck.ok) {
+      return sendError(res, roleCheck.status, roleCheck.message, null, roleCheck.code);
     }
     const resolvedRole = resolveLoginActiveRole(authUser, normalizedEmail, roleHint);
     if (!resolvedRole) {

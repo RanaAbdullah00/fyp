@@ -1,4 +1,4 @@
-import { normalizeBidStatus } from '../utils/bidStatus.js';
+import { normalizeBidStatus, isCounterOffered } from '../utils/bidStatus.js';
 import { estimateLocalFare } from '../utils/localFareEstimate.js';
 
 // Data normalization adapters so UI never breaks on field mismatches.
@@ -45,6 +45,7 @@ export const normalizeLoad = (raw) => {
         ? Number(raw.deadlineMinutes)
         : (raw.deadlineHours != null ? Number(raw.deadlineHours) * 60 : 120),
     biddingEndsAt: raw.biddingEndsAt ?? raw.bidding_ends_at ?? null,
+    bidCount: Number(raw.bidCount ?? raw.bid_count ?? 0),
     deadline:
       raw.deadline ??
       raw.biddingEndsAt ??
@@ -72,6 +73,10 @@ export const normalizeBid = (raw) => {
     loadCode: raw.loadCode ?? raw.load_code ?? null,
     carrierId: raw.carrierId ?? raw.carrier ?? null,
     carrierName: raw.carrierName ?? raw.name ?? 'Carrier',
+    shipperName: raw.shipperName ?? raw.shipper_name ?? null,
+    carrierAvatar: raw.carrierAvatar ?? raw.carrierProfileImage ?? raw.carrier_avatar ?? null,
+    shipperAvatar: raw.shipperAvatar ?? raw.shipperProfileImage ?? raw.shipper_avatar ?? null,
+    shipperId: raw.shipperId ?? raw.shipper_id ?? null,
     vehicleType: raw.vehicleType ?? 'Truck',
     transitTime: raw.transitTime ?? raw.etaDays ?? 2,
     price,
@@ -81,7 +86,13 @@ export const normalizeBid = (raw) => {
     suggestedAmount: raw.suggestedAmount != null ? Number(raw.suggestedAmount) : null,
     suggestedAt: raw.suggestedAt ?? null,
     suggestedBy: raw.suggestedBy ?? null,
-    createdAt: raw.createdAt ?? new Date().toISOString()
+    bidType:
+      raw.bidType === 'suggested' ||
+      (isCounterOffered(raw.status) && raw.suggestedBy === 'carrier')
+        ? 'suggested'
+        : 'normal',
+    createdAt: raw.createdAt ?? new Date().toISOString(),
+    expiresAt: raw.expiresAt ?? raw.expires_at ?? null
   };
 };
 
@@ -141,6 +152,7 @@ export const normalizeTracking = (raw) => {
     refKey: raw.refKey != null ? String(raw.refKey) : null,
     loadId: raw.loadId != null ? String(raw.loadId) : null,
     lifecycleStage: raw.lifecycleStage ?? null,
+    assignedCarrierId: raw.assignedCarrierId ?? raw.assigned_carrier_id ?? null,
     ts: raw.ts != null ? Number(raw.ts) : null
   };
 };

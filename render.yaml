@@ -26,7 +26,7 @@ services:
     autoDeploy: true
     # Clear build cache in Dashboard on manual deploy if behavior looks stale.
     buildCommand: rm -rf node_modules dist .render-build-stamp.json && npm ci && npm run build
-    startCommand: npm run db:migrate && node server.js
+    startCommand: npm run db:migrate && npm run db:ensure-capacity-bridge && node server.js
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
@@ -44,9 +44,6 @@ services:
         value: "http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173"
       - key: PG_CONNECTION_TIMEOUT_MS
         value: "30000"
-      - key: ENABLE_TRANSPAK_DEMO_ADMIN
+      - key: ALLOW_VEHICLE_TYPE_MISMATCH
         value: "true"
-      - key: TRANSPAK_DEMO_ADMIN_EMAIL
-        value: mrrajpoot.327@gmail.com
-      # Set in Render Dashboard (never commit): TRANSPAK_DEMO_ADMIN_PASSWORD=11223344
       # Set in Render Dashboard (never commit): ORS_API_KEY — OpenRouteService routing proxy

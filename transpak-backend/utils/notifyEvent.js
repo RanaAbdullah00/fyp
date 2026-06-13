@@ -1,5 +1,7 @@
 const { query } = require("../db/pool");
 const { buildDedupeKey, newEventId, emitDispatchEvent, DISPATCH_TYPES } = require("./realtimeDispatch");
+const { resolveEventType } = require("./eventContractRegistry");
+const { roleNotifyGuard } = require("./roleNotifyGuard");
 
 const MAX_CARRIER_BROADCAST = Number(process.env.LOAD_NOTIFY_CARRIER_LIMIT || 250);
 const SOCKET_FLUSH_MS = Number(process.env.NOTIFY_SOCKET_FLUSH_MS || 400);
@@ -61,7 +63,6 @@ function queueSocketEmit(receiverId, payload, roleType) {
 }
 
 function flushSocketQueue(receiverId, roleType) {
-  const { emitToUserRole } = require("../services/realtimeHub");
   const role = roleType != null ? String(roleType).trim().toLowerCase() : null;
   const key = `${receiverId}|${role || "any"}`;
   const q = socketQueues.get(key);
@@ -83,12 +84,9 @@ function flushSocketQueue(receiverId, roleType) {
       payload: { title: payload.title, message: payload.message }
     });
   });
-
-  if (items.length === 1) {
-    emitToUserRole(receiverId, rt, "notification:new", items[0]);
-    return;
-  }
-  emitToUserRole(receiverId, rt, "notifications:batch", { items });
+  // dispatch:event is the single socket channel (includes notification payload).
+  // Avoid also emitting notification:new / notifications:batch — clients dedupe poorly
+  // and users can see duplicate toasts + sounds.
 }
 
 async function findByDedupeKey(receiverId, dedupeKey) {
@@ -149,7 +147,25 @@ async function insertNotification({ receiverId, senderId, roleType, title, messa
 
 async function notifyUser({ receiverId, senderId, roleType, title, message, type, idempotencyKey }) {
   if (!receiverId || !title || !message) return null;
-  const eventType = type || title;
+
+  try {
+    const roleCheck = await roleNotifyGuard(receiverId, roleType);
+    if (!roleCheck.ok) {
+      // eslint-disable-next-line no-console
+      console.warn("[notify] skipped — role mismatch", {
+        receiverId,
+        roleType,
+        reason: roleCheck.reason
+      });
+      return null;
+    }
+  } catch (guardErr) {
+    // eslint-disable-next-line no-console
+    console.warn("[notify] role guard error — skipped", guardErr?.message || guardErr);
+    return null;
+  }
+
+  const eventType = resolveEventType(type || title);
   const dedupeKey = idempotencyKey || dedupeKeyFromContent(receiverId, title, message);
   const now = Date.now();
   pruneMemoryDedupe(now);
@@ -233,9 +249,12 @@ function flushAllNotificationQueues() {
   }
 }
 
+const { notifyAdmins } = require("./adminNotify");
+
 module.exports = {
   notifyUser,
   notifyLoadPostedToCarriers,
+  notifyAdmins,
   flushAllNotificationQueues,
   dedupeKeyFromContent
 };

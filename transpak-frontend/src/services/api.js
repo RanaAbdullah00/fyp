@@ -67,10 +67,7 @@ function handleApiFailure(error, config) {
   if (isCanceledError(error)) return;
   logApiFailure(error, config);
   if (config?.skipGlobalErrorToast) return;
-  const { displayMessage } = unwrapErrorDetail(error);
-  const endpoint = fullUrl(config || {});
-  const msg = displayMessage || `Request failed (${endpoint})`;
-  notifyApiError(error, msg);
+  notifyApiError(error);
 }
 
 const api = axios.create({
@@ -95,8 +92,13 @@ api.interceptors.request.use((config) => {
   assertAllowedEndpoint(config.url);
 
   const token = getAuthToken();
+  const path = String(config.url || '');
+  const isAuthEndpoint = /\/auth(\/|$)/i.test(path);
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+  } else if (!isAuthEndpoint && AUTH_DEBUG) {
+    // eslint-disable-next-line no-console
+    console.warn('[api] no auth token for protected request:', fullUrl(config));
   }
   if (config.data instanceof FormData) {
     delete config.headers['Content-Type'];

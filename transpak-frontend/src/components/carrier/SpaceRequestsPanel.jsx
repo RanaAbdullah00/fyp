@@ -1,16 +1,22 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useState } from 'react';
 import Card from '../ui/Card.jsx';
+import { AppContext } from '../../context/AppContext.jsx';
 import { useApi } from '../../hooks/useApi.js';
+import { useAuth } from '../../hooks/useAuth.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { notifyError, notifySuccess } from '../ui/ToastProvider.jsx';
 import { formatUserError } from '../../utils/userErrors.js';
-import { emitRealtimeRefresh } from '../../utils/spaceFlow.js';
+import { triggerAcceptActivationSync, emitRealtimeRefresh } from '../../utils/spaceFlow.js';
+import { commitOptimisticSpaceAccept } from '../../utils/contractActivationLayer.js';
 import { emitReviewPrompt } from '../../utils/reviewPrompt.js';
 import SpaceRequestLifecycle from './SpaceRequestLifecycle.jsx';
+import { isCapacityFlowPending } from '../../utils/flowSession.js';
 
 const SpaceRequestsPanel = () => {
   const { t } = useLanguage();
+  const { user } = useAuth();
   const { request } = useApi();
+  const { getSocket } = useContext(AppContext) || {};
   const [rows, setRows] = useState([]);
 
   const refresh = useCallback(async () => {
@@ -27,20 +33,55 @@ const SpaceRequestsPanel = () => {
   }, [refresh]);
 
   useEffect(() => {
+    const socket = getSocket?.();
+    if (!socket || !rows.length) return undefined;
+    rows.forEach((r) => {
+      if (r?.id) socket.emit('space:join', { requestId: r.id });
+    });
+    const onConnect = () => {
+      rows.forEach((r) => {
+        if (r?.id) socket.emit('space:join', { requestId: r.id });
+      });
+    };
+    socket.on('connect', onConnect);
+    return () => socket.off('connect', onConnect);
+  }, [getSocket, rows]);
+
+  useEffect(() => {
     const h = (e) => {
       const scope = e?.detail?.scope;
       if (scope && scope !== 'all' && scope !== 'space' && scope !== 'loads') return;
       refresh();
     };
+    const onContractActivated = () => refresh();
+    const onShipmentsRefresh = () => refresh();
     window.addEventListener('tp:realtime-refresh', h);
-    return () => window.removeEventListener('tp:realtime-refresh', h);
+    window.addEventListener('tp:contract-activated', onContractActivated);
+    window.addEventListener('tp:shipments-refresh', onShipmentsRefresh);
+    return () => {
+      window.removeEventListener('tp:realtime-refresh', h);
+      window.removeEventListener('tp:contract-activated', onContractActivated);
+      window.removeEventListener('tp:shipments-refresh', onShipmentsRefresh);
+    };
   }, [refresh]);
 
   const respond = async (id, action) => {
     try {
-      await request({ method: 'PUT', url: `/carrier-space/requests/${id}/${action}` });
+      const res = await request({ method: 'PUT', url: `/carrier-space/requests/${id}/${action}` });
       notifySuccess(action === 'accept' ? t('loadsHub.requestAccepted') : t('loadsHub.requestRejected'));
-      emitRealtimeRefresh('space');
+      if (action === 'accept') {
+        commitOptimisticSpaceAccept(id, res, {
+          userId: user?.id,
+          role: 'carrier',
+          carrierId: user?.id
+        });
+        await triggerAcceptActivationSync(res, {
+          userId: user?.id,
+          role: 'carrier'
+        });
+      } else {
+        emitRealtimeRefresh('space');
+      }
       refresh();
     } catch (err) {
       notifyError(formatUserError(err, t));
@@ -68,24 +109,34 @@ const SpaceRequestsPanel = () => {
     }
   };
 
-  if (!rows.length) return null;
+  const pendingCount = rows.filter((r) => isCapacityFlowPending(r)).length;
 
   return (
-    <Card className="p-3 mb-3">
-      <h6 className="mb-3">{t('loadsHub.incomingRequests')}</h6>
-      <div className="d-flex flex-column gap-3">
-        {rows.map((r) => (
-          <SpaceRequestLifecycle
-            key={r.id}
-            row={r}
-            showCarrierActions
-            onAccept={(id) => respond(id, 'accept')}
-            onReject={(id) => respond(id, 'reject')}
-            onInTransit={(id) => transition(id, 'in-transit')}
-            onComplete={(id) => transition(id, 'complete')}
-          />
-        ))}
+    <Card className={`p-3 mb-3 ${pendingCount > 0 ? 'tp-space-requests-panel--priority border-warning' : ''}`}>
+      <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h6 className="mb-0">{t('loadsHub.incomingRequests')}</h6>
+        {pendingCount > 0 ? (
+          <span className="badge text-bg-warning">{t('loadsHub.pendingRequests', { count: pendingCount })}</span>
+        ) : null}
       </div>
+      {!rows.length ? (
+        <p className="small text-muted mb-0">{t('loadsHub.noIncomingRequests')}</p>
+      ) : (
+        <div className="d-flex flex-column gap-3">
+          {rows.map((r) => (
+            <SpaceRequestLifecycle
+              key={r.id}
+              row={r}
+              showCarrierActions
+              priority={isCapacityFlowPending(r)}
+              onAccept={(id) => respond(id, 'accept')}
+              onReject={(id) => respond(id, 'reject')}
+              onInTransit={(id) => transition(id, 'in-transit')}
+              onComplete={(id) => transition(id, 'complete')}
+            />
+          ))}
+        </div>
+      )}
     </Card>
   );
 };

@@ -34,6 +34,16 @@ const AdminFleetQueue = () => {
     load();
   }, [load]);
 
+  useEffect(() => {
+    const onRefresh = (e) => {
+      const scope = e?.detail?.scope;
+      if (scope && scope !== 'all' && scope !== 'space') return;
+      load();
+    };
+    window.addEventListener('tp:realtime-refresh', onRefresh);
+    return () => window.removeEventListener('tp:realtime-refresh', onRefresh);
+  }, [load]);
+
   const act = async (id, action) => {
     setBusyId(id);
     try {
@@ -55,7 +65,7 @@ const AdminFleetQueue = () => {
   };
 
   return (
-    <div className="container py-3">
+    <div className="container py-3 tp-dashboard tp-dashboard--admin">
       <h5 className="mb-1">{t('pages.admin.fleetQueueTitle')}</h5>
       <p className="small text-muted mb-3">{t('pages.admin.fleetQueueHint')}</p>
       {loading && trucks.length === 0 ? (

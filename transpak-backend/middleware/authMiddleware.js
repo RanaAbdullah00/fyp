@@ -2,7 +2,6 @@ const { verifyToken } = require("../utils/jwt");
 const { sendError } = require("../utils/apiResponse");
 const { recordAuthFailure } = require("../utils/opsTelemetry");
 const userRepo = require("../repositories/userRepo");
-const { isDemoAdminEmail } = require("../utils/demoAdmin");
 const { buildAuthContextFromDB, logAuthContext } = require("../utils/authContext");
 
 /** Valid JWT identity → load permissions from DB only. */
@@ -13,7 +12,7 @@ async function requireAuth(req, res, next) {
 
     if (scheme !== "Bearer" || !token) {
       recordAuthFailure("missing_token");
-      return sendError(res, 401, "Unauthorized");
+      return sendError(res, 401, "Unauthorized access", null, "AUTH_INVALID");
     }
 
     let decoded;
@@ -21,27 +20,26 @@ async function requireAuth(req, res, next) {
       decoded = verifyToken(token);
     } catch {
       recordAuthFailure("invalid_token");
-      return sendError(res, 401, "Unauthorized");
+      return sendError(res, 401, "Unauthorized access", null, "AUTH_INVALID");
     }
 
     const userId = decoded?.sub;
     if (!userId) {
       recordAuthFailure("missing_sub");
-      return sendError(res, 401, "Unauthorized");
+      return sendError(res, 401, "Unauthorized access", null, "AUTH_INVALID");
     }
 
     const ctx = await buildAuthContextFromDB(userId);
     if (!ctx?.user) {
       recordAuthFailure("user_not_found");
-      return sendError(res, 401, "Unauthorized");
+      return sendError(res, 401, "Unauthorized access", null, "AUTH_INVALID");
     }
 
     const user = ctx.user;
     if (user.blocked) {
       return sendError(res, 403, "Account is blocked");
     }
-    const emailLc = String(user.email || "").trim().toLowerCase();
-    if (!user.verified && !isDemoAdminEmail(emailLc)) {
+    if (!user.verified) {
       return sendError(res, 403, "Please verify your email before using the app.", null, "EMAIL_NOT_VERIFIED");
     }
 
@@ -51,7 +49,7 @@ async function requireAuth(req, res, next) {
 
     return next();
   } catch (err) {
-    return sendError(res, 401, "Unauthorized");
+    return sendError(res, 401, "Unauthorized access", null, "AUTH_INVALID");
   }
 }
 

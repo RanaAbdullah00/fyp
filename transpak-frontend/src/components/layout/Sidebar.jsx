@@ -11,7 +11,8 @@ import {
   FaSignOutAlt,
   FaQuestionCircle,
   FaClipboardCheck,
-  FaWarehouse
+  FaHistory,
+  FaMapMarkedAlt
 } from 'react-icons/fa';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import SafeAvatar from '../ui/SafeAvatar.jsx';
@@ -70,7 +71,7 @@ const Sidebar = () => {
               {t('pages.dashboard.statOpenMarketplace')}
             </NavLink>
             <NavLink to="/loads/manage?tab=capacity" className={navLinkClass}>
-              <FaWarehouse />
+              <FaTruck />
               {t('loadsHub.navCapacityHub')}
             </NavLink>
             <NavLink to="/bids/mine" className={navLinkClass}>
@@ -84,6 +85,22 @@ const Sidebar = () => {
             <NavLink to="/carrier/verification" className={navLinkClass}>
               <FaClipboardCheck />
               {t('nav.carrierVerification')}
+            </NavLink>
+          </>
+        )}
+        {(isShipper || isCarrier) && (
+          <>
+            <NavLink to="/shipments/active" className={navLinkClass}>
+              <FaTruck />
+              {t('nav.shipmentsActive')}
+            </NavLink>
+            <NavLink to="/shipments/history" className={navLinkClass}>
+              <FaHistory />
+              {t('nav.shipmentsHistory')}
+            </NavLink>
+            <NavLink to="/shipments/tracking" className={navLinkClass}>
+              <FaMapMarkedAlt />
+              {t('nav.shipmentsTracking')}
             </NavLink>
           </>
         )}

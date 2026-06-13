@@ -1,14 +1,22 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import Card from '../ui/Card.jsx';
 import Badge from '../ui/Badge.jsx';
 import Button from '../ui/Button.jsx';
 import ConfirmActionModal from '../ui/ConfirmActionModal.jsx';
 import UserRatingBadge from '../reviews/UserRatingBadge.jsx';
-import ProfileLink from '../profile/ProfileLink.jsx';
+import ProfileAccessLayer from '../profile/ProfileAccessLayer.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { translateBidStatus } from '../../utils/i18nLabels.js';
 import { isAwaitingShipper, isCounterOffered, isActiveBidStatus, normalizeBidStatus, BID_STATUS } from '../../utils/bidStatus.js';
+import { deriveBidType } from '../../utils/flowSession.js';
 import { formatDistanceKm } from '../../utils/formatDistance.js';
+import { getTrackingRef, mergeOptimisticBid } from '../../utils/contractActivationLayer.js';
+import {
+  assertIsSnapshotConsumer,
+  getUnifiedShipmentSnapshot,
+  resolveBidFromSnapshot
+} from '../../utils/shipmentUIState.js';
 
 function formatHHMMSS(totalSeconds) {
   const s = Math.max(0, Math.floor(totalSeconds));
@@ -20,7 +28,7 @@ function formatHHMMSS(totalSeconds) {
 
 // Card representing a bid placed by a carrier.
 const BidCard = ({
-  bid,
+  bid = {},
   onAccept,
   onReject,
   onSuggest,
@@ -37,45 +45,84 @@ const BidCard = ({
   counterpartyLabel = null
 }) => {
   const { t } = useLanguage();
+  const [bidUiTick, bumpBidUi] = useState(0);
+
+  useEffect(() => {
+    const refresh = (e) => {
+      const bidId = String(e?.detail?.bidId || '').trim();
+      const loadCode = String(e?.detail?.loadCode || e?.detail?.ref || '').trim();
+      if (bidId && String(bid.id) !== bidId) return;
+      if (
+        !bidId &&
+        loadCode &&
+        String(bid.loadCode || bid.load_code || '') !== loadCode
+      ) {
+        return;
+      }
+      bumpBidUi((n) => n + 1);
+    };
+    window.addEventListener('tp:bid-updated', refresh);
+    window.addEventListener('tp:contract-activated', refresh);
+    return () => {
+      window.removeEventListener('tp:bid-updated', refresh);
+      window.removeEventListener('tp:contract-activated', refresh);
+    };
+  }, [bid.id, bid.loadCode, bid.load_code]);
+
+  const resolvedBid = useMemo(() => {
+    const mergedBid = mergeOptimisticBid(bid && typeof bid === 'object' ? bid : {});
+    const snapshot = assertIsSnapshotConsumer(
+      getUnifiedShipmentSnapshot({ bid: mergedBid }),
+      'BidCard'
+    );
+    return resolveBidFromSnapshot(snapshot, bid?.id, 'BidCard');
+  }, [bid, bidUiTick]);
 
   const createdAtMs = useMemo(() => {
-    const v = bid?.createdAt;
+    const v = resolvedBid?.createdAt;
     const d = v ? new Date(v) : null;
     return d && !Number.isNaN(d.getTime()) ? d.getTime() : Date.now();
-  }, [bid?.createdAt]);
+  }, [resolvedBid?.createdAt]);
 
   const expiresAtMs = useMemo(() => {
-    const v = bid?.expiresAt;
+    const v = resolvedBid?.expiresAt;
     const d = v ? new Date(v) : null;
     if (d && !Number.isNaN(d.getTime())) return d.getTime();
     return createdAtMs + 2 * 60 * 60 * 1000;
-  }, [bid?.expiresAt, createdAtMs]);
+  }, [resolvedBid?.expiresAt, createdAtMs]);
 
   const totalWindow = Math.max(1, Math.floor((expiresAtMs - createdAtMs) / 1000));
   const [nowMs, setNowMs] = useState(Date.now());
   useEffect(() => {
-    const t = setInterval(() => setNowMs(Date.now()), 1000);
-    return () => clearInterval(t);
+    const tick = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(tick);
   }, []);
 
   const remainingSeconds = Math.max(0, Math.floor((expiresAtMs - nowMs) / 1000));
-  const isExpired = remainingSeconds <= 0 || bid.status === 'expired';
-  const canonStatus = normalizeBidStatus(bid.status);
+  const isExpired = remainingSeconds <= 0 || resolvedBid?.status === 'expired';
+  const canonStatus = normalizeBidStatus(resolvedBid?.status);
   const statusBadgeLabel = isExpired
     ? t('bidCard.expired')
     : translateBidStatus(t, canonStatus);
   const progressPct = Math.max(0, Math.min(100, Math.round((remainingSeconds / totalWindow) * 100)));
-  const amount = Number(bid?.amount ?? bid?.price ?? 0);
-  const suggestedAmount = bid?.suggestedAmount != null ? Number(bid.suggestedAmount) : null;
-  const currency = bid?.currency || 'PKR';
-  const isSuggested = isCounterOffered(bid.status);
-  const suggestedByShipper = isSuggested && bid?.suggestedBy === 'shipper';
-  const suggestedByCarrier = isSuggested && bid?.suggestedBy === 'carrier';
+  const amount = Number(resolvedBid?.amount ?? resolvedBid?.price ?? 0);
+  const suggestedAmount =
+    resolvedBid?.suggestedAmount != null ? Number(resolvedBid.suggestedAmount) : null;
+  const currency = resolvedBid?.currency || 'PKR';
+  const bidType = deriveBidType(resolvedBid);
+  const isSuggested = bidType === 'suggested' || isCounterOffered(resolvedBid.status);
+  const suggestedByShipper = isSuggested && resolvedBid?.suggestedBy === 'shipper';
+  const suggestedByCarrier = isSuggested && resolvedBid?.suggestedBy === 'carrier';
   const displayAmount = suggestedAmount != null ? suggestedAmount : amount;
 
-  const profileId = profileUserId || ratingTargetUserId || (isShipper ? bid.carrierId : bid.shipperId);
+  const profileId =
+    profileUserId || ratingTargetUserId || (isShipper ? resolvedBid.carrierId : resolvedBid.shipperId);
+  const profileAvatar = isShipper
+    ? resolvedBid.carrierAvatar || resolvedBid.carrierProfileImage
+    : resolvedBid.shipperAvatar || resolvedBid.shipperProfileImage;
   const primaryName =
-    (isShipper ? bid.carrierName : counterpartyLabel || bid.carrierName) || (isShipper ? t('auth.carrier') : t('auth.shipper'));
+    (isShipper ? resolvedBid.carrierName : counterpartyLabel || resolvedBid.carrierName) ||
+    (isShipper ? t('auth.carrier') : t('auth.shipper'));
   const profileRole = isShipper ? t('auth.carrier') : t('auth.shipper');
 
   const [suggestInput, setSuggestInput] = useState('');
@@ -83,17 +130,19 @@ const BidCard = ({
 
   const [confirmState, setConfirmState] = useState(null); // { kind: 'accept'|'reject', handler: fn }
 
-  const showActions = isActiveBidStatus(bid.status) && !isExpired;
+  const showActions = isActiveBidStatus(resolvedBid.status) && !isExpired;
 
   const canAccept = isShipper
-    ? showActions && (isAwaitingShipper(bid.status) || suggestedByCarrier) && typeof onAccept === 'function'
+    ? showActions &&
+      (isAwaitingShipper(resolvedBid.status) || suggestedByCarrier) &&
+      typeof onAccept === 'function'
     : isCarrier
     ? showActions && suggestedByShipper && typeof onAcceptSuggestion === 'function'
     : false;
 
   const canReject = isShipper
     ? showActions &&
-      (isAwaitingShipper(bid.status) || suggestedByCarrier) &&
+      (isAwaitingShipper(resolvedBid.status) || suggestedByCarrier) &&
       typeof onReject === 'function'
     : isCarrier
     ? showActions && suggestedByShipper && typeof onRejectSuggestion === 'function'
@@ -101,11 +150,11 @@ const BidCard = ({
 
   const canSuggest = isShipper
     ? showActions &&
-      (isAwaitingShipper(bid.status) || suggestedByCarrier) &&
+      (isAwaitingShipper(resolvedBid.status) || suggestedByCarrier) &&
       typeof onSuggest === 'function'
     : isCarrier
     ? showActions &&
-      (isAwaitingShipper(bid.status) || suggestedByShipper) &&
+      (isAwaitingShipper(resolvedBid.status) || suggestedByShipper) &&
       typeof onSuggest === 'function'
     : false;
 
@@ -113,11 +162,11 @@ const BidCard = ({
   const routeDistance = formatDistanceKm(distRaw, t);
 
   const acceptHandler = canAccept
-    ? () => (isShipper ? onAccept?.(bid) : onAcceptSuggestion?.(bid))
+    ? () => (isShipper ? onAccept?.(resolvedBid) : onAcceptSuggestion?.(resolvedBid))
     : null;
 
   const rejectHandler = canReject
-    ? () => (isShipper ? onReject?.(bid) : onRejectSuggestion?.(bid))
+    ? () => (isShipper ? onReject?.(resolvedBid) : onRejectSuggestion?.(resolvedBid))
     : null;
 
   useEffect(() => {
@@ -128,20 +177,29 @@ const BidCard = ({
   const handleSuggestSubmit = () => {
     const val = Number(suggestInput);
     if (!Number.isNaN(val) && val >= 0 && onSuggest) {
-      onSuggest(bid, val);
+      onSuggest(resolvedBid, val);
       setSuggestInput('');
       setShowSuggestInput(false);
     }
   };
 
+  const isAccepted = canonStatus === BID_STATUS.ACCEPTED;
+  const trackingRef = getTrackingRef(resolvedBid) || null;
+
   return (
-    <Card className={`tp-bid-card ${isExpired ? 'opacity-50' : ''}`}>
+    <Card className={`tp-bid-card ${isSuggested ? 'tp-bid-card--suggested border-info' : ''} ${isExpired ? 'opacity-50' : ''}`}>
       <div className="d-flex justify-content-between align-items-center mb-2 gap-2 flex-wrap">
         <div className="min-w-0 flex-grow-1 tp-min-w-12">
           <div className="d-flex align-items-center gap-2 flex-wrap">
             {profileId ? (
               <h6 className="mb-0">
-                <ProfileLink userId={profileId} name={primaryName} showBadge role={profileRole} />
+                <ProfileAccessLayer
+                  userId={profileId}
+                  name={primaryName}
+                  avatarSrc={profileAvatar}
+                  showBadge
+                  role={profileRole}
+                />
               </h6>
             ) : (
               <h6 className="mb-0 text-break">{primaryName}</h6>
@@ -149,26 +207,31 @@ const BidCard = ({
             {profileId ? <UserRatingBadge userId={profileId} /> : null}
           </div>
           <small className="text-muted d-block text-break">
-            {bid.vehicleType} · {bid.transitTime} {t('bidCard.daysSuffix')}
+            {resolvedBid.vehicleType} · {resolvedBid.transitTime} {t('bidCard.daysSuffix')}
             {routeDistance.available ? ` · ${routeDistance.display}` : ''}
           </small>
           {!routeDistance.available && distRaw != null ? (
             <small className="text-muted d-block">{routeDistance.display}</small>
           ) : null}
         </div>
-        <Badge
-          variant={
-            canonStatus === BID_STATUS.ACCEPTED
-              ? 'success'
-              : isCounterOffered(bid.status)
-                ? 'info'
-                : isExpired
-                  ? 'secondary'
-                  : 'warning'
-          }
-        >
-          {statusBadgeLabel}
-        </Badge>
+        <div className="d-flex flex-column align-items-end gap-1">
+          {isSuggested && !isAccepted ? (
+            <Badge variant="info">{t('bidCard.suggestedBidType')}</Badge>
+          ) : null}
+          <Badge
+            variant={
+              canonStatus === BID_STATUS.ACCEPTED
+                ? 'success'
+                : isSuggested
+                  ? 'info'
+                  : isExpired
+                    ? 'secondary'
+                    : 'warning'
+            }
+          >
+            {statusBadgeLabel}
+          </Badge>
+        </div>
       </div>
       <div className="d-flex justify-content-between align-items-end mb-2">
         <div>
@@ -189,7 +252,7 @@ const BidCard = ({
           )}
         </div>
         <small className="text-muted">
-          {bid.createdAt ? new Date(bid.createdAt).toLocaleString() : ''}
+          {resolvedBid.createdAt ? new Date(resolvedBid.createdAt).toLocaleString() : ''}
         </small>
       </div>
       <div className="mb-2">
@@ -285,6 +348,16 @@ const BidCard = ({
           {t('bidCard.bidExpiredHint')}
         </small>
       )}
+      {isAccepted && trackingRef ? (
+        <div className="mt-2 text-end">
+          <Link
+            to={`/shipments/tracking/${encodeURIComponent(trackingRef)}`}
+            className="btn btn-sm btn-primary"
+          >
+            {t('pages.dashboard.viewLiveTracking')}
+          </Link>
+        </div>
+      ) : null}
     </Card>
   );
 };

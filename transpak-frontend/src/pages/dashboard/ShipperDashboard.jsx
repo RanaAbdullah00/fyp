@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth.js';
 import { useApi } from '../../hooks/useApi.js';
@@ -7,39 +7,64 @@ import { useDashboardMetrics } from '../../hooks/useDashboardMetrics.js';
 import StatsCards from '../../components/dashboard/StatsCards.jsx';
 import ActivityFeed from '../../components/dashboard/ActivityFeed.jsx';
 import LoadList from '../../components/loadboard/LoadList.jsx';
-import ActiveShipmentPanel from '../../components/dashboard/ActiveShipmentPanel.jsx';
+import DashboardShipmentTabs from '../../components/dashboard/DashboardShipmentTabs.jsx';
+import SpaceSentRequestsPanel from '../../components/carrier/SpaceSentRequestsPanel.jsx';
 import { normalizeLoads } from '../../adapters/normalize.js';
 import ActiveRoleBadge from '../../components/profile/ActiveRoleBadge.jsx';
-import { useShipmentTracking } from '../../hooks/useShipmentTracking.js';
 import Loader from '../../components/ui/Loader.jsx';
-
 const ShipperDashboard = () => {
   const { t } = useLanguage();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const activeRole = user?.activeRole ?? user?.roles?.[0];
   const profileComplete = user?.profileComplete === true;
-  const { ops, loadingOps, activities } = useDashboardMetrics();
+  const { ops, loadingOps, activities, refreshOps } = useDashboardMetrics();
   const [mineLoads, setMineLoads] = useState([]);
   const [loadingLoads, setLoadingLoads] = useState(true);
   const { request } = useApi();
 
-  useEffect(() => {
-    let cancelled = false;
+  const refreshLoads = useCallback(async () => {
     setLoadingLoads(true);
-    setMineLoads([]);
-    (async () => {
-      try {
-        const data = await request({ url: '/loads/mine', skipGlobalErrorToast: true });
-        if (!cancelled) setMineLoads(normalizeLoads(Array.isArray(data) ? data : []));
-      } catch {
-        if (!cancelled) setMineLoads([]);
-      } finally {
-        if (!cancelled) setLoadingLoads(false);
+    try {
+      const data = await request({ url: '/loads/mine', skipGlobalErrorToast: true });
+      setMineLoads(normalizeLoads(Array.isArray(data) ? data : []));
+    } catch {
+      setMineLoads([]);
+    } finally {
+      setLoadingLoads(false);
+    }
+  }, [request]);
+
+  const refreshBids = refreshOps;
+
+  useEffect(() => {
+    refreshLoads();
+  }, [refreshLoads, user?.activeRole]);
+
+  useEffect(() => {
+    const onRefresh = (e) => {
+      const scope = e?.detail?.scope;
+      if (!scope || scope === 'all' || scope === 'loads' || scope === 'shipments') {
+        refreshLoads();
       }
-    })();
-    return () => {
-      cancelled = true;
+      if (!scope || scope === 'all' || scope === 'bids') {
+        refreshBids();
+      }
     };
-  }, [request, user?.activeRole]);
+    const onContractActivated = () => {
+      refreshBids();
+    };
+    const onShipmentsRefresh = () => {
+      refreshBids();
+    };
+    window.addEventListener('tp:realtime-refresh', onRefresh);
+    window.addEventListener('tp:contract-activated', onContractActivated);
+    window.addEventListener('tp:shipments-refresh', onShipmentsRefresh);
+    return () => {
+      window.removeEventListener('tp:realtime-refresh', onRefresh);
+      window.removeEventListener('tp:contract-activated', onContractActivated);
+      window.removeEventListener('tp:shipments-refresh', onShipmentsRefresh);
+    };
+  }, [refreshLoads, refreshBids]);
 
   const earnings = useMemo(
     () =>
@@ -65,16 +90,13 @@ const ShipperDashboard = () => {
 
   const openLoads = useMemo(() => mineLoads.filter((l) => l.status === 'open'), [mineLoads]);
 
-  const activeTrackRef = useMemo(() => {
-    const active = mineLoads.find((l) => String(l.status || '').toLowerCase() === 'booked');
-    return active ? active.code || active.id : null;
-  }, [mineLoads]);
-
-  const { trackingData, loading: loadingTracking } = useShipmentTracking({
-    trackRef: activeTrackRef,
-    shareLive: false,
-    enabled: Boolean(activeTrackRef)
-  });
+  if (authLoading || !user?.id || !activeRole) {
+    return (
+      <div className="container py-3 text-center">
+        <Loader />
+      </div>
+    );
+  }
 
   return (
     <div className="container py-3 tp-dashboard tp-dashboard--shipper">
@@ -118,7 +140,7 @@ const ShipperDashboard = () => {
               <Loader />
             </div>
           ) : (
-            <LoadList loads={openLoads.length ? openLoads : mineLoads.slice(0, 5)} />
+            <LoadList loads={openLoads} />
           )}
         </div>
         <div className="col-12 col-lg-5">
@@ -127,14 +149,19 @@ const ShipperDashboard = () => {
       </div>
 
       <div className="mt-4">
+        <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+          <h6 className="mb-0">{t('loadsHub.mySpaceRequests')}</h6>
+          <Link to="/loads/manage?tab=market" className="btn btn-sm btn-primary">
+            {t('loadsHub.sendRequest')}
+          </Link>
+        </div>
+        <SpaceSentRequestsPanel embedded />
+      </div>
+
+      <div className="mt-4">
         <h6 className="mb-3">{t('pages.dashboard.myActiveShipments')}</h6>
-        <ActiveShipmentPanel
-          trackingData={trackingData}
-          loadingTracking={loadingTracking}
-          trackHref={
-            activeTrackRef ? `/shipments/tracking/${encodeURIComponent(activeTrackRef)}` : null
-          }
-          emptyState={
+        <DashboardShipmentTabs
+          activeEmptyState={
             <div className="text-muted text-center py-5 px-3 tp-empty-state rounded-3 border border-dashed">
               <div className="fw-semibold mb-1">{t('pages.dashboard.emptyNoActiveShipments')}</div>
               <div className="small">{t('pages.dashboard.emptyNoActiveShipmentsBody')}</div>

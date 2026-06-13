@@ -8,7 +8,7 @@ import { useAuth } from '../../hooks/useAuth.js';
 import { useApi } from '../../hooks/useApi.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { notifySuccess, notifyError, notifyInfo } from '../../components/ui/ToastProvider.jsx';
-import { notifyProfileIncomplete } from '../../utils/notifySystem.js';
+import { notifyProfileIncomplete, notifySystem, SystemNotifyType } from '../../utils/notifySystem.js';
 import { formatUserError } from '../../utils/userErrors.js';
 import { emitRealtimeRefresh } from '../../utils/realtimeRefresh.js';
 
@@ -78,6 +78,10 @@ const PlaceBid = () => {
       });
       if (!bid?.id && !bid?.loadId) {
         throw new Error(t('pages.placeBid.bidFailed'));
+      }
+
+      if (bid?.vehicleTypeMismatchWarning) {
+        notifySystem(SystemNotifyType.WARNING, t('pages.loads.vehicleTypeMismatchWarning'));
       }
 
       notifySuccess(t('pages.placeBid.bidPlaced', { code: load.code }));

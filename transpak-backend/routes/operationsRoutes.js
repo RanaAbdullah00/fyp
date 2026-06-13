@@ -3,8 +3,24 @@ const { protect, requireAnyRole, validateViewAs } = require("../middleware/authM
 const { resolveCommercialViewRole } = require("../utils/commercialViewRole");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
 const { query } = require("../db/pool");
+const { buildEventSync } = require("../utils/eventSync");
 
 const router = express.Router();
+
+/** Reconnect recovery — backend-confirmed events since timestamp. */
+router.get(
+  "/sync/events",
+  protect,
+  requireAnyRole(["shipper", "carrier", "admin"]),
+  async (req, res) => {
+    try {
+      const payload = await buildEventSync(req.auth, req);
+      return sendSuccess(res, 200, payload);
+    } catch (err) {
+      return sendError(res, 500, err.message || "Server error");
+    }
+  }
+);
 
 router.get(
   "/snapshot",
@@ -55,7 +71,7 @@ router.get(
         query(
           `SELECT COUNT(*) FILTER (WHERE status IN ('pending_shipper_confirmation','counter_offered','pending','suggested'))::int AS active,
                   COUNT(*) FILTER (WHERE status = 'accepted')::int AS won
-           FROM bids WHERE carrier_id = $1`,
+           FROM bids WHERE carrier_id = $1 AND status <> 'cancelled'`,
           [uid]
         ),
         query(

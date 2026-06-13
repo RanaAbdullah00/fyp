@@ -9,8 +9,9 @@ const {
   handleValidationErrors
 } = require("../middleware/validateShipmentBody");
 const { query } = require("../db/pool");
-const { notifyUser } = require("../utils/notifyEvent");
-const { emitToTracking } = require("../services/realtimeHub");
+const { notifyUser, notifyAdmins } = require("../utils/notifyEvent");
+const { buildDedupeKey } = require("../utils/realtimeDispatch");
+const { emitToTracking, emitToShipment } = require("../services/realtimeHub");
 const {
   buildRouteCoordinates,
   trackRoomKey,
@@ -97,16 +98,10 @@ async function resolveLoadForRef(refKey) {
   return rows[0] || null;
 }
 
+const { createShipmentUnified } = require("../utils/shipmentFactory");
+
 async function getOrCreateShipment(loadId) {
-  const { rows } = await query(
-    `INSERT INTO shipments (load_id, status, location_unavailable)
-     VALUES ($1, 'posted', true)
-     ON CONFLICT (load_id)
-     DO UPDATE SET load_id = EXCLUDED.load_id
-     RETURNING id, load_id, status, current_lat, current_lng, location_unavailable, updated_at`,
-    [loadId]
-  );
-  return rows[0];
+  return createShipmentUnified(null, { loadId, mode: "get_or_create" });
 }
 
 async function getShipmentHistory(shipmentId) {
@@ -125,6 +120,131 @@ async function getShipmentHistory(shipmentId) {
   }));
 }
 
+/** Safe user id for shipment list queries — never throws. */
+function resolveShipmentsUserId(req) {
+  const raw = req?.auth?.userId ?? req?.user?.id ?? null;
+  if (raw == null) return null;
+  const uid = String(raw).trim();
+  return uid || null;
+}
+
+/** Non-throwing empty fallback for GET /shipments/active (keeps dashboards alive). */
+function sendActiveShipmentsFallback(res, message = "No active shipments found") {
+  return sendSuccess(res, 200, [], message);
+}
+
+const ACTIVE_SHIPMENT_SELECT = `
+  SELECT l.id, l.code, l.cargo, l.origin, l.destination,
+         l.vehicle_type AS "vehicleType", l.pickup_date AS "pickupDate",
+         l.shipper_id AS "shipperId", l.assigned_carrier_id AS "assignedCarrierId",
+         COALESCE(us.full_name, us.email, 'Shipper') AS "shipperName",
+         COALESCE(uc.full_name, uc.email, 'Carrier') AS "carrierName",
+         us.profile_image AS "shipperAvatar",
+         uc.profile_image AS "carrierAvatar",
+         s.id AS "shipmentId", s.status AS "shipmentStatus", s.updated_at AS "updatedAt",
+         CASE
+           WHEN l.booking_reference IS NOT NULL AND l.booking_reference LIKE 'space:%'
+           THEN 'CAPACITY'
+           ELSE 'BID'
+         END AS "flowType",
+         CASE
+           WHEN s.status NOT IN ('delivered', 'closed')
+           THEN true
+           ELSE false
+         END AS "trackingEnabled"
+  FROM shipments s
+  JOIN loads l ON l.id = s.load_id
+  LEFT JOIN users us ON us.id = l.shipper_id
+  LEFT JOIN users uc ON uc.id = l.assigned_carrier_id
+  WHERE s.status NOT IN ('delivered', 'closed')
+    AND (
+      l.status = 'booked'
+      OR l.assigned_carrier_id IS NOT NULL
+    )
+    AND (l.shipper_id = $1 OR l.assigned_carrier_id = $1)
+  ORDER BY s.updated_at DESC
+  LIMIT 50`;
+
+const ACTIVE_SHIPMENT_SELECT_NO_BOOKING_REF = `
+  SELECT l.id, l.code, l.cargo, l.origin, l.destination,
+         l.vehicle_type AS "vehicleType", l.pickup_date AS "pickupDate",
+         l.shipper_id AS "shipperId", l.assigned_carrier_id AS "assignedCarrierId",
+         COALESCE(us.full_name, us.email, 'Shipper') AS "shipperName",
+         COALESCE(uc.full_name, uc.email, 'Carrier') AS "carrierName",
+         us.profile_image AS "shipperAvatar",
+         uc.profile_image AS "carrierAvatar",
+         s.id AS "shipmentId", s.status AS "shipmentStatus", s.updated_at AS "updatedAt",
+         'BID' AS "flowType",
+         CASE
+           WHEN s.status NOT IN ('delivered', 'closed')
+           THEN true
+           ELSE false
+         END AS "trackingEnabled"
+  FROM shipments s
+  JOIN loads l ON l.id = s.load_id
+  LEFT JOIN users us ON us.id = l.shipper_id
+  LEFT JOIN users uc ON uc.id = l.assigned_carrier_id
+  WHERE s.status NOT IN ('delivered', 'closed')
+    AND (
+      l.status = 'booked'
+      OR l.assigned_carrier_id IS NOT NULL
+    )
+    AND (l.shipper_id = $1 OR l.assigned_carrier_id = $1)
+  ORDER BY s.updated_at DESC
+  LIMIT 50`;
+
+async function queryActiveShipmentsForUser(uid) {
+  try {
+    const result = await query(ACTIVE_SHIPMENT_SELECT, [uid]);
+    return Array.isArray(result?.rows) ? result.rows : [];
+  } catch (dbErr) {
+    const msg = String(dbErr?.message || "");
+    if (/booking_reference|column .* does not exist/i.test(msg)) {
+      const result = await query(ACTIVE_SHIPMENT_SELECT_NO_BOOKING_REF, [uid]);
+      return Array.isArray(result?.rows) ? result.rows : [];
+    }
+    throw dbErr;
+  }
+}
+
+router.get(
+  "/active",
+  protect,
+  requireAnyRole(["shipper", "carrier", "admin"]),
+  async (req, res) => {
+    try {
+      const uid = resolveShipmentsUserId(req);
+      if (!uid) {
+        return sendActiveShipmentsFallback(res);
+      }
+
+      let rows = [];
+      try {
+        rows = await queryActiveShipmentsForUser(uid);
+      } catch (dbErr) {
+        // eslint-disable-next-line no-console
+        console.warn("[shipments/active] query failed", {
+          userId: uid,
+          message: dbErr?.message || "unknown",
+          code: dbErr?.code || null
+        });
+        return sendActiveShipmentsFallback(res);
+      }
+
+      const safeRows = rows.filter((row) => row && typeof row === "object");
+      if (!safeRows.length) {
+        return sendActiveShipmentsFallback(res);
+      }
+
+      return sendSuccess(res, 200, safeRows);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn("[shipments/active] handler error", err?.message || "unknown");
+      return sendActiveShipmentsFallback(res);
+    }
+  }
+);
+
 router.get(
   "/completed",
   protect,
@@ -135,9 +255,16 @@ router.get(
       const { rows } = await query(
         `SELECT l.id, l.code, l.cargo, l.origin, l.destination,
                 l.vehicle_type AS "vehicleType", l.pickup_date AS "pickupDate",
+                l.shipper_id AS "shipperId", l.assigned_carrier_id AS "assignedCarrierId",
+                COALESCE(uc.full_name, uc.email, 'Carrier') AS "carrierName",
+                COALESCE(us.full_name, us.email, 'Shipper') AS "shipperName",
+                uc.profile_image AS "carrierAvatar",
+                us.profile_image AS "shipperAvatar",
                 s.status AS "shipmentStatus", s.updated_at AS "completedAt"
          FROM shipments s
          JOIN loads l ON l.id = s.load_id
+         LEFT JOIN users uc ON uc.id = l.assigned_carrier_id
+         LEFT JOIN users us ON us.id = l.shipper_id
          WHERE s.status IN ('delivered', 'closed')
            AND (l.shipper_id = $1 OR l.assigned_carrier_id = $1)
          ORDER BY s.updated_at DESC
@@ -147,6 +274,37 @@ router.get(
       return sendSuccess(res, 200, rows);
     } catch (err) {
       return sendError(res, 500, err.message || "Server error");
+    }
+  }
+);
+
+router.get(
+  "/:id/status",
+  protect,
+  requireAnyRole(["shipper", "carrier", "admin"]),
+  shipmentIdParam,
+  handleValidationErrors,
+  async (req, res) => {
+    try {
+      const load = await resolveLoadForRef(req.params.id);
+      if (!load) return sendError(res, 404, "Not found");
+      assertTrackAccessOrThrow(load, req.auth);
+
+      const shipment = await getOrCreateShipment(load.id);
+      const history = await getShipmentHistory(shipment.id);
+      const canonical = normalizeShipmentStatus(shipment.status) || "posted";
+
+      return sendSuccess(res, 200, {
+        ref: trackingRefKey(load),
+        status: canonical,
+        history,
+        trackingEnabled: !["delivered", "closed", "completed"].includes(canonical)
+      });
+    } catch (err) {
+      const status = err.statusCode || 500;
+      const safeMsg =
+        status >= 500 ? "Server error" : err.message || "Request failed";
+      return sendError(res, status, safeMsg);
     }
   }
 );
@@ -244,6 +402,22 @@ router.put(
       if (nextLoadStatus && nextLoadStatus !== load.status) {
         await query(`UPDATE loads SET status = $2, updated_at = now() WHERE id = $1`, [load.id, nextLoadStatus]);
       }
+      if (canonical === "intransit") {
+        await query(
+          `UPDATE carrier_space_requests
+           SET status = 'in_transit', updated_at = now()
+           WHERE load_id = $1 AND status IN ('active', 'accepted')`,
+          [load.id]
+        );
+      }
+      if (canonical === "delivered" || canonical === "closed") {
+        await query(
+          `UPDATE carrier_space_requests
+           SET status = 'completed', updated_at = now()
+           WHERE load_id = $1 AND status NOT IN ('completed', 'rejected')`,
+          [load.id]
+        );
+      }
 
       const statusNotifyMap = {
         pickedup: { type: "SHIPMENT_PICKED_UP", title: "SHIPMENT_PICKED_UP" },
@@ -280,6 +454,13 @@ router.put(
             message: msg
           });
         }
+        void notifyAdmins({
+          senderId: req.auth.userId,
+          title: notifyMeta.type,
+          type: notifyMeta.type,
+          message: `[Platform] ${msg}`,
+          idempotencyKey: buildDedupeKey(["ADMIN", notifyMeta.type, load.id, canonical])
+        });
       }
 
       const history = await getShipmentHistory(shipment.id);
@@ -291,19 +472,19 @@ router.put(
       });
       const room = trackRoomKey(load);
       if (room && core) emitToTracking(room, "tracking:update", core);
-      if (canonical === "booked") {
+      if (shipment?.id && core) emitToShipment(shipment.id, "tracking:update", core);
+      const auditActionMap = {
+        pickedup: "shipment.picked_up",
+        intransit: "shipment.in_transit",
+        booked: "shipment.started",
+        delivered: "shipment.completed",
+        closed: "shipment.completed"
+      };
+      const auditAction = auditActionMap[canonical];
+      if (auditAction) {
         void writeAudit({
           actorUserId: req.auth.userId,
-          action: "shipment.started",
-          targetEntity: "shipment",
-          targetId: shipment.id,
-          metadata: { loadId: load.id, status: canonical }
-        });
-      }
-      if (canonical === "delivered" || canonical === "closed") {
-        void writeAudit({
-          actorUserId: req.auth.userId,
-          action: "shipment.completed",
+          action: auditAction,
           targetEntity: "shipment",
           targetId: shipment.id,
           metadata: { loadId: load.id, status: canonical }

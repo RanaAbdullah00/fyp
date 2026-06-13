@@ -1,47 +1,64 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
 import Loader from '../../components/ui/Loader.jsx';
-import Button from '../../components/ui/Button.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
-import { normalizeLoads } from '../../adapters/normalize.js';
+import { useAuth } from '../../hooks/useAuth.js';
+import { mergeActiveShipmentRows } from '../../utils/activeShipmentModel.js';
+import { dashboardPathForRole } from '../../utils/dashboardPath.js';
 
 const AcceptedLoads = () => {
   const { request, loading } = useApi();
   const { t } = useLanguage();
-  const [loads, setLoads] = useState([]);
-  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [rows, setRows] = useState([]);
+  const hasLoadedRef = useRef(false);
+
+  const refresh = useCallback(async ({ silent = false } = {}) => {
+    try {
+      const data = await request({
+        method: 'GET',
+        url: '/shipments/active',
+        skipGlobalErrorToast: true
+      });
+      setRows((prev) => {
+        const next = mergeActiveShipmentRows(prev, data, { silent });
+        if (next.length) hasLoadedRef.current = true;
+        return next;
+      });
+    } catch {
+      if (!silent) setRows([]);
+    }
+  }, [request]);
 
   useEffect(() => {
-    let alive = true;
-    const run = async () => {
-      try {
-        const mineBids = await request({ method: 'GET', url: '/bids/mine' });
-        if (!alive) return;
-        const bidList = Array.isArray(mineBids) ? mineBids : [];
-        const accepted = bidList.filter((b) => String(b.status) === 'accepted');
-        const loadIds = accepted.map((b) => b.loadId).filter(Boolean);
-        const details = await Promise.all(
-          loadIds.map(async (id) => {
-            try {
-              return await request({ method: 'GET', url: `/loads/${id}` });
-            } catch {
-              return null;
-            }
-          })
-        );
-        if (alive) setLoads(normalizeLoads(details.filter(Boolean)));
-      } catch {
-        if (alive) setLoads([]);
-      }
+    refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    const onHydrate = (e) => {
+      const nextRows = e?.detail?.rows;
+      if (!Array.isArray(nextRows)) return;
+      if (!nextRows.length && e?.detail?.pendingRetry) return;
+      setRows((prev) => mergeActiveShipmentRows(prev, nextRows));
     };
-    run();
+    const onRefresh = (e) => {
+      const scope = e?.detail?.scope;
+      if (scope !== 'shipments') return;
+      if (e?.detail?.atomicSync) return;
+      refresh({ silent: hasLoadedRef.current });
+    };
+    window.addEventListener('tp:active-shipments-hydrate', onHydrate);
+    window.addEventListener('tp:realtime-refresh', onRefresh);
     return () => {
-      alive = false;
+      window.removeEventListener('tp:active-shipments-hydrate', onHydrate);
+      window.removeEventListener('tp:realtime-refresh', onRefresh);
     };
-  }, [request]);
+  }, [refresh]);
+
+  const dashboardHref = dashboardPathForRole(user?.activeRole);
 
   return (
     <div className="container py-3">
@@ -50,33 +67,29 @@ const AcceptedLoads = () => {
         <div className="d-flex justify-content-center py-5">
           <Loader />
         </div>
-      ) : loads.length === 0 ? (
+      ) : rows.length === 0 ? (
         <div className="text-center text-muted py-5 px-3 tp-empty-state rounded-3 border border-dashed">
           {t('pages.loads.emptyAcceptedLoads')}
         </div>
       ) : (
-        loads.map((l) => (
-          <Card key={l.id} className="p-3">
+        rows.map((row) => (
+          <Card key={row.trackRef || row.id} className="p-3 mb-2">
             <div className="d-flex justify-content-between align-items-start flex-wrap gap-2">
               <div>
-                <div className="fw-semibold">{l.cargo}</div>
+                <div className="fw-semibold">{row.cargo || row.trackRef}</div>
                 <div className="small text-muted">
-                  {l.code} · {l.origin} → {l.destination}
+                  {row.trackRef} · {row.origin} → {row.destination}
                 </div>
                 <div className="small text-muted mt-1">
-                  {t('pages.loads.pickupLabel')}: {l.pickupDate || t('common.emDash')}
+                  {t('pages.loads.pickupLabel')}: {row.pickupDate || t('common.emDash')}
                 </div>
               </div>
-              <Badge variant={l.status === 'assigned' ? 'warning' : 'secondary'}>{l.status}</Badge>
+              <Badge variant="success">{row.shipmentStatus || 'booked'}</Badge>
             </div>
             <div className="d-flex justify-content-end mt-2">
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => navigate(`/shipments/tracking/${encodeURIComponent(l.code || l.id)}`)}
-              >
-                {t('pages.loads.trackShipment')}
-              </Button>
+              <Link to={dashboardHref} className="btn btn-primary btn-sm">
+                {t('pages.dashboard.myActiveShipments')}
+              </Link>
             </div>
           </Card>
         ))

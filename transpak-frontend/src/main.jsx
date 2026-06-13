@@ -14,12 +14,14 @@ import { LanguageProvider } from './context/LanguageContext.jsx';
 import { AppProvider } from './context/AppContext.jsx';
 import { ThemeProvider } from './context/ThemeContext.jsx';
 import { ToastProvider } from './components/ui/ToastProvider.jsx';
-import ErrorBoundary from './components/ui/ErrorBoundary.jsx';
+import NotificationToastHost from './components/notifications/NotificationToast.jsx';
 import { initTranspakBuildInfo } from './utils/buildInfo.js';
 import { verifyProductionDeploy } from './utils/verifyDeploy.js';
+import { initContractSyncGuarantee } from './utils/contractSyncGuarantee.js';
 
 initTranspakBuildInfo();
 verifyProductionDeploy();
+initContractSyncGuarantee();
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -29,9 +31,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <LanguageProvider>
             <AppProvider>
               <ToastProvider>
-                <ErrorBoundary>
-                  <App />
-                </ErrorBoundary>
+                <NotificationToastHost />
+                <App />
               </ToastProvider>
             </AppProvider>
           </LanguageProvider>

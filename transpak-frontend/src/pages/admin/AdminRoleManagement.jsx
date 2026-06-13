@@ -8,6 +8,7 @@ import { useLanguage } from '../../hooks/useLanguage.js';
 import { notifyError, notifySuccess } from '../../components/ui/ToastProvider.jsx';
 import { ensureArray, ensureRolesArray } from '../../utils/unwrapApi.js';
 import { formatUserError } from '../../utils/userErrors.js';
+import TranslatedText from '../../components/ui/TranslatedText.jsx';
 
 const ROLE_OPTIONS = ['shipper', 'carrier', 'admin'];
 
@@ -98,13 +99,13 @@ const AdminRoleManagement = () => {
   );
 
   return (
-    <div className="container py-3">
+    <div className="container py-3 tp-dashboard tp-dashboard--admin">
       <h5 className="mb-2">{t('pages.admin.roleMgmt.title')}</h5>
       <p className="small text-muted mb-3">{t('pages.admin.roleMgmt.subtitle')}</p>
 
       {listError && (
         <div className="alert alert-danger rounded-3 border-0 shadow-sm" role="alert">
-          {listError}
+          <TranslatedText text={listError} as="span" />
           <button type="button" className="btn btn-sm btn-outline-danger ms-2 rounded-lg" onClick={() => refresh()}>
             {t('pages.admin.tryAgain')}
           </button>
@@ -117,7 +118,7 @@ const AdminRoleManagement = () => {
         <Card className="p-0 overflow-hidden border-0 shadow-sm">
           <div className="table-responsive">
             <table className="table table-hover table-sm mb-0 align-middle">
-              <thead className="table-light">
+              <thead>
                 <tr>
                   <th className="ps-3 py-3">{t('auth.fullName')}</th>
                   <th className="py-3">{t('auth.email')}</th>

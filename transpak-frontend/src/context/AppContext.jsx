@@ -12,13 +12,23 @@ import { getAuthToken } from '../utils/authTokenStorage.js';
 import { workspaceQueryParams } from '../utils/workspaceApi.js';
 import { getWorkspace } from '../utils/workspace.js';
 import {
-  shouldProcessRealtimeEvent,
+  acknowledgeSyncedEventIds,
   clearRealtimeDedupeCache,
-  getLastNotificationSyncAt
+  getLastEventSyncAt
 } from '../utils/realtimeDedupe.js';
-import { syncNotificationsSince, fetchUnreadCount } from '../utils/realtimeSync.js';
+import { syncEventsSince, syncNotificationsSince, fetchUnreadCount } from '../utils/realtimeSync.js';
 import { handleDispatchEvent } from '../utils/realtimeDispatch.js';
+import { normalizePersistedNotification } from '../utils/notificationEngine.js';
+import { pushNotification, clearNotificationStore } from '../utils/notificationStore.js';
+import {
+  buildNotificationEventId,
+  claimNotificationEvent,
+  clearNotificationEventRegistry,
+  registerNotificationEventIds
+} from '../utils/notificationEventRegistry.js';
+import { emitRealtimeRefresh } from '../utils/realtimeRefresh.js';
 import { pruneWorkspaceQueryCaches } from '../utils/workspaceQueryCache.js';
+import { emitShipmentStatusUpdated } from '../utils/shipmentStatusOptimistic.js';
 
 export const AppContext = createContext(null);
 
@@ -69,6 +79,7 @@ export const AppProvider = ({ children }) => {
   const addNotificationRef = useRef(null);
   const welcomeToastShownRef = useRef(false);
   const lastReconnectSyncRef = useRef(0);
+  const reconnectSyncInFlightRef = useRef(false);
   const userRef = useRef(user);
   userRef.current = user;
 
@@ -95,7 +106,13 @@ export const AppProvider = ({ children }) => {
       roleType: sanitizeNotificationRoleType(base.roleType)
     };
     const eid = normalized.eventId || normalized.id || normalized._id;
-    if (eid && !shouldProcessRealtimeEvent(eid)) return;
+    const globalEventId = buildNotificationEventId({
+      dispatchType: normalized.type || normalized.title,
+      shipmentRef: normalized.shipmentRef || normalized.refKey,
+      timestamp: normalized.createdAt,
+      eventId: eid
+    });
+    if (!claimNotificationEvent({ globalEventId, eventId: eid })) return;
     const nid = normalized.id ?? normalized._id;
     setNotifications((prev) => {
       if (eid && prev.some((p) => String(p.eventId || p.id || p._id) === String(eid))) {
@@ -116,10 +133,13 @@ export const AppProvider = ({ children }) => {
       if (dup) return prev;
       const next = [{ id: nid ?? `local-${Date.now()}`, read: Boolean(normalized.read), ...normalized }, ...prev];
       const scoped = user ? notificationsForWorkspace(next, user) : next;
+      const eng = normalizePersistedNotification(normalized);
+      pushNotification({ ...eng, read: Boolean(normalized.read), dedupeKey: `persist|${eng.id}` });
       if (showToast) {
         queueMicrotask(() => {
-          routeRealtimeNotification(normalized);
-          window.dispatchEvent(new CustomEvent('tp:notification-sound'));
+          window.dispatchEvent(
+            new CustomEvent('tp:notification-toast', { detail: eng })
+          );
           const unread = scoped.filter((n) => !(n.read || n.isRead)).length;
           window.dispatchEvent(new CustomEvent('tp:unread-sync', { detail: { count: unread } }));
         });
@@ -187,6 +207,7 @@ export const AppProvider = ({ children }) => {
 
   const mergeNotificationsFromServer = useCallback((rows) => {
     const list = ensureArray(rows);
+    registerNotificationEventIds(list);
     const mapped = list.map(mapNotificationRow);
     setNotifications((prev) => {
       const byId = new Map();
@@ -208,18 +229,44 @@ export const AppProvider = ({ children }) => {
   }, [user?.id, user?.activeRole]);
 
   const syncReconnectNotifications = useCallback(async () => {
-    if (!user?.id) return;
+    if (!user?.id || reconnectSyncInFlightRef.current) return;
+    reconnectSyncInFlightRef.current = true;
     try {
-      const since = getLastNotificationSyncAt(user.id);
-      const out = await syncNotificationsSince(user, since ? { since } : {});
-      mergeNotificationsFromServer(ensureArray(out.items));
+      const since = getLastEventSyncAt(user.id);
+      const out = await syncEventsSince(user, since ? { since } : {});
+      mergeNotificationsFromServer(ensureArray(out.notifications));
       window.dispatchEvent(
         new CustomEvent('tp:unread-sync', { detail: { count: out.unreadCount } })
       );
+      const scopes = ensureArray(out.refreshScopes);
+      if (scopes.length) {
+        const unique = [...new Set(scopes)];
+        unique.forEach((scope) => emitRealtimeRefresh(scope));
+      } else {
+        emitRealtimeRefresh('all');
+      }
+      if (out.auditEvents?.length) {
+        window.dispatchEvent(
+          new CustomEvent('tp:admin-audit-sync', { detail: { events: out.auditEvents } })
+        );
+      }
     } catch (err) {
-      if (err?.response?.status !== 401) {
+      if (err?.response?.status === 401) return;
+      try {
+        const since = getLastEventSyncAt(user.id);
+        const fallback = await syncNotificationsSince(user, since ? { since } : {});
+        const synced = ensureArray(fallback.items);
+        acknowledgeSyncedEventIds(synced);
+        mergeNotificationsFromServer(synced);
+        window.dispatchEvent(
+          new CustomEvent('tp:unread-sync', { detail: { count: fallback.unreadCount } })
+        );
+        emitRealtimeRefresh('all');
+      } catch {
         /* optional — list refetch still runs */
       }
+    } finally {
+      reconnectSyncInFlightRef.current = false;
     }
   }, [user, mergeNotificationsFromServer]);
 
@@ -266,7 +313,12 @@ export const AppProvider = ({ children }) => {
   }, [notificationsCursor, notificationsHasMore, notificationsLoadingMore, mergeNotificationsFromServer, user]);
 
   useEffect(() => {
-    const onRefresh = () => refetchNotifications();
+    const onRefresh = (e) => {
+      const scope = e?.detail?.scope;
+      const notifyScopes = new Set(['all', 'loads', 'bids', 'shipments', 'space']);
+      if (scope && !notifyScopes.has(scope)) return;
+      refetchNotifications();
+    };
     window.addEventListener('tp:realtime-refresh', onRefresh);
     return () => window.removeEventListener('tp:realtime-refresh', onRefresh);
   }, [refetchNotifications]);
@@ -279,6 +331,8 @@ export const AppProvider = ({ children }) => {
       lastTrackingSig.current = { sig: '', t: 0 };
       lastTrackingTsByRef.current.clear();
       clearRealtimeDedupeCache();
+      clearNotificationStore();
+      clearNotificationEventRegistry();
     };
     window.addEventListener('tp:session-cleared', onSessionCleared);
     return () => window.removeEventListener('tp:session-cleared', onSessionCleared);
@@ -369,6 +423,9 @@ export const AppProvider = ({ children }) => {
         if (connected) {
           socketLostRef.current = false;
           setSocketStatus('connected');
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tp:socket-ready', { detail: { status: 'ready' } }));
+          }
           return;
         }
         if (meta?.exhausted) {
@@ -392,7 +449,6 @@ export const AppProvider = ({ children }) => {
           const active = getWorkspace(u);
           if (String(d.scope.workspace).toLowerCase() !== active) return;
         }
-        if (d?.eventId && !shouldProcessRealtimeEvent(d.eventId)) return;
         handleDispatchEvent(d, { onNotification: ingestNotification });
       },
       onNotification: (n) => {
@@ -418,6 +474,11 @@ export const AppProvider = ({ children }) => {
           return;
         }
         lastTrackingSig.current = { sig, t: now };
+        const status = p?.tracking?.status;
+        const statusRef = String(p?.refKey || p?.loadId || '').trim();
+        if (statusRef && status) {
+          emitShipmentStatusUpdated(statusRef, status, { source: 'socket' });
+        }
         trackingHandlers.current.forEach((fn) => {
           try {
             fn(p);

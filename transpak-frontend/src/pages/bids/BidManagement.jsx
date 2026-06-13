@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import BidList from '../../components/loadboard/BidList.jsx';
+import BidTimeline from '../../components/bids/BidTimeline.jsx';
 import Loader from '../../components/ui/Loader.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useAuth } from '../../hooks/useAuth.js';
@@ -10,7 +11,12 @@ import { useLanguage } from '../../hooks/useLanguage.js';
 import { formatUserError } from '../../utils/userErrors.js';
 import { mergeWorkspaceParams } from '../../utils/workspaceApi.js';
 import { usePollingAllowed } from '../../hooks/useSocketPolling.js';
-import { emitRealtimeRefresh } from '../../utils/realtimeRefresh.js';
+import { triggerAcceptActivationSync } from '../../utils/contractActivation.js';
+import {
+  commitOptimisticBidAccept,
+  commitOptimisticBidReject,
+  commitOptimisticBidSuggest
+} from '../../utils/contractActivationLayer.js';
 
 // Screen summarising bids across loads.
 const BidManagement = () => {
@@ -34,34 +40,50 @@ const BidManagement = () => {
 
   const handleAccept = async (bid) => {
     try {
-      await request({ method: 'PUT', url: `/bids/${bid.id}/accept` });
-      notifySuccess(t('pages.bids.bidAccepted'));
-      emitRealtimeRefresh('bids');
-      fetchBidsData();
+      const res = await request({ method: 'PUT', url: `/bids/${bid.id}/accept` });
+      const loadCode = res?.loadCode || bid.loadCode || null;
+      const payload = { ...res, loadCode };
+      commitOptimisticBidAccept(bid.id, payload, {
+        loadCode,
+        carrierId: bid.carrierId,
+        origin: bid.origin || bid.loadOrigin || null,
+        destination: bid.destination || bid.loadDestination || null,
+        userId: user?.id,
+        role: user?.activeRole
+      });
+      await triggerAcceptActivationSync(payload, {
+        userId: user?.id,
+        role: user?.activeRole
+      });
+      notifySuccess(t('flowSession.bidFlowStarted'));
+      void fetchBidsData();
     } catch (err) {
       notifyError(formatUserError(err, t, { fallback: t('pages.bids.acceptFailed') }));
     }
   };
 
-  const handleReject = async (bid) => {
+  const handleSuggest = async (bid, amount) => {
     try {
-      await request({ method: 'PUT', url: `/bids/${bid.id}/reject` });
-      notifySuccess(t('pages.bids.bidRejected'));
-      emitRealtimeRefresh('bids');
-      fetchBidsData();
+      commitOptimisticBidSuggest(bid.id, amount, {
+        suggestedBy: 'shipper',
+        loadCode: bid.loadCode
+      });
+      await request({ method: 'PUT', url: `/bids/${bid.id}/suggest`, data: { amount } });
+      notifySuccess(t('pages.bids.suggestSent', { amount: Number(amount).toLocaleString() }));
+      void fetchBidsData();
     } catch (err) {
-      notifyError(formatUserError(err, t, { fallback: t('pages.bids.rejectFailed') }));
+      notifyError(formatUserError(err, t, { fallback: t('pages.bids.suggestFailed') }));
     }
   };
 
-  const handleSuggest = async (bid, amount) => {
+  const handleReject = async (bid) => {
     try {
-      await request({ method: 'PUT', url: `/bids/${bid.id}/suggest`, data: { amount } });
-      notifySuccess(t('pages.bids.suggestSent', { amount: Number(amount).toLocaleString() }));
-      emitRealtimeRefresh('bids');
-      fetchBidsData();
+      commitOptimisticBidReject(bid.id, { loadCode: bid.loadCode });
+      await request({ method: 'PUT', url: `/bids/${bid.id}/reject` });
+      notifySuccess(t('pages.bids.bidRejected'));
+      void fetchBidsData();
     } catch (err) {
-      notifyError(formatUserError(err, t, { fallback: t('pages.bids.suggestFailed') }));
+      notifyError(formatUserError(err, t, { fallback: t('pages.bids.rejectFailed') }));
     }
   };
 
@@ -84,7 +106,8 @@ const BidManagement = () => {
             const load = await request({ url: `/loads/${lid}` });
             const normalized = normalizeLoads([load])[0];
             next[lid] = {
-              distanceKm: normalized?.distanceKm ?? normalized?.distance ?? null
+              distanceKm: normalized?.distanceKm ?? normalized?.distance ?? null,
+              load: normalized
             };
           } catch {
             /* load may be restricted */
@@ -104,14 +127,36 @@ const BidManagement = () => {
     return distanceKm != null && distanceKm > 0 ? { ...b, distanceKm } : b;
   });
 
+  const bidsByLoad = useMemo(() => {
+    const map = new Map();
+    for (const bid of bidsWithDistance) {
+      const key = bid.loadId ? String(bid.loadId) : 'unknown';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(bid);
+    }
+    return [...map.entries()];
+  }, [bidsWithDistance]);
+
   useEffect(() => {
-    const onRefresh = (e) => {
-      const scope = e?.detail?.scope;
-      if (scope && scope !== 'all' && scope !== 'bids') return;
-      fetchBidsData();
+    const reconcile = () => {
+      void fetchBidsData();
     };
-    window.addEventListener('tp:realtime-refresh', onRefresh);
-    return () => window.removeEventListener('tp:realtime-refresh', onRefresh);
+    const onBidsRefresh = () => reconcile();
+    const onLegacyRefresh = (e) => {
+      const scope = e?.detail?.scope;
+      if (!scope || scope === 'all') return;
+      if (scope === 'bids') reconcile();
+    };
+    window.addEventListener('tp:bids-refresh', onBidsRefresh);
+    window.addEventListener('tp:bid-updated', onBidsRefresh);
+    window.addEventListener('tp:contract-activated', onBidsRefresh);
+    window.addEventListener('tp:realtime-refresh', onLegacyRefresh);
+    return () => {
+      window.removeEventListener('tp:bids-refresh', onBidsRefresh);
+      window.removeEventListener('tp:bid-updated', onBidsRefresh);
+      window.removeEventListener('tp:contract-activated', onBidsRefresh);
+      window.removeEventListener('tp:realtime-refresh', onLegacyRefresh);
+    };
   }, [fetchBidsData]);
 
   useEffect(() => {
@@ -131,7 +176,32 @@ const BidManagement = () => {
           <Loader />
         </div>
       ) : (
-        <BidList bids={bidsWithDistance} mode="shipper" onAccept={handleAccept} onReject={handleReject} onSuggest={handleSuggest} actionsDisabled={!profileComplete} />
+        bidsByLoad.map(([loadId, groupBids]) => {
+          const loadStub =
+            loadMetaByLoad[loadId]?.load ||
+            (groupBids[0]
+              ? {
+                  id: loadId,
+                  status: groupBids.some((b) => String(b.status).toLowerCase() === 'accepted')
+                    ? 'booked'
+                    : 'open',
+                  createdAt: groupBids[0]?.createdAt
+                }
+              : null);
+          return (
+            <div key={loadId} className="mb-4">
+              {loadStub ? <BidTimeline load={loadStub} bids={groupBids} className="mb-3 p-3 rounded border bg-light-subtle" /> : null}
+              <BidList
+                bids={groupBids}
+                mode="shipper"
+                onAccept={handleAccept}
+                onReject={handleReject}
+                onSuggest={handleSuggest}
+                actionsDisabled={!profileComplete}
+              />
+            </div>
+          );
+        })
       )}
     </div>
   );

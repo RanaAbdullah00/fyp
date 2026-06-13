@@ -44,8 +44,8 @@ export const translations = {
       distanceUnavailable: 'Distance unavailable',
       submitting: 'Submitting…',
       preparingWorkspace: 'Preparing your workspace…',
-      errorBoundaryTitle: 'Something went wrong',
-      errorBoundaryBody: 'Please refresh the page or try again in a moment.',
+      errorBoundaryTitle: 'This section failed to load',
+      errorBoundaryBody: 'This section could not be displayed. Please try again.',
       errorBoundaryDevBody: 'The UI crashed while rendering.',
       errorBoundaryRetry: 'Try again',
       redirectingProfile: 'Redirecting to profile…',
@@ -103,14 +103,20 @@ export const translations = {
       statusOpen: 'Open',
       statusClosed: 'Closed',
       closeListing: 'Close listing',
+      closeListingDisabled: 'Cannot close while an active agreement is in progress',
+      editListing: 'Edit listing',
+      spaceUpdated: 'Listing updated',
+      spaceEditLocked: 'Editing locked after a request is accepted',
       roleRequired: 'Switch to shipper or carrier workspace to use this page.',
       requestCapacity: 'Request capacity',
       sendRequest: 'Send request',
       requestSent: 'Capacity request sent',
       requestFailed: 'Could not send request',
       capacityListFailed: 'Could not load capacity listings.',
-      minCapacityKg: 'Min available (tons)',
+      minCapacityKg: 'Min needed (tons)',
       incomingRequests: 'Incoming capacity requests',
+      pendingRequests: '{{count}} pending',
+      noIncomingRequests: 'No incoming requests right now.',
       acceptRequest: 'Accept',
       rejectRequest: 'Decline',
       requestAccepted: 'Request accepted',
@@ -118,13 +124,23 @@ export const translations = {
       markInTransit: 'Mark in transit',
       markComplete: 'Confirm delivery',
       mySpaceRequests: 'My capacity requests',
+      noSpaceRequestsYet: 'No capacity requests yet.',
       spaceStatusUpdated: 'Contract status updated',
       spaceCompletedHint: 'Contract completed — leave a review from your profile.',
       maxCapacityKg: 'Max available (tons)',
-      availableFrom: 'Available from date',
+      availableFrom: 'Need space by',
+      availabilitySlots: 'Availability time windows',
+      addTimeSlot: 'Add time slot',
       sortCapacity: 'Most capacity',
       sortRate: 'Lowest rate/ton',
-      resetFilters: 'Reset filters'
+      resetFilters: 'Reset filters',
+      proposedPrice: 'Proposed price',
+      requestMessage: 'Message',
+      requestNotesPlaceholder: 'Notes for the carrier (optional)',
+      requestRejectedHint: 'The carrier declined this capacity request. You can send a new request on another listing.',
+      viewDetails: 'View details',
+      listingDetails: 'Capacity details',
+      createFromCapacityHint: 'Sending a request starts the contract flow. When the carrier accepts, a shipment is created automatically.'
     },
     realtime: {
       reconnecting: 'Reconnecting…',
@@ -141,6 +157,7 @@ export const translations = {
       completed: 'Completed',
       phone: 'Phone',
       phoneLocked: 'Contact details unlock after an active contract',
+      whatsapp: 'WhatsApp',
       truckGallery: 'Fleet gallery',
       reviewsTitle: 'Trust & reviews'
     },
@@ -154,17 +171,21 @@ export const translations = {
       delivered: 'Delivered',
       completed: 'Completed',
       spaceListed: 'Listed',
-      requestSent: 'Request sent'
+      requestSent: 'Request sent',
+      rejected: 'Declined'
     },
     bidTimeline: {
       title: 'Bid lifecycle',
       aria: 'Bid lifecycle timeline',
-      posted: 'Load posted',
+      posted: 'Posted',
+      activeBidding: 'Active bidding',
       carrierAccept: 'Carrier accept',
       pendingConfirmation: 'Pending shipper confirmation',
-      counter: 'Counter offer',
-      accepted: 'Booked',
-      delivered: 'Delivered'
+      counter: 'Counter offered',
+      accepted: 'Accepted',
+      inTransit: 'In transit',
+      delivered: 'Delivered',
+      closed: 'Closed'
     },
     demo: {
       bannerTitle: 'FYP demo mode',
@@ -206,6 +227,10 @@ export const translations = {
       completionHint: 'Still needed for a complete profile:',
       completionServerHint:
         'Review each section and save changes — status will update after the server confirms.',
+      cnicSubmittedBadge: 'CNIC submitted',
+      cnicAwaitingAdminTitle: 'Awaiting admin verification',
+      cnicAwaitingAdminBody:
+        'Your CNIC documents are on file. An administrator will review and approve your account soon.',
       completeProfileCta: 'Complete Profile',
       activeShipperBadge: 'Active Shipper',
       activeCarrierBadge: 'Active Carrier',
@@ -256,9 +281,20 @@ export const translations = {
       statAdminReviews: 'Reviews stored',
       activityNoCommercialHint: 'Sign in with a shipper or carrier role to see your personal activity metrics.'
     },
+    demo: {
+      vehicleMismatchTitle: 'Vehicle mismatch detected (demo override available)',
+      vehicleMismatchBody:
+        'Your fleet type does not match this load. In presentation mode you can preview the tracking flow without changing server rules.',
+      vehicleMismatchBodyWithLoad:
+        'Load {load}: fleet type does not match. Use demo preview to continue the presentation flow.',
+      proceedDemoPreview: 'Proceed for demo preview',
+      forceAcceptDemoOnly: 'Force Accept (Demo Only)',
+      timelineAccepted: 'Accepted',
+      overrideSuccess: 'Demo contract activated — tracking preview is ready.'
+    },
     deploy: {
-      mismatchTitle: 'System version mismatch detected',
-      mismatchBody: 'Frontend and API builds may be out of sync. Redeploy Cloudflare Pages and Render, then hard-refresh.'
+      mismatchTitle: 'System updated',
+      mismatchBody: 'Please refresh the page to continue.'
     },
     reviews: {
       rateUsersHint:
@@ -370,7 +406,10 @@ export const translations = {
     },
     errors: {
       invalidCredentials: 'Invalid credentials',
-      wrongRoleForAccount: 'This account is not registered for the selected role. Choose the correct role and try again.',
+      invalidPassword: 'Invalid password',
+      invalidUsername: 'Invalid username',
+      wrongRoleForAccount: 'Invalid account type for selected role',
+      roleSelectionRequired: 'Select shipper or carrier to continue',
       wrongPasswordForRegister:
         'This email is already registered. Use the correct password for that account, or sign up with a different email.',
       invalidRole: 'Choose a valid role (shipper or carrier).',
@@ -392,7 +431,11 @@ export const translations = {
       phoneRequired: 'Phone is required',
       phoneInvalid: 'Enter a valid international phone number',
       accountAlreadyExists: 'Account already exists',
-      generic: 'Something went wrong',
+      generic: 'We could not complete this action. Please try again.',
+      unknown: 'We could not complete this action. Please try again.',
+      unauthorized: 'Please sign in to continue.',
+      forbidden: 'You do not have permission to access this resource.',
+      validationFailed: 'Please check your input and try again.',
       databaseUnavailable: 'Server database is temporarily unavailable. Wait a moment and try again.',
       adminSessionRequired: 'Switch to admin workspace to view this page.',
       adminCommercialForbidden: 'Switch to shipper or carrier workspace for this action.',
@@ -410,6 +453,8 @@ export const translations = {
     },
     status: {
       posted: 'Posted',
+      accepted: 'Accepted',
+      rejected: 'Rejected',
       booked: 'Booked',
       pickedup: 'Picked up',
       intransit: 'In transit',
@@ -441,6 +486,32 @@ export const translations = {
       rejected: 'Rejected',
       cancelled: 'Cancelled'
     },
+    bidFlow: {
+      negotiationCounter: 'Counter offer — awaiting response',
+      negotiationAwaitingShipper: 'Awaiting shipper confirmation'
+    },
+    spaceStatus: {
+      request_sent: 'Request sent',
+      pending: 'Pending',
+      requested: 'Requested',
+      active: 'Active',
+      accepted: 'Accepted',
+      in_transit: 'In transit',
+      intransit: 'In transit',
+      completed: 'Completed',
+      rejected: 'Rejected',
+      closed: 'Closed'
+    },
+    flowSession: {
+      badgeActive: 'Active',
+      bidFlowStarted: 'Bid flow started — live tracking is now available',
+      carrierBidActive: 'ACTIVE BID FLOW',
+      carrierCapacityActive: 'ACTIVE CAPACITY MATCH',
+      shipperShipmentActive: 'ACTIVE SHIPMENT',
+      shipperCapacityActive: 'ACTIVE CAPACITY MATCH',
+      withCounterparty: 'With {{name}}',
+      liveTrackingEnabled: 'Your shipment is live on the map'
+    },
     notifications: {
       roleFallback: 'Role',
       rolePlatform: 'Platform',
@@ -448,11 +519,12 @@ export const translations = {
       badgeNew: 'New',
       seen: 'Seen',
       toastNew: 'New notification',
-      typeGeneric: '{{type}}',
+      typeGeneric: 'Update',
       type: {
         BID: 'Bid',
         BID_RECEIVED: 'New bid received',
         BID_ACCEPTED: 'Bid accepted',
+        STATUS_UPDATED: 'Shipment status updated',
         BID_REJECTED: 'Bid declined',
         COUNTER_OFFER: 'Counter offer',
         COUNTER_OFFERED: 'Counter offer',
@@ -462,6 +534,25 @@ export const translations = {
         SPACE_LISTED: 'Capacity published',
         CONTRACT_STARTED: 'Contract started',
         TRUCK_UPDATED: 'Truck updated',
+        TRUCK_PENDING: 'Truck pending approval',
+        VERIFICATION_PENDING: 'Verification pending',
+        VERIFICATION_APPROVED: 'Verification approved',
+        VERIFICATION_REJECTED: 'Verification rejected',
+        BID_CREATED: 'New bid',
+        BID_COUNTER: 'Counter offer',
+        SPACE_REQUEST: 'Capacity request',
+        SPACE_ACCEPTED: 'Capacity request accepted',
+        SPACE_REJECTED: 'Capacity request declined',
+        SPACE_IN_TRANSIT: 'Capacity in transit',
+        SPACE_COMPLETED: 'Capacity contract completed',
+        SPACE_CLOSED: 'Capacity listing closed',
+        BID_UPDATED: 'Bid updated',
+        TRUCK_APPROVED: 'Truck approved',
+        TRUCK_REJECTED: 'Truck rejected',
+        TRUCK_SUSPENDED: 'Truck suspended',
+        USER_REGISTERED: 'New user registered',
+        SHIPMENT_PICKED_UP: 'Shipment picked up',
+        SHIPMENT_IN_TRANSIT: 'Shipment in transit',
         DELIVERY_COMPLETED: 'Delivery completed',
         REVIEW_RECEIVED: 'New review',
         LOAD: 'Load',
@@ -514,6 +605,11 @@ export const translations = {
         pickupLabel: 'Pickup',
         noLoadsTitle: 'No loads posted yet',
         noLoadsBody: 'Post your first load to receive bids from carriers.',
+        noLoadsInTab: 'No loads in {{tab}}.',
+        tabOpen: 'Open',
+        tabBooked: 'Booked',
+        tabClosed: 'Closed',
+        tabExpired: 'Expired',
         bidsCount: '{{count}} bids',
         view: 'View',
         edit: 'Edit',
@@ -549,6 +645,8 @@ export const translations = {
         listedFareHint: 'Listed fare: {{price}} PKR',
         carrierAcceptSuccess: 'Bid submitted — awaiting shipper confirmation',
         carrierCounterSuccess: 'Counter offer sent to shipper',
+        vehicleTypeMismatchWarning:
+          'Your fleet vehicle type does not match this load. Bid was submitted — assign a matching truck before pickup.',
         carrierRejectSuccess: 'Load hidden from your board',
         carrierUseFreightBoard: 'Use the freight board to accept or counter on loads'
       },
@@ -590,10 +688,13 @@ export const translations = {
         statFleetSub: 'Registered',
         myActiveShipments: 'My active shipments',
         myAssignedShipments: 'My assigned shipments',
+        tabActiveShipments: 'Active',
+        tabHistory: 'History',
         emptyNoActiveShipments: 'No active shipments',
         emptyNoActiveShipmentsBody: 'Accept a carrier bid to start shipment tracking.',
         emptyNoAssignedShipments: 'No assigned shipments',
         emptyNoAssignedShipmentsBody: 'When a shipper accepts your bid, the shipment will appear here.',
+        activeShipmentsCount: '{{count}} active shipments',
         chartWeekLabel: 'Week {{n}}',
         operationsTitle: 'Operations snapshot',
         operationsLive: 'Live',
@@ -621,8 +722,22 @@ export const translations = {
         loadFailed: 'Could not load tracking.',
         timelineUpdate: 'Update',
         mapPoint: 'Point {{n}}',
+        originCity: 'Origin city',
+        destinationCity: 'Destination city',
         lastReportedPosition: 'Last reported position',
-        locationStale: 'Driver location is outdated — waiting for a fresh GPS report.'
+        locationStale: 'Driver location is outdated — waiting for a fresh GPS report.',
+        updateStatus: 'Update shipment status',
+        advanceStatus: 'Next step',
+        advanceBooked: 'Confirm pickup',
+        advanceInTransit: 'Mark in transit',
+        advancePickedup: 'Mark in transit',
+        advanceIntransit: 'Mark delivered',
+        advanceDelivered: 'Mark delivered',
+        advanceClosed: 'Close shipment',
+        statusUpdated: 'Shipment status updated',
+        trackingNotActiveYet:
+          'Live tracking starts after the bid is accepted and the shipment is booked.',
+        waitingForData: 'Waiting for tracking data…'
       },
       shipments: {
         tracking: 'Shipment Tracking',
@@ -635,7 +750,18 @@ export const translations = {
         historyLead: 'Delivered loads you shipped or carried appear here.',
         historyView: 'View shipment',
         historyClosedLabel: 'Closed',
-        historyLoadFailed: 'Could not load shipment history.'
+        historyLoadFailed: 'Could not load shipment history.',
+        historyTabCompleted: 'Completed',
+        historyTabAccepted: 'Accepted',
+        historyTabRejected: 'Rejected',
+        historyTabClosed: 'Closed',
+        historyTabCancelled: 'Cancelled',
+        historyBidRow: 'Rejected bid',
+        historySearchPlaceholder: 'Search by load code or route…',
+        historyRoleShipper: 'Loads you posted',
+        historyRoleCarrier: 'Loads you carried',
+        activeTitle: 'Active shipments',
+        activeLead: 'Live contracts you are shipping or carrying right now.'
       },
       supportPage: {
         title: 'Support',
@@ -787,6 +913,18 @@ export const translations = {
       notificationsPage: {
         title: 'Notifications'
       },
+      notifications: {
+        filterAll: 'All',
+        filterContract: 'Contract',
+        filterBid: 'Bids',
+        filterStatus: 'Status',
+        viewLiveTracking: 'View live tracking',
+        viewShipment: 'View shipment',
+        viewBids: 'View bids',
+        historySearchPlaceholder: 'Search by load code or route…',
+        historyRoleShipper: 'Loads you posted',
+        historyRoleCarrier: 'Loads you carried'
+      },
       truckForm: {
         truckType: 'Truck type',
         selectType: 'Select type',
@@ -850,7 +988,8 @@ export const translations = {
       activityFeed: {
         title: 'Recent activity',
         empty: 'No recent activity yet.',
-        emptySub: 'Updates will appear when loads, bids, or shipments change.'
+        emptySub: 'Updates will appear when loads, bids, or shipments change.',
+        update: 'Activity update'
       },
       adminDashboardPage: {
         title: 'Admin dashboard',
@@ -910,7 +1049,11 @@ export const translations = {
         approveCarrierOk: 'OK',
         emptyShipper: 'No bids yet. Carriers will start bidding soon after you post.',
         emptyCarrier: 'No bids yet.',
-        acceptedBidsHeading: 'Accepted Bids',
+        acceptedBidsHeading: 'Accepted bids',
+        rejectedBidsHeading: 'Rejected bids',
+        standardBidsHeading: 'Standard bids',
+        suggestedBidsHeading: 'Suggested bids',
+        counterOffersHeading: 'Counter offers',
         closedBidsHeading: 'Closed bids',
         myBidsTitle: 'My bids',
         bidManagementTitle: 'Bid management',
@@ -985,6 +1128,7 @@ export const translations = {
         edit: 'Edit',
         reset: 'Reset',
         saveChanges: 'Save changes',
+        saving: 'Saving…',
         addTruckCta: 'Add truck',
         typeLabel: 'Truck type *',
         verifiedShort: 'Verified',
@@ -996,7 +1140,9 @@ export const translations = {
         deleted: 'Truck removed',
         matchingEligible: 'Eligible for load matching',
         notMatchingEligible: 'Not eligible for matching until approved',
-        suspendedHint: 'This truck was suspended by admin and cannot be used for matching'
+        suspendedHint: 'This truck was suspended by admin and cannot be used for matching',
+        verifiedLocked: 'Verified',
+        verifiedNoEdit: 'Admin-verified trucks cannot be edited'
       },
       feedbackPage: {
         title: 'Feedback',
@@ -1117,7 +1263,7 @@ export const translations = {
         widgetAuthErrorHint: 'Your admin session may have expired. Sign in again; other dashboard areas stay available.',
         widgetForbiddenError: 'Access denied for this section.',
         widgetServerError: 'Server error — try again shortly.',
-        widgetNetworkError: 'Network/CORS failure — see endpoint details below.',
+        widgetNetworkError: 'Unable to load this section. Check your connection and try again.',
         widgetNotFoundError: 'This data source is not available on the server.',
         widgetDataError: 'Data could not be loaded.',
         widgetEmpty: 'No data yet.',
@@ -1208,6 +1354,9 @@ export const translations = {
         yes: 'Yes',
         no: 'No',
         trackShipment: 'Open live tracking',
+        shipmentsReadOnlyLead:
+          'Monitor shipments and open live tracking. Status changes are made by carriers only.',
+        noShipments: 'No shipments to display.',
         forceDelivered: 'Force delivered',
         shipmentUpdated: 'Shipment status updated',
         shipmentUpdateFailed: 'Could not update shipment',
@@ -1304,6 +1453,9 @@ export const translations = {
       fleetApproval: 'Fleet approval',
       disputes: 'Disputes',
       shipments: 'Shipments',
+      shipmentsActive: 'Active shipments',
+      shipmentsHistory: 'Shipment history',
+      shipmentsTracking: 'Live tracking',
       roleManagement: 'Role administration',
       notifications: 'Notifications',
       settings: 'Settings',
@@ -1337,6 +1489,7 @@ export const translations = {
       youSuggested: 'You suggested',
       carrierSuggested: 'Carrier suggested',
       suggestedLabel: 'Suggested',
+      suggestedBidType: 'Suggested bid',
       original: 'original',
       amountPlaceholder: 'Amount (PKR)',
       bidExpiredHint: 'This bid ended. You can place a new bid on open loads.',
@@ -1389,8 +1542,8 @@ export const translations = {
       emDash: '—',
       distanceUnavailable: 'فاصلہ دستیاب نہیں',
       preparingWorkspace: 'آپ کا ورک اسپیس تیار ہو رہا ہے…',
-      errorBoundaryTitle: 'کچھ غلط ہو گیا',
-      errorBoundaryBody: 'صفحہ ریفریش کریں یا تھوڑی دیر بعد دوبارہ کوشش کریں۔',
+      errorBoundaryTitle: 'یہ حصہ لوڈ نہیں ہو سکا',
+      errorBoundaryBody: 'یہ حصہ دکھایا نہیں جا سکا۔ دوبارہ کوشش کریں۔',
       errorBoundaryDevBody: 'UI رینڈر کرتے وقت خرابی ہوئی۔',
       errorBoundaryRetry: 'دوبارہ کوشش کریں',
       redirectingProfile: 'پروفائل پر بھیجا جا رہا ہے…'
@@ -1445,19 +1598,25 @@ export const translations = {
       statusOpen: 'کھلا',
       statusClosed: 'بند',
       closeListing: 'لسٹنگ بند کریں',
+      closeListingDisabled: 'فعال معاہدہ جاری ہونے کے دوران بند نہیں کیا جا سکتا',
+      editListing: 'لسٹنگ میں ترمیم',
+      spaceUpdated: 'لسٹنگ اپ ڈیٹ',
+      spaceEditLocked: 'قبول درخواست کے بعد ترمیم بند',
       roleRequired: 'شپر یا کیریئر ورک اسپیس منتخب کریں۔',
       requestCapacity: 'گنجائش کی درخواست',
       sendRequest: 'درخواست بھیجیں',
       requestSent: 'درخواست بھیج دی گئی',
       requestFailed: 'درخواست نہیں بھیجی جا سکی',
       capacityListFailed: 'گنجائش کی فہرست لوڈ نہیں ہو سکی۔',
-      minCapacityKg: 'کم از کم دستیاب (ٹن)',
+      minCapacityKg: 'کم از کم درکار (ٹن)',
       maxCapacityKg: 'زیادہ سے زیادہ دستیاب (ٹن)',
-      availableFrom: 'دستیاب تاریخ سے',
+      availableFrom: 'اس تاریخ تک جگہ درکار',
       sortCapacity: 'سب سے زیادہ گنجائش',
       sortRate: 'کم ترین شرح/کلو',
       resetFilters: 'فلٹرز ری سیٹ',
       incomingRequests: 'آنے والی درخواستیں',
+      pendingRequests: '{{count}} زیر التواء',
+      noIncomingRequests: 'فی الحال کوئی آنے والی درخواست نہیں۔',
       acceptRequest: 'قبول',
       rejectRequest: 'مسترد',
       requestAccepted: 'درخواست قبول',
@@ -1465,6 +1624,14 @@ export const translations = {
       markInTransit: 'ٹرانزٹ میں',
       markComplete: 'ڈیلیوری کی تصدیق',
       mySpaceRequests: 'میری گنجائش درخواستیں',
+      noSpaceRequestsYet: 'ابھی کوئی گنجائش درخواست نہیں۔',
+      proposedPrice: 'مجوزہ قیمت',
+      requestMessage: 'پیغام',
+      requestNotesPlaceholder: 'کیریئر کے لیے نوٹ (اختیاری)',
+      requestRejectedHint: 'کیریئر نے یہ گنجائش درخواست مسترد کر دی۔ آپ دوسری لسٹنگ پر نئی درخواست بھیج سکتے ہیں۔',
+      viewDetails: 'تفصیل دیکھیں',
+      listingDetails: 'گنجائش کی تفصیل',
+      createFromCapacityHint: 'درخواست بھیجنے سے معاہدے کا عمل شروع ہوتا ہے۔ کیریئر قبول کرنے پر شپمنٹ خود بخود بن جاتی ہے۔',
       spaceStatusUpdated: 'معاہدے کی حیثیت اپ ڈیٹ',
       spaceCompletedHint: 'معاہدہ مکمل — جائزہ دیں۔'
     },
@@ -1479,6 +1646,7 @@ export const translations = {
       completed: 'مکمل',
       phone: 'فون',
       phoneLocked: 'فعال معاہدے کے بعد رابطہ کھلے گا',
+      whatsapp: 'واٹس ایپ',
       truckGallery: 'فلیٹ گیلری',
       reviewsTitle: 'اعتماد اور جائزے'
     },
@@ -1492,17 +1660,21 @@ export const translations = {
       delivered: 'پہنچا دیا',
       completed: 'مکمل',
       spaceListed: 'لسٹ',
-      requestSent: 'درخواست بھیجی'
+      requestSent: 'درخواست بھیجی',
+      rejected: 'مسترد'
     },
       bidTimeline: {
       title: 'بولی کی زندگی',
       aria: 'بولی کی زندگی — وقت کی لکیر',
-      posted: 'لوڈ شائع',
+      posted: 'شائع',
+      activeBidding: 'فعال بولی',
       carrierAccept: 'کیریئر نے قبول کیا',
       pendingConfirmation: 'بھیجنے والے کی تصدیق',
-      counter: 'جوابی پیشکش',
-      accepted: 'بک شدہ',
-      delivered: 'پہنچا دیا'
+      counter: 'کاؤنٹر آفر',
+      accepted: 'قبول',
+      inTransit: 'راستے میں',
+      delivered: 'پہنچا دیا',
+      closed: 'بند'
     },
     demo: {
       bannerTitle: 'FYP ڈیمو موڈ',
@@ -1548,6 +1720,10 @@ export const translations = {
       completionHint: 'مکمل پروفائل کے لیے ابھی درکار:',
       completionServerHint:
         'ہر سیکشن دیکھیں اور تبدیلیاں محفوظ کریں — سرور کی تصدیق کے بعد حیثیت اپ ڈیٹ ہو گی۔',
+      cnicSubmittedBadge: 'CNIC جمع',
+      cnicAwaitingAdminTitle: 'ایڈمن تصدیق زیر التوا',
+      cnicAwaitingAdminBody:
+        'آپ کے CNIC دستاویزات محفوظ ہیں۔ ایڈمن جلد اکاؤنٹ کی تصدیق کرے گا۔',
       completeProfileCta: 'پروفائل مکمل کریں',
       activeShipperBadge: 'فعال شپپر',
       activeCarrierBadge: 'فعال کیریئر',
@@ -1597,9 +1773,20 @@ export const translations = {
       activityNoCommercialHint:
         'ذاتی سرگرمی کے اعداد و شمار کے لیے شپر یا کیریئر کردار سے سائن ان کریں۔'
     },
+    demo: {
+      vehicleMismatchTitle: 'گاڑی کی قسم مماثل نہیں (ڈیمو اووررائیڈ دستیاب)',
+      vehicleMismatchBody:
+        'آپ کا بیڑا اس لوڈ سے میل نہیں کھاتا۔ پریزنٹیشن موڈ میں سرور قوانین بدلے بغیر ٹریکنگ فلو دیکھ سکتے ہیں۔',
+      vehicleMismatchBodyWithLoad:
+        'لوڈ {load}: بیڑے کی قسم مماثل نہیں۔ پریزنٹیشن فلو کے لیے ڈیمو پیش نظارہ استعمال کریں۔',
+      proceedDemoPreview: 'ڈیمو پیش نظارہ جاری رکھیں',
+      forceAcceptDemoOnly: 'زبردستی قبول (صرف ڈیمو)',
+      timelineAccepted: 'قبول شدہ',
+      overrideSuccess: 'ڈیمو معاہدہ فعال — ٹریکنگ پیش نظارہ تیار ہے۔'
+    },
     deploy: {
-      mismatchTitle: 'سسٹم ورژن میں عدم مطابقت',
-      mismatchBody: 'فرنٹ اینڈ اور API ہم آہنگ نہیں۔ Cloudflare اور Render دوبارہ ڈپلائے کریں، پھر ہارڈ ریفریش کریں۔'
+      mismatchTitle: 'سسٹم اپ ڈیٹ ہو گیا',
+      mismatchBody: 'جاری رکھنے کے لیے صفحہ ریفریش کریں۔'
     },
     reviews: {
       rateUsersHint:
@@ -1712,7 +1899,10 @@ export const translations = {
     },
     errors: {
       invalidCredentials: 'غلط معلومات',
-      wrongRoleForAccount: 'یہ اکاؤنٹ منتخب کردار کے لیے رجسٹرڈ نہیں۔ صحیح کردار منتخب کریں۔',
+      invalidPassword: 'غلط پاس ورڈ',
+      invalidUsername: 'غلط صارف نام',
+      wrongRoleForAccount: 'منتخب کردار کے لیے اکاؤنٹ کی قسم درست نہیں',
+      roleSelectionRequired: 'شپپر یا کیریئر منتخب کریں',
       wrongPasswordForRegister:
         'یہ ای میل پہلے سے رجسٹرڈ ہے۔ درست پاس ورڈ استعمال کریں یا دوسری ای میل سے نیا اکاؤنٹ بنائیں۔',
       invalidRole: 'درست کردار منتخب کریں (شپپر یا کیریئر)۔',
@@ -1734,7 +1924,11 @@ export const translations = {
       phoneRequired: 'فون نمبر ضروری ہے',
       phoneInvalid: 'درست بین الاقوامی فون نمبر درج کریں',
       accountAlreadyExists: 'اکاؤنٹ پہلے سے موجود ہے',
-      generic: 'کچھ غلط ہو گیا',
+      generic: 'یہ عمل مکمل نہیں ہو سکا۔ دوبارہ کوشش کریں۔',
+      unknown: 'یہ عمل مکمل نہیں ہو سکا۔ دوبارہ کوشش کریں۔',
+      unauthorized: 'جاری رکھنے کے لیے سائن ان کریں۔',
+      forbidden: 'آپ کو اس وسیلے تک رسائی کی اجازت نہیں ہے۔',
+      validationFailed: 'براہ کرم اپنی معلومات چیک کریں اور دوبارہ کوشش کریں۔',
       databaseUnavailable: 'سرور ڈیٹا بیس عارضی طور پر دستیاب نہیں۔ تھوڑی دیر بعد دوبارہ کوشش کریں۔',
       adminSessionRequired: 'یہ صفحہ دیکھنے کے لیے ایڈمن ورک اسپیس پر جائیں۔',
       adminCommercialForbidden: 'یہ عمل شپر یا کیریئر ورک اسپیس میں کریں۔',
@@ -1752,6 +1946,8 @@ export const translations = {
     },
     status: {
       posted: 'پوسٹ شدہ',
+      accepted: 'قبول شدہ',
+      rejected: 'مسترد',
       booked: 'بک شدہ',
       pickedup: 'اٹھا لیا گیا',
       intransit: 'راستے میں',
@@ -1783,6 +1979,32 @@ export const translations = {
       rejected: 'مسترد',
       cancelled: 'منسوخ'
     },
+    bidFlow: {
+      negotiationCounter: 'کاؤنٹر آفر — جواب کا انتظار',
+      negotiationAwaitingShipper: 'شپپر کی تصدیق کا انتظار'
+    },
+    spaceStatus: {
+      request_sent: 'درخواست بھیجی گئی',
+      pending: 'زیر التواء',
+      requested: 'درخواست شدہ',
+      active: 'فعال',
+      accepted: 'قبول شدہ',
+      in_transit: 'راستے میں',
+      intransit: 'راستے میں',
+      completed: 'مکمل',
+      rejected: 'مسترد',
+      closed: 'بند'
+    },
+    flowSession: {
+      badgeActive: 'فعال',
+      bidFlowStarted: 'شپمنٹ فعال ہے — ٹریکنگ کے لیے ڈیش بورڈ کھولیں',
+      carrierBidActive: 'فعال بڈ فلو',
+      carrierCapacityActive: 'فعال گنجائش میچ',
+      shipperShipmentActive: 'فعال شپمنٹ',
+      shipperCapacityActive: 'فعال گنجائش میچ',
+      withCounterparty: '{{name}} کے ساتھ',
+      liveTrackingEnabled: 'آپ کی شپمنٹ میپ پر لائیو ہے'
+    },
     notifications: {
       roleFallback: 'کردار',
       rolePlatform: 'پلیٹ فارم',
@@ -1790,11 +2012,12 @@ export const translations = {
       badgeNew: 'نیا',
       seen: 'دیکھ لیا',
       toastNew: 'نئی نوٹیفکیشن',
-      typeGeneric: '{{type}}',
+      typeGeneric: 'اپ ڈیٹ',
       type: {
         BID: 'بڈ',
         BID_RECEIVED: 'نئی بڈ موصول',
         BID_ACCEPTED: 'بڈ قبول',
+        STATUS_UPDATED: 'شپمنٹ کی حالت اپ ڈیٹ',
         BID_REJECTED: 'بڈ مسترد',
         COUNTER_OFFER: 'کاؤنٹر آفر',
         COUNTER_OFFERED: 'کاؤنٹر آفر',
@@ -1804,6 +2027,25 @@ export const translations = {
         SPACE_LISTED: 'گنجائش شائع',
         CONTRACT_STARTED: 'معاہدہ شروع',
         TRUCK_UPDATED: 'ٹرک اپ ڈیٹ',
+        TRUCK_PENDING: 'ٹرک منظوری زیر التوا',
+        VERIFICATION_PENDING: 'تصدیق زیر التوا',
+        VERIFICATION_APPROVED: 'تصدیق منظور',
+        VERIFICATION_REJECTED: 'تصدیق مسترد',
+        BID_CREATED: 'نئی بڈ',
+        BID_COUNTER: 'کاؤنٹر آفر',
+        SPACE_REQUEST: 'گنجائش کی درخواست',
+        SPACE_ACCEPTED: 'گنجائش کی درخواست قبول',
+        SPACE_REJECTED: 'گنجائش کی درخواست مسترد',
+        SPACE_IN_TRANSIT: 'گنجائش راستے میں',
+        SPACE_COMPLETED: 'گنجائش معاہدہ مکمل',
+        SPACE_CLOSED: 'گنجائش لسٹنگ بند',
+        BID_UPDATED: 'بڈ اپ ڈیٹ',
+        TRUCK_APPROVED: 'ٹرک منظور',
+        TRUCK_REJECTED: 'ٹرک مسترد',
+        TRUCK_SUSPENDED: 'ٹرک معطل',
+        USER_REGISTERED: 'نیا صارف رجسٹر',
+        SHIPMENT_PICKED_UP: 'شپمنٹ اٹھا لی گئی',
+        SHIPMENT_IN_TRANSIT: 'شپمنٹ راستے میں',
         DELIVERY_COMPLETED: 'ڈیلیوری مکمل',
         REVIEW_RECEIVED: 'نیا جائزہ',
         LOAD: 'لوڈ',
@@ -1849,9 +2091,16 @@ export const translations = {
         acceptedLoadsTitle: 'قبول شدہ لوڈز',
         emptyAcceptedLoads: 'ابھی کوئی قبول شدہ لوڈ نہیں۔',
         trackShipment: 'ٹریک کریں',
+        shipmentsReadOnlyLead: 'شپمنٹس دیکھیں؛ اسٹیٹس کیریئر اپ ڈیٹ کرتا ہے۔',
+        noShipments: 'کوئی شپمنٹ نہیں۔',
         pickupLabel: 'اٹھانا',
         noLoadsTitle: 'ابھی کوئی لوڈ پوسٹ نہیں',
         noLoadsBody: 'پہلا لوڈ پوسٹ کریں تاکہ کیریئرز بڈ لگا سکیں۔',
+        noLoadsInTab: '{{tab}} میں کوئی لوڈ نہیں۔',
+        tabOpen: 'کھلے',
+        tabBooked: 'بک شدہ',
+        tabClosed: 'بند',
+        tabExpired: 'میعاد ختم',
         bidsCount: '{{count}} بڈز',
         view: 'دیکھیں',
         edit: 'ترمیم',
@@ -1887,6 +2136,8 @@ export const translations = {
         listedFareHint: 'درج کرایہ: {{price}} PKR',
         carrierAcceptSuccess: 'بڈ بھیج دیا — شپپر کی تصدیق کا انتظار',
         carrierCounterSuccess: 'کاؤنٹر آفر شپپر کو بھیج دی',
+        vehicleTypeMismatchWarning:
+          'آپ کے بیڑے کی گاڑی کی قسم اس لوڈ سے مماثل نہیں۔ بڈ جمع ہو گئی — پک اپ سے پہلے مناسب ٹرک تفویض کریں۔',
         carrierRejectSuccess: 'لوڈ آپ کے بورڈ سے ہٹا دیا',
         carrierUseFreightBoard: 'لوڈز پر قبول یا جوابی پیشکش کے لیے لوڈ بورڈ استعمال کریں'
       },
@@ -1906,8 +2157,22 @@ export const translations = {
         loadFailed: 'سراغ لوڈ نہیں ہو سکا۔',
         timelineUpdate: 'اپ ڈیٹ',
         mapPoint: 'نقطہ {{n}}',
+        originCity: 'ابتدائی شہر',
+        destinationCity: 'منزل شہر',
         lastReportedPosition: 'آخری رپورٹ شدہ مقام',
-        locationStale: 'ڈرائیور کی لوکیشن پرانی ہے — تازہ GPS کا انتظار ہے۔'
+        locationStale: 'ڈرائیور کی لوکیشن پرانی ہے — تازہ GPS کا انتظار ہے۔',
+        updateStatus: 'شپمنٹ کی حیثیت اپ ڈیٹ کریں',
+        advanceStatus: 'اگلا مرحلہ',
+        advanceBooked: 'پک اپ کی تصدیق',
+        advanceInTransit: 'راستے میں نشان لگائیں',
+        advancePickedup: 'راستے میں نشان لگائیں',
+        advanceIntransit: 'ڈیلیور نشان لگائیں',
+        advanceDelivered: 'ڈیلیور نشان لگائیں',
+        advanceClosed: 'شپمنٹ بند کریں',
+        statusUpdated: 'شپمنٹ کی حیثیت اپ ڈیٹ ہو گئی',
+        trackingNotActiveYet:
+          'لائیو ٹریکنگ اس وقت شروع ہوتی ہے جب بولی قبول ہو اور شپمنٹ بک ہو جائے۔',
+        waitingForData: 'ٹریکنگ ڈیٹا کا انتظار…'
       },
       supportPage: {
         title: 'مدد',
@@ -2059,6 +2324,18 @@ export const translations = {
       notificationsPage: {
         title: 'نوٹیفکیشنز'
       },
+      notifications: {
+        filterAll: 'سب',
+        filterContract: 'معاہدہ',
+        filterBid: 'بولیاں',
+        filterStatus: 'حیثیت',
+        viewLiveTracking: 'لائیو ٹریکنگ دیکھیں',
+        viewShipment: 'شپمنٹ دیکھیں',
+        viewBids: 'بولیاں دیکھیں',
+        historySearchPlaceholder: 'لوڈ کوڈ یا روٹ سے تلاش…',
+        historyRoleShipper: 'آپ کے پوسٹ کردہ لوڈز',
+        historyRoleCarrier: 'آپ کی گزارش کردہ لوڈز'
+      },
       truckForm: {
         truckType: 'ٹرک کی قسم',
         selectType: 'قسم منتخب کریں',
@@ -2113,7 +2390,8 @@ export const translations = {
       activityFeed: {
         title: 'تازہ سرگرمی',
         empty: 'ابھی کوئی سرگرمی نہیں۔',
-        emptySub: 'لوڈز، بڈز یا شپمنٹس بدلنے پر اپ ڈیٹس نظر آئیں گے۔'
+        emptySub: 'لوڈز، بڈز یا شپمنٹس بدلنے پر اپ ڈیٹس نظر آئیں گے۔',
+        update: 'سرگرمی کی اپ ڈیٹ'
       },
       adminDashboardPage: {
         title: 'ایڈمن ڈیش بورڈ',
@@ -2174,6 +2452,10 @@ export const translations = {
         emptyShipper: 'ابھی کوئی بڈ نہیں۔ لوڈ پوسٹ کرنے کے بعد کیریئرز بڈ لگانا شروع کریں گے۔',
         emptyCarrier: 'ابھی کوئی بڈ نہیں۔',
         acceptedBidsHeading: 'قبول شدہ بڈز',
+        rejectedBidsHeading: 'مسترد بڈز',
+        standardBidsHeading: 'معمولی بڈز',
+        suggestedBidsHeading: 'تجویز شدہ بڈز',
+        counterOffersHeading: 'کاؤنٹر آفرز',
         closedBidsHeading: 'بند بڈز',
         myBidsTitle: 'میرے بڈز',
         bidManagementTitle: 'بولیوں کا انتظام',
@@ -2248,6 +2530,7 @@ export const translations = {
         edit: 'ترمیم',
         reset: 'ری سیٹ',
         saveChanges: 'تبدیلیاں محفوظ کریں',
+        saving: 'محفوظ ہو رہا ہے…',
         addTruckCta: 'ٹرک شامل کریں',
         typeLabel: 'ٹرک کی قسم *',
         verifiedShort: 'تصدیق شدہ',
@@ -2259,7 +2542,9 @@ export const translations = {
         deleted: 'ٹرک ہٹا دیا گیا',
         matchingEligible: 'لوڈ میچنگ کے لیے اہل',
         notMatchingEligible: 'منظوری تک میچنگ کے لیے اہل نہیں',
-        suspendedHint: 'یہ ٹرک ایڈمن نے معطل کر دیا ہے اور میچنگ کے لیے استعمال نہیں ہو سکتا'
+        suspendedHint: 'یہ ٹرک ایڈمن نے معطل کر دیا ہے اور میچنگ کے لیے استعمال نہیں ہو سکتا',
+        verifiedLocked: 'تصدیق شدہ',
+        verifiedNoEdit: 'ایڈمن سے تصدیق شدہ ٹرک میں ترمیم نہیں ہو سکتی'
       },
       feedbackPage: {
         title: 'فیڈ بیک',
@@ -2362,7 +2647,18 @@ export const translations = {
         historyLead: 'وہ لوڈز جو ڈیلیور یا بند ہو چکے ہیں یہاں نظر آئیں گے۔',
         historyView: 'شپمنٹ دیکھیں',
         historyClosedLabel: 'بند',
-        historyLoadFailed: 'شپمنٹ ہسٹری لوڈ نہیں ہو سکی۔'
+        historyLoadFailed: 'شپمنٹ ہسٹری لوڈ نہیں ہو سکی۔',
+        historyTabCompleted: 'مکمل',
+        historyTabAccepted: 'قبول شدہ',
+        historyTabRejected: 'مسترد',
+        historyTabClosed: 'بند',
+        historyTabCancelled: 'منسوخ',
+        historyBidRow: 'مسترد بڈ',
+        historySearchPlaceholder: 'لوڈ کوڈ یا روٹ سے تلاش…',
+        historyRoleShipper: 'آپ کے پوسٹ کردہ لوڈز',
+        historyRoleCarrier: 'آپ کی گزارش کردہ لوڈز',
+        activeTitle: 'فعال شپمنٹس',
+        activeLead: 'وہ معاہدے جو ابھی لائیو ہیں۔'
       },
       // wallet removed: ادائیگی آف لائن
       dashboard: {
@@ -2397,10 +2693,13 @@ export const translations = {
         statFleetSub: 'رجسٹرڈ',
         myActiveShipments: 'میری فعال شپمنٹس',
         myAssignedShipments: 'میری تفویض شدہ شپمنٹس',
+        tabActiveShipments: 'فعال',
+        tabHistory: 'تاریخ',
         emptyNoActiveShipments: 'کوئی فعال شپمنٹ نہیں',
         emptyNoActiveShipmentsBody: 'ٹریکنگ کے لیے کیریئر بڈ قبول کریں۔',
         emptyNoAssignedShipments: 'کوئی تفویض نہیں',
         emptyNoAssignedShipmentsBody: 'جب شپپر بڈ قبول کرے گا تو یہاں نظر آئے گی۔',
+        activeShipmentsCount: '{{count}} فعال شپمنٹس',
         chartWeekLabel: 'ہفتہ {{n}}',
         operationsTitle: 'آپریشنز کا خلاصہ',
         operationsLive: 'لائیو',
@@ -2445,7 +2744,7 @@ export const translations = {
         widgetAuthErrorHint: 'آپ کا ایڈمن سیشن ختم ہو سکتا ہے۔ دوبارہ سائن ان کریں؛ باقی ڈیش بورڈ دستیاب رہے گا۔',
         widgetForbiddenError: 'اس حصے تک رسائی نہیں۔',
         widgetServerError: 'سرور خرابی — تھوڑی دیر بعد دوبارہ کوشش کریں۔',
-        widgetNetworkError: 'نیٹ ورک/CORS خرابی — نیچے endpoint تفصیل دیکھیں۔',
+        widgetNetworkError: 'یہ حصہ لوڈ نہیں ہو سکا۔ کنکشن چیک کریں اور دوبارہ کوشش کریں۔',
         widgetNotFoundError: 'یہ ڈیٹا سرور پر دستیاب نہیں۔',
         widgetDataError: 'ڈیٹا لوڈ نہیں ہو سکا۔',
         widgetEmpty: 'ابھی کوئی ڈیٹا نہیں۔',
@@ -2606,6 +2905,9 @@ export const translations = {
       fleetApproval: 'فلیٹ منظوری',
       disputes: 'تنازعات',
       shipments: 'ترسیلات',
+      shipmentsActive: 'فعال شپمنٹس',
+      shipmentsHistory: 'شپمنٹ کی تاریخ',
+      shipmentsTracking: 'لائیو ٹریکنگ',
       roleManagement: 'کرداروں کی اجازتیں',
       notifications: 'اطلاعات',
       settings: 'سیٹنگز',
@@ -2639,6 +2941,7 @@ export const translations = {
       youSuggested: 'آپ نے تجویز دی',
       carrierSuggested: 'کیریئر نے تجویز دی',
       suggestedLabel: 'تجویز',
+      suggestedBidType: 'تجویز شدہ بڈ',
       original: 'اصل',
       amountPlaceholder: 'رقم (PKR)',
       bidExpiredHint: 'یہ بڈ ختم ہو گیا۔ کھلے لوڈز پر نیا بڈ لگا سکتے ہیں۔',

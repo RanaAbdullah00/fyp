@@ -9,20 +9,20 @@ import { normalizeTrucksResponse } from '../../utils/fleetApi.js';
 import { useAuth } from '../../hooks/useAuth.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { useDashboardMetrics } from '../../hooks/useDashboardMetrics.js';
-import ActiveShipmentPanel from '../../components/dashboard/ActiveShipmentPanel.jsx';
-import ActiveTripBanner from '../../components/dashboard/ActiveTripBanner.jsx';
+import DashboardShipmentTabs from '../../components/dashboard/DashboardShipmentTabs.jsx';
+import SpaceRequestsPanel from '../../components/carrier/SpaceRequestsPanel.jsx';
 import { normalizeLoads } from '../../adapters/normalize.js';
 import { ensureArray } from '../../utils/unwrapApi.js';
 import ActiveRoleBadge from '../../components/profile/ActiveRoleBadge.jsx';
+import Loader from '../../components/ui/Loader.jsx';
 import { acceptLoadAtListedFare, submitCounterOffer, rejectLoadForCarrier } from '../../services/carrierLoadOffer.js';
+import { commitOptimisticBidSuggest, emitScopedRefresh } from '../../utils/contractActivationLayer.js';
 import { notifyApiError, notifySystem, SystemNotifyType } from '../../utils/notifySystem.js';
 import { isActiveBidStatus, normalizeBidStatus } from '../../utils/bidStatus.js';
-import { useShipmentTracking } from '../../hooks/useShipmentTracking.js';
-import Loader from '../../components/ui/Loader.jsx';
-
 const CarrierDashboard = () => {
   const { t } = useLanguage();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const activeRole = user?.activeRole ?? user?.roles?.[0];
   const profileComplete = user?.profileComplete === true;
   const { ops, loadingOps, activities } = useDashboardMetrics();
   const [openLoads, setOpenLoads] = useState([]);
@@ -58,11 +58,23 @@ const CarrierDashboard = () => {
   useEffect(() => {
     const onRefresh = (e) => {
       const scope = e?.detail?.scope;
-      if (scope && scope !== 'all' && scope !== 'loads' && scope !== 'bids') return;
+      if (scope && scope !== 'all' && scope !== 'loads' && scope !== 'bids' && scope !== 'shipments' && scope !== 'space') return;
+      refreshBoard().catch(() => {});
+    };
+    const onContractActivated = () => {
+      refreshBoard().catch(() => {});
+    };
+    const onShipmentsRefresh = () => {
       refreshBoard().catch(() => {});
     };
     window.addEventListener('tp:realtime-refresh', onRefresh);
-    return () => window.removeEventListener('tp:realtime-refresh', onRefresh);
+    window.addEventListener('tp:contract-activated', onContractActivated);
+    window.addEventListener('tp:shipments-refresh', onShipmentsRefresh);
+    return () => {
+      window.removeEventListener('tp:realtime-refresh', onRefresh);
+      window.removeEventListener('tp:contract-activated', onContractActivated);
+      window.removeEventListener('tp:shipments-refresh', onShipmentsRefresh);
+    };
   }, [refreshBoard]);
 
   const stats = useMemo(() => {
@@ -77,21 +89,13 @@ const CarrierDashboard = () => {
     ];
   }, [ops?.carrier, myBids, fleetCount, openLoads.length, t]);
 
-  const activeTrackRef = useMemo(() => {
-    const won = myBids.find((b) => normalizeBidStatus(b.status) === 'accepted');
-    return won?.loadCode || won?.loadId || null;
-  }, [myBids]);
-
-  const { trackingData, loading: loadingTracking, livePos, geoError } = useShipmentTracking({
-    trackRef: activeTrackRef,
-    shareLive: true,
-    enabled: Boolean(activeTrackRef)
-  });
-
   const handleCarrierAccept = async (load) => {
     setOfferBusyId(load.id);
     try {
-      await acceptLoadAtListedFare(request, load);
+      await acceptLoadAtListedFare(request, load, {
+        t,
+        notifyWarn: (msg) => notifySystem(SystemNotifyType.WARNING, msg)
+      });
       notifySystem(SystemNotifyType.SUCCESS, t('pages.loads.carrierAcceptSuccess'));
       await refreshBoard();
     } catch (err) {
@@ -104,8 +108,18 @@ const CarrierDashboard = () => {
   const handleCarrierCounter = async (load, amount) => {
     setOfferBusyId(load.id);
     try {
-      await submitCounterOffer(request, load, amount);
+      const updated = await submitCounterOffer(request, load, amount, {
+        t,
+        notifyWarn: (msg) => notifySystem(SystemNotifyType.WARNING, msg)
+      });
+      if (updated?.id) {
+        commitOptimisticBidSuggest(updated.id, amount, {
+          suggestedBy: 'carrier',
+          loadCode: load?.code
+        });
+      }
       notifySystem(SystemNotifyType.SUCCESS, t('pages.loads.carrierCounterSuccess'));
+      emitScopedRefresh('bids');
       await refreshBoard();
     } catch (err) {
       notifyApiError(err);
@@ -126,6 +140,14 @@ const CarrierDashboard = () => {
       setOfferBusyId(null);
     }
   };
+
+  if (authLoading || !user?.id || !activeRole) {
+    return (
+      <div className="container py-3 text-center">
+        <Loader />
+      </div>
+    );
+  }
 
   return (
     <div className="container py-3 tp-dashboard tp-dashboard--carrier">
@@ -188,18 +210,14 @@ const CarrierDashboard = () => {
       </div>
 
       <div className="mt-4">
+        <SpaceRequestsPanel />
+      </div>
+
+      <div className="mt-4">
         <h6 className="mb-3">{t('pages.dashboard.myAssignedShipments')}</h6>
-        {activeTrackRef ? <ActiveTripBanner trackingData={trackingData} trackRef={activeTrackRef} /> : null}
-        <ActiveShipmentPanel
-          trackingData={trackingData}
-          loadingTracking={loadingTracking}
-          liveDriver={Boolean(activeTrackRef)}
-          liveLocation={livePos}
-          geoError={geoError}
-          trackHref={
-            activeTrackRef ? `/shipments/tracking/${encodeURIComponent(activeTrackRef)}` : null
-          }
-          emptyState={
+        <DashboardShipmentTabs
+          carrierMode
+          activeEmptyState={
             <div className="text-center py-5 px-3 tp-empty-state rounded-3 border border-dashed text-muted">
               <FaTruck className="fs-1 text-muted mb-3" />
               <h6 className="mb-2">{t('pages.dashboard.emptyNoAssignedShipments')}</h6>

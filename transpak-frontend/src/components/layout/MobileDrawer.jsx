@@ -1,7 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { NavLink } from 'react-router-dom';
-import { FaSignOutAlt, FaClipboardCheck, FaWarehouse } from 'react-icons/fa';
+import { FaSignOutAlt, FaClipboardCheck } from 'react-icons/fa';
 import { useAuth } from '../../hooks/useAuth.js';
 import LogoutConfirmModal from '../ui/LogoutConfirmModal.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
@@ -63,16 +63,23 @@ const MobileDrawer = ({ open, onClose }) => {
                 </NavLink>
               </>
             )}
+            {(activeRole === 'shipper' || activeRole === 'carrier') && (
+              <>
+                <NavLink to="/shipments/active" className={linkClass} onClick={onClose}>
+                  {t('nav.shipmentsActive')}
+                </NavLink>
+                <NavLink to="/shipments/history" className={linkClass} onClick={onClose}>
+                  {t('nav.shipmentsHistory')}
+                </NavLink>
+                <NavLink to="/shipments/tracking" className={linkClass} onClick={onClose}>
+                  {t('nav.shipmentsTracking')}
+                </NavLink>
+              </>
+            )}
             {activeRole === 'carrier' && (
               <>
                 <NavLink to="/loads/manage?tab=freight" className={linkClass} onClick={onClose}>
                   {t('pages.dashboard.statOpenMarketplace')}
-                </NavLink>
-                <NavLink to="/loads/manage?tab=capacity" className={linkClass} onClick={onClose}>
-                  <span className="d-flex align-items-center gap-2">
-                    <FaWarehouse size={14} aria-hidden />
-                    {t('loadsHub.navCapacityHub')}
-                  </span>
                 </NavLink>
                 <NavLink to="/bids/mine" className={linkClass} onClick={onClose}>
                   {t('nav.myBids')}

@@ -116,6 +116,79 @@ module.exports = function registerSocketHandlers(io) {
         if (!isShipper && !isCarrier) return;
         const room = trackRoomKey(load);
         if (room) socket.join(`track:${room}`);
+        const { rows: shipRows } = await db(`SELECT id FROM shipments WHERE load_id = $1 LIMIT 1`, [
+          load.id
+        ]);
+        if (shipRows[0]?.id) socket.join(`shipment:${shipRows[0].id}`);
+      } catch {
+        /* ignore */
+      }
+    });
+
+    socket.on("space:join", async (payload) => {
+      if (!allowSocketEvent(socket, "space:join")) return;
+      try {
+        const requestId = String(payload?.requestId || "").trim();
+        if (!isUuid(requestId)) return;
+        const { rows } = await db(
+          `SELECT r.id, r.shipper_id, l.carrier_id
+           FROM carrier_space_requests r
+           JOIN carrier_space_listings l ON l.id = r.listing_id
+           WHERE r.id = $1`,
+          [requestId]
+        );
+        const row = rows[0];
+        if (!row) return;
+        const isParty =
+          String(row.shipper_id) === uid || String(row.carrier_id) === uid;
+        if (!isParty) return;
+        socket.join(`space:${requestId}`);
+      } catch {
+        /* ignore */
+      }
+    });
+
+    socket.on("bid:join", async (payload) => {
+      if (!allowSocketEvent(socket, "bid:join")) return;
+      try {
+        const bidId = String(payload?.bidId || "").trim();
+        if (!isUuid(bidId)) return;
+        const { rows } = await db(
+          `SELECT b.id, b.carrier_id, l.shipper_id
+           FROM bids b
+           JOIN loads l ON l.id = b.load_id
+           WHERE b.id = $1`,
+          [bidId]
+        );
+        const row = rows[0];
+        if (!row) return;
+        const isParty =
+          String(row.carrier_id) === uid || String(row.shipper_id) === uid;
+        if (!isParty) return;
+        socket.join(`bid:${bidId}`);
+      } catch {
+        /* ignore */
+      }
+    });
+
+    socket.on("shipment:join", async (payload) => {
+      if (!allowSocketEvent(socket, "shipment:join")) return;
+      try {
+        const shipmentId = String(payload?.shipmentId || "").trim();
+        if (!isUuid(shipmentId)) return;
+        const { rows } = await db(
+          `SELECT s.id, l.shipper_id, l.assigned_carrier_id
+           FROM shipments s
+           JOIN loads l ON l.id = s.load_id
+           WHERE s.id = $1`,
+          [shipmentId]
+        );
+        const row = rows[0];
+        if (!row) return;
+        const isParty =
+          String(row.shipper_id) === uid || String(row.assigned_carrier_id) === uid;
+        if (!isParty) return;
+        socket.join(`shipment:${shipmentId}`);
       } catch {
         /* ignore */
       }
@@ -155,6 +228,19 @@ module.exports = function registerSocketHandlers(io) {
           return;
         }
 
+        const { normalizeShipmentStatus } = require("../utils/shipmentStatus");
+        const { rows: shipGate } = await db(
+          `SELECT status FROM shipments WHERE load_id = $1 LIMIT 1`,
+          [load.id]
+        );
+        const shipCanon = normalizeShipmentStatus(shipGate[0]?.status) || "posted";
+        if (!["booked", "pickedup", "intransit"].includes(shipCanon)) {
+          if (typeof ack === "function") {
+            ack({ ok: false, message: "Live tracking is available after the shipment is booked" });
+          }
+          return;
+        }
+
         const throttle = checkGpsThrottle(load.id);
         if (!throttle.ok) {
           if (typeof ack === "function") {
@@ -163,12 +249,8 @@ module.exports = function registerSocketHandlers(io) {
           return;
         }
 
-        await db(
-          `INSERT INTO shipments (load_id, status, location_unavailable)
-           VALUES ($1, 'posted', true)
-           ON CONFLICT (load_id) DO NOTHING`,
-          [load.id]
-        );
+        const { createShipmentUnified } = require("../utils/shipmentFactory");
+        await createShipmentUnified({ query: db }, { loadId: load.id, mode: "posted_gps" });
         const result = await db(
           `UPDATE shipments
            SET current_lat = $2, current_lng = $3, location_unavailable = false, updated_at = now()
@@ -191,6 +273,12 @@ module.exports = function registerSocketHandlers(io) {
         const room = trackRoomKey(load);
         if (room) {
           io.to(`track:${room}`).emit("tracking:update", updatePayload);
+        }
+        const { rows: shipRows } = await db(`SELECT id FROM shipments WHERE load_id = $1 LIMIT 1`, [
+          load.id
+        ]);
+        if (shipRows[0]?.id) {
+          io.to(`shipment:${shipRows[0].id}`).emit("tracking:update", updatePayload);
         }
         if (typeof ack === "function") ack({ ok: true, data: updatePayload });
       } catch {
