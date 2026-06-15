@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "updatedAt": "2026-06-15T16:46:10.908Z",
+  "updatedAt": "2026-06-15T16:54:29.273Z",
   "chainStatus": "synced",
   "fyp": {
-    "sha": "87f90c6ed463ed6ec9ad883a492bd0877df1678c",
-    "short": "87f90c6ed463"
+    "sha": "d01541b81543579043c7ca30cd274553e45c7d7c",
+    "short": "d01541b81543"
   },
   "backend": {
     "repo": "RanaAbdullah00/transpak-backend",
@@ -25,13 +25,6 @@
     "frontendUrls": [
       "https://transpak-frontend.pages.dev"
     ],
-    "lastVerifiedAt": "2026-06-15T16:46:17.058Z",
-    "renderCommit": "a6c5965081987e9da045ab5691d4257f2efd394f",
-    "frontendBundles": [
-      {
-        "url": "https://transpak-frontend.pages.dev",
-        "mainJs": "mtaIAufg"
-      }
-    ]
+    "lastVerifiedAt": "2026-06-15T16:54:29.275Z"
   }
 }
