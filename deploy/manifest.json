@@ -1,16 +1,16 @@
 {
   "version": 1,
-  "updatedAt": "2026-06-15T12:17:33.386Z",
+  "updatedAt": "2026-06-15T12:47:49.155Z",
   "chainStatus": "synced",
   "fyp": {
-    "sha": "bf466ce0226972509ab1513749ddeba95a9015ba",
-    "short": "bf466ce02269"
+    "sha": "4792dfb047bdb64ec91b21f7cc305a323e039c23",
+    "short": "4792dfb047bd"
   },
   "backend": {
     "repo": "RanaAbdullah00/transpak-backend",
-    "repoSha": "a9900fd7b70445eabe515438d925c22957ab6857",
-    "short": "a9900fd7b704",
-    "contentHash": "dc6bf6950a723ad0"
+    "repoSha": "5372f317fafe25c4cda40a7fef8c3e29efaf195a",
+    "short": "5372f317fafe",
+    "contentHash": "3919c212dc4541b3"
   },
   "frontend": {
     "repo": "RanaAbdullah00/transpak-frontend",
