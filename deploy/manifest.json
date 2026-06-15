@@ -1,24 +1,24 @@
 {
   "version": 1,
-  "updatedAt": "2026-05-31T11:01:39.792Z",
+  "updatedAt": "2026-06-15T06:06:51.287Z",
   "chainStatus": "synced",
   "fyp": {
-    "sha": "64439357c988ed0971b045ed2ad8243fb8025a70",
-    "short": "64439357c988"
+    "sha": "d0a5f38b6484e2e041a113eab87965488e7346d2",
+    "short": "d0a5f38b6484"
   },
   "backend": {
     "repo": "RanaAbdullah00/transpak-backend",
-    "repoSha": "580787b36edd59cb6f7ac9a803d4201000b6ee53",
-    "short": "580787b36edd",
-    "contentHash": "5194b429e11de093"
+    "repoSha": "f791735c4787f83afead4a2cfa7bb6ef463c2c6d",
+    "short": "f791735c4787",
+    "contentHash": "240357d8b180e1af"
   },
   "frontend": {
     "repo": "RanaAbdullah00/transpak-frontend",
-    "repoSha": "33fe48bbf1e05ae251687fce40f5724988c8344f",
-    "short": "33fe48bbf1e0",
-    "contentHash": "80fe9c35fc789051",
-    "assetFingerprint": "DlsQIQQL",
-    "buildMeta": "33fe48bbf1e0"
+    "repoSha": "9765980cc1c5ee0ae65ff2a101884a802976bbc3",
+    "short": "9765980cc1c5",
+    "contentHash": "71f384f3f7c6378c",
+    "assetFingerprint": "Yj3qqbua",
+    "buildMeta": "9765980cc1c5"
   },
   "live": {
     "apiOrigin": "https://transpak-backend-1.onrender.com",
