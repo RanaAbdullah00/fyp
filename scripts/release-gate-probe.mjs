@@ -56,6 +56,20 @@ async function loginShipper() {
   return body.data.token;
 }
 
+async function loginAdmin() {
+  const email = env.E2E_ADMIN_ONLY_EMAIL || env.E2E_ADMIN_EMAIL;
+  const password = env.E2E_ADMIN_PASSWORD || env.PHASE1_RBAC_PASSWORD;
+  if (!email || !password) return null;
+  const res = await fetch(`${apiOrigin}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ email, password, roleHint: "admin" })
+  });
+  const body = await res.json();
+  if (!res.ok || !body?.data?.token) return null;
+  return body.data.token;
+}
+
 async function main() {
   console.log(`\n=== TransPAK Release Gate Probe ===\nAPI: ${apiOrigin}\nFrontend: ${frontendOrigin}\n`);
 
@@ -88,25 +102,74 @@ async function main() {
   const probes = [
     ["/api/shipments/active", 401, "shipments-active-auth"],
     ["/api/shipments/history", 401, "shipments-history-route"],
+    ["/api/admin/dashboard/live", 401, "admin-dashboard-unauth"],
     ["/api/public/stats", 200, "public-stats"],
   ];
   for (const [path, expectMin, id] of probes) {
     try {
       const r = await fetch(`${apiOrigin}${path}`, { cache: "no-store" });
       const isHistory = path.includes("/history");
+      const isAdminLive = path.includes("/admin/dashboard/live");
       const pass = isHistory
         ? r.status === 401 || r.status === 200
-        : path.includes("active")
-          ? r.status === 401 || r.status === 200
-          : r.status === expectMin || r.status === 401;
+        : isAdminLive
+          ? r.status === 401 || r.status === 403
+          : path.includes("active")
+            ? r.status === 401 || r.status === 200
+            : r.status === expectMin || r.status === 401;
       const detail =
         isHistory && r.status === 404
           ? `${path} HTTP 404 (route missing — deploy stabilization backend)`
-          : `${path} HTTP ${r.status}${path.includes("active") && r.status === 404 ? " (route missing — deploy final backend)" : ""}`;
+          : isAdminLive && r.status === 404
+            ? `${path} HTTP 404 (admin dashboard route missing)`
+            : `${path} HTTP ${r.status}${path.includes("active") && r.status === 404 ? " (route missing — deploy final backend)" : ""}`;
       record(id, pass, detail);
     } catch (e) {
       record(id, false, e.message);
     }
+  }
+
+  try {
+    const adminToken = await loginAdmin();
+    if (!adminToken) {
+      record(
+        "admin-dashboard-auth",
+        false,
+        "skipped — set E2E_ADMIN_EMAIL + E2E_ADMIN_PASSWORD (or PHASE1_RBAC_PASSWORD) in transpak-backend/.env"
+      );
+      record("admin-widget-loads", false, "skipped — admin login unavailable");
+    } else {
+      const dashRes = await fetch(`${apiOrigin}/api/admin/dashboard/live`, {
+        headers: { Authorization: `Bearer ${adminToken}`, Accept: "application/json" },
+        cache: "no-store"
+      });
+      const dashBody = await dashRes.json();
+      const stats = dashBody?.data?.stats;
+      record(
+        "admin-dashboard-auth",
+        dashRes.ok && stats && typeof stats.totalUsers === "number",
+        dashRes.ok
+          ? `HTTP ${dashRes.status} totalUsers=${stats?.totalUsers ?? "n/a"}`
+          : `HTTP ${dashRes.status} ${dashBody?.message || "error"}`
+      );
+
+      const widgetRes = await fetch(`${apiOrigin}/api/admin/dashboard/widgets/loads`, {
+        headers: { Authorization: `Bearer ${adminToken}`, Accept: "application/json" },
+        cache: "no-store"
+      });
+      const widgetBody = await widgetRes.json();
+      const widgetData = widgetBody?.data;
+      record(
+        "admin-widget-loads",
+        widgetRes.ok && (widgetData?.ok === true || Array.isArray(widgetData?.recentLoads)),
+        widgetRes.ok
+          ? `HTTP ${widgetRes.status} widget=${widgetData?.widget || "loads"} durationMs=${widgetData?.durationMs ?? "n/a"}`
+          : `HTTP ${widgetRes.status} ${widgetBody?.message || "error"}`
+      );
+    }
+  } catch (e) {
+    record("admin-dashboard-auth", false, e.message);
+    record("admin-widget-loads", false, e.message);
   }
 
   try {
@@ -154,6 +217,21 @@ async function main() {
           (js.includes("read-all', undefined") || js.includes('read-all",void 0') || js.includes("read-all\",null")),
         "dual-role notification PATCH query params in bundle"
       );
+      const adminChunk = html.match(/assets\/AdminDashboardPage-[A-Za-z0-9_-]+\.js/)?.[0];
+      if (adminChunk) {
+        const adminJs = await fetch(`${frontendOrigin}/${adminChunk}`, { cache: "no-store" }).then((r) => r.text());
+        record(
+          "frontend-admin-live-feed",
+          adminJs.includes("liveFeedReconnecting") || adminJs.includes("AdminLiveFeedPanel") || adminJs.includes("tp-admin-live-badge"),
+          "admin dashboard live feed UI in chunk"
+        );
+      } else {
+        record(
+          "frontend-admin-live-feed",
+          js.includes("liveFeedReconnecting") || js.includes("tp-admin-live-badge"),
+          "admin live feed markers in main bundle"
+        );
+      }
     }
   } catch (e) {
     record("frontend-http", false, e.message);
