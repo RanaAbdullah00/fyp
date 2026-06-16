@@ -1,0 +1,18 @@
+{
+  "at": "2026-06-16T17:44:58.348Z",
+  "pass": true,
+  "dedupePass": true,
+  "dedupeDetail": {
+    "fallback": "no duplicate event_id groups",
+    "duplicates": []
+  },
+  "listDedupe": true,
+  "markReadPass": true,
+  "markReadDetail": {
+    "markStatus": 200,
+    "persistedRead": true
+  },
+  "adminMarkPass": true,
+  "syncOk": true,
+  "unreadBeforeCount": 7
+}

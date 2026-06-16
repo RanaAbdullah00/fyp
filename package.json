@@ -14,6 +14,7 @@
     "backend:dev": "npm run dev --prefix transpak-backend",
     "backend:start": "npm run start --prefix transpak-backend",
     "frontend:dev": "npm run dev --prefix transpak-frontend",
-    "frontend:build": "npm run build --prefix transpak-frontend"
+    "frontend:build": "npm run build --prefix transpak-frontend",
+    "validate:behavioral": "node scripts/behavioral-validation.mjs"
   }
 }

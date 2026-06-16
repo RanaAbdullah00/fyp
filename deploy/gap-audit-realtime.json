@@ -1,0 +1,16 @@
+{
+  "at": "2026-06-16T17:44:47.167Z",
+  "pass": true,
+  "phase5Core": true,
+  "notifSyncPass": true,
+  "loadId": "33bf16ef-84ff-44c7-b642-087a5cdf851f",
+  "bidId": "b2ac4ddb-2efb-4be0-908e-66369a0b1e66",
+  "acceptOk": true,
+  "acceptStatus": 200,
+  "activeVisibleMs": 917,
+  "activeVisible": true,
+  "notifSyncMs": 703,
+  "notifSync": true,
+  "deadlineMs": 5000,
+  "totalMs": 3609
+}

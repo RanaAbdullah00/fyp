@@ -1,0 +1,2196 @@
+{
+  "at": "2026-06-16T17:45:12.243Z",
+  "pass": true,
+  "steps": [
+    {
+      "name": "validate-defect-fixes",
+      "pass": true
+    },
+    {
+      "name": "db-integrity-check",
+      "pass": true
+    },
+    {
+      "name": "release-gate-probe",
+      "pass": true
+    },
+    {
+      "name": "tracking-perf",
+      "pass": true
+    },
+    {
+      "name": "cors",
+      "pass": true
+    },
+    {
+      "name": "bid-stress",
+      "pass": true
+    },
+    {
+      "name": "status-integrity",
+      "pass": true
+    },
+    {
+      "name": "realtime",
+      "pass": true
+    },
+    {
+      "name": "notifications",
+      "pass": true
+    },
+    {
+      "name": "admin-data",
+      "pass": true
+    },
+    {
+      "name": "capacity-expiry",
+      "pass": true
+    },
+    {
+      "name": "frontend-perf",
+      "pass": true
+    }
+  ],
+  "passCount": 12,
+  "total": 12,
+  "artifacts": {
+    "gap-audit-admin-data": {
+      "at": "2026-06-16T17:45:04.384Z",
+      "pass": true,
+      "feedPages": [
+        {
+          "page": 1,
+          "ok": true,
+          "status": 200,
+          "total": 5429,
+          "totalPages": 272,
+          "dupes": [],
+          "itemCount": 20
+        },
+        {
+          "page": 2,
+          "ok": true,
+          "status": 200,
+          "total": 5430,
+          "totalPages": 272,
+          "dupes": [],
+          "itemCount": 20
+        },
+        {
+          "page": 3,
+          "ok": true,
+          "status": 200,
+          "total": 5430,
+          "totalPages": 272,
+          "dupes": [],
+          "itemCount": 20
+        }
+      ],
+      "withinPageDupes": false,
+      "crossPageDuplicateIds": [
+        "5cc70ff0-97ab-4eda-9810-6ffb109b2de2"
+      ],
+      "crossPageDupesLive": true,
+      "paginationStable": false,
+      "auditPaginationStable": false,
+      "note": "Cross-page duplicate ids may occur when live events insert during offset pagination",
+      "auditPages": [
+        {
+          "page": 1,
+          "ok": true,
+          "status": 200,
+          "total": 3218,
+          "totalPages": 161,
+          "itemCount": 20
+        },
+        {
+          "page": 2,
+          "ok": true,
+          "status": 200,
+          "total": 3216,
+          "totalPages": 161,
+          "itemCount": 20
+        },
+        {
+          "page": 3,
+          "ok": true,
+          "status": 200,
+          "total": 3216,
+          "totalPages": 161,
+          "itemCount": 20
+        }
+      ],
+      "shipmentFilterOk": true
+    },
+    "gap-audit-bid-stress": {
+      "at": "2026-06-16T17:44:28.545Z",
+      "pass": true,
+      "loadId": "e11a45f4-590b-467d-a646-db3c776ab906",
+      "concurrent": 50,
+      "elapsedMs": 6418,
+      "success": 12,
+      "conflict": 37,
+      "dbCount": 1,
+      "activeForLoad": 0,
+      "statusHistogram": {
+        "200": 11,
+        "201": 1,
+        "409": 37,
+        "520": 1
+      }
+    },
+    "gap-audit-capacity-expiry": {
+      "at": "2026-06-16T17:45:10.827Z",
+      "pass": true,
+      "marketCount": 10,
+      "mineCount": 0,
+      "closedInMarket": [],
+      "reopenBlocked": null,
+      "expiredLoadsHidden": true
+    },
+    "gap-audit-cors": {
+      "at": "2026-06-16T17:44:15.427Z",
+      "pass": true,
+      "probes": [
+        {
+          "requestHeaders": "authorization, content-type, idempotency-key, x-idempotency-key, x-requested-with",
+          "status": 204,
+          "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+          "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+          "maxAge": 86400,
+          "missing": [],
+          "pass": true
+        },
+        {
+          "requestHeaders": "authorization",
+          "status": 204,
+          "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+          "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+          "maxAge": 86400,
+          "missing": [],
+          "pass": true
+        },
+        {
+          "requestHeaders": "content-type",
+          "status": 204,
+          "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+          "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+          "maxAge": 86400,
+          "missing": [],
+          "pass": true
+        },
+        {
+          "requestHeaders": "idempotency-key",
+          "status": 204,
+          "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+          "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+          "maxAge": 86400,
+          "missing": [],
+          "pass": true
+        },
+        {
+          "requestHeaders": "x-idempotency-key",
+          "status": 204,
+          "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+          "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+          "maxAge": 86400,
+          "missing": [],
+          "pass": true
+        },
+        {
+          "requestHeaders": "x-requested-with",
+          "status": 204,
+          "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+          "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+          "maxAge": 86400,
+          "missing": [],
+          "pass": true
+        }
+      ],
+      "staticCheck": {
+        "pass": true,
+        "useCorsCount": 1,
+        "hasIdempotency": true,
+        "hasMaxAge": true
+      },
+      "origin": "https://910b6159.transpak-frontend.pages.dev"
+    },
+    "gap-audit-frontend-perf": {
+      "at": "2026-06-16T17:45:12.105Z",
+      "pass": true,
+      "frontend": "https://transpak-frontend.pages.dev",
+      "bundleUrl": "https://transpak-frontend.pages.dev/assets/index-nkLsKm-3.js",
+      "cold": {
+        "ok": true,
+        "status": 200,
+        "ms": 140,
+        "bytes": 520650
+      },
+      "warm": {
+        "ok": true,
+        "status": 200,
+        "ms": 118,
+        "bytes": 520650
+      },
+      "dashboardStatus": 200,
+      "thresholdMs": 2500,
+      "note": "Measurement only — no App.jsx instrumentation"
+    },
+    "gap-audit-notifications": {
+      "at": "2026-06-16T17:44:58.348Z",
+      "pass": true,
+      "dedupePass": true,
+      "dedupeDetail": {
+        "fallback": "no duplicate event_id groups",
+        "duplicates": []
+      },
+      "listDedupe": true,
+      "markReadPass": true,
+      "markReadDetail": {
+        "markStatus": 200,
+        "persistedRead": true
+      },
+      "adminMarkPass": true,
+      "syncOk": true,
+      "unreadBeforeCount": 7
+    },
+    "gap-audit-realtime": {
+      "at": "2026-06-16T17:44:47.167Z",
+      "pass": true,
+      "phase5Core": true,
+      "notifSyncPass": true,
+      "loadId": "33bf16ef-84ff-44c7-b642-087a5cdf851f",
+      "bidId": "b2ac4ddb-2efb-4be0-908e-66369a0b1e66",
+      "acceptOk": true,
+      "acceptStatus": 200,
+      "activeVisibleMs": 917,
+      "activeVisible": true,
+      "notifSyncMs": 703,
+      "notifSync": true,
+      "deadlineMs": 5000,
+      "totalMs": 3609
+    },
+    "gap-audit-regression": {
+      "at": "2026-06-16T17:16:51.712Z",
+      "pass": true,
+      "steps": [
+        {
+          "name": "validate-defect-fixes",
+          "pass": true
+        },
+        {
+          "name": "db-integrity-check",
+          "pass": true
+        },
+        {
+          "name": "release-gate-probe",
+          "pass": true
+        },
+        {
+          "name": "tracking-perf",
+          "pass": true
+        },
+        {
+          "name": "cors",
+          "pass": true
+        },
+        {
+          "name": "bid-stress",
+          "pass": true
+        },
+        {
+          "name": "status-integrity",
+          "pass": true
+        },
+        {
+          "name": "realtime",
+          "pass": true
+        },
+        {
+          "name": "notifications",
+          "pass": true
+        },
+        {
+          "name": "admin-data",
+          "pass": true
+        },
+        {
+          "name": "capacity-expiry",
+          "pass": true
+        },
+        {
+          "name": "frontend-perf",
+          "pass": true
+        }
+      ],
+      "passCount": 12,
+      "total": 12,
+      "artifacts": {
+        "gap-audit-admin-data": {
+          "at": "2026-06-16T17:16:44.357Z",
+          "pass": true,
+          "feedPages": [
+            {
+              "page": 1,
+              "ok": true,
+              "status": 200,
+              "total": 4674,
+              "totalPages": 234,
+              "dupes": [],
+              "itemCount": 20
+            },
+            {
+              "page": 2,
+              "ok": true,
+              "status": 200,
+              "total": 4674,
+              "totalPages": 234,
+              "dupes": [],
+              "itemCount": 20
+            },
+            {
+              "page": 3,
+              "ok": true,
+              "status": 200,
+              "total": 4676,
+              "totalPages": 234,
+              "dupes": [],
+              "itemCount": 20
+            }
+          ],
+          "withinPageDupes": false,
+          "crossPageDuplicateIds": [
+            "95b3532f-49fb-4e32-aadc-c6fb034b6d5f",
+            "21ffb00d-5f85-4ea7-96b7-bf7b48207579"
+          ],
+          "crossPageDupesLive": true,
+          "paginationStable": false,
+          "auditPaginationStable": true,
+          "note": "Cross-page duplicate ids may occur when live events insert during offset pagination",
+          "auditPages": [
+            {
+              "page": 1,
+              "ok": true,
+              "status": 200,
+              "total": 2774,
+              "totalPages": 139,
+              "itemCount": 20
+            },
+            {
+              "page": 2,
+              "ok": true,
+              "status": 200,
+              "total": 2774,
+              "totalPages": 139,
+              "itemCount": 20
+            },
+            {
+              "page": 3,
+              "ok": true,
+              "status": 200,
+              "total": 2774,
+              "totalPages": 139,
+              "itemCount": 20
+            }
+          ],
+          "shipmentFilterOk": true
+        },
+        "gap-audit-bid-stress": {
+          "at": "2026-06-16T17:16:07.475Z",
+          "pass": true,
+          "loadId": "b8558f1a-72da-4b65-a33b-49ac1229d145",
+          "concurrent": 50,
+          "elapsedMs": 7169,
+          "success": 25,
+          "conflict": 25,
+          "dbCount": 1,
+          "activeForLoad": 0,
+          "statusHistogram": {
+            "200": 24,
+            "201": 1,
+            "409": 25
+          }
+        },
+        "gap-audit-capacity-expiry": {
+          "at": "2026-06-16T17:16:50.481Z",
+          "pass": true,
+          "marketCount": 10,
+          "mineCount": 0,
+          "closedInMarket": [],
+          "reopenBlocked": null,
+          "expiredLoadsHidden": true
+        },
+        "gap-audit-cors": {
+          "at": "2026-06-16T17:15:53.094Z",
+          "pass": true,
+          "probes": [
+            {
+              "requestHeaders": "authorization, content-type, idempotency-key, x-idempotency-key, x-requested-with",
+              "status": 204,
+              "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+              "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+              "maxAge": 86400,
+              "missing": [],
+              "pass": true
+            },
+            {
+              "requestHeaders": "authorization",
+              "status": 204,
+              "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+              "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+              "maxAge": 86400,
+              "missing": [],
+              "pass": true
+            },
+            {
+              "requestHeaders": "content-type",
+              "status": 204,
+              "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+              "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+              "maxAge": 86400,
+              "missing": [],
+              "pass": true
+            },
+            {
+              "requestHeaders": "idempotency-key",
+              "status": 204,
+              "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+              "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+              "maxAge": 86400,
+              "missing": [],
+              "pass": true
+            },
+            {
+              "requestHeaders": "x-idempotency-key",
+              "status": 204,
+              "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+              "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+              "maxAge": 86400,
+              "missing": [],
+              "pass": true
+            },
+            {
+              "requestHeaders": "x-requested-with",
+              "status": 204,
+              "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+              "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+              "maxAge": 86400,
+              "missing": [],
+              "pass": true
+            }
+          ],
+          "staticCheck": {
+            "pass": true,
+            "useCorsCount": 1,
+            "hasIdempotency": true,
+            "hasMaxAge": true
+          },
+          "origin": "https://910b6159.transpak-frontend.pages.dev"
+        },
+        "gap-audit-frontend-perf": {
+          "at": "2026-06-16T17:16:51.551Z",
+          "pass": true,
+          "frontend": "https://transpak-frontend.pages.dev",
+          "bundleUrl": "https://transpak-frontend.pages.dev/assets/index-nkLsKm-3.js",
+          "cold": {
+            "ok": true,
+            "status": 200,
+            "ms": 123,
+            "bytes": 520650
+          },
+          "warm": {
+            "ok": true,
+            "status": 200,
+            "ms": 107,
+            "bytes": 520650
+          },
+          "dashboardStatus": 200,
+          "thresholdMs": 2500,
+          "note": "Measurement only — no App.jsx instrumentation"
+        },
+        "gap-audit-notifications": {
+          "at": "2026-06-16T17:16:39.047Z",
+          "pass": true,
+          "dedupePass": true,
+          "dedupeDetail": {
+            "fallback": "no duplicate event_id groups",
+            "duplicates": []
+          },
+          "listDedupe": true,
+          "markReadPass": true,
+          "markReadDetail": {
+            "markStatus": 200,
+            "persistedRead": true
+          },
+          "adminMarkPass": true,
+          "syncOk": true,
+          "unreadBeforeCount": 7
+        },
+        "gap-audit-realtime": {
+          "at": "2026-06-16T17:16:26.738Z",
+          "pass": true,
+          "phase5Core": true,
+          "notifSyncPass": true,
+          "loadId": "d90b1664-c804-466f-829c-3ed914b3f124",
+          "bidId": "18824f69-ffd2-4c59-b90c-8ccaa578c704",
+          "acceptOk": true,
+          "acceptStatus": 200,
+          "activeVisibleMs": 1358,
+          "activeVisible": true,
+          "notifSyncMs": 705,
+          "notifSync": true,
+          "deadlineMs": 5000,
+          "totalMs": 4122
+        },
+        "gap-audit-regression": {
+          "at": "2026-06-16T17:12:22.367Z",
+          "pass": false,
+          "steps": [
+            {
+              "name": "validate-defect-fixes",
+              "pass": true
+            },
+            {
+              "name": "db-integrity-check",
+              "pass": true
+            },
+            {
+              "name": "release-gate-probe",
+              "pass": false
+            },
+            {
+              "name": "tracking-perf",
+              "pass": true
+            },
+            {
+              "name": "cors",
+              "pass": true
+            },
+            {
+              "name": "bid-stress",
+              "pass": true
+            },
+            {
+              "name": "status-integrity",
+              "pass": true
+            },
+            {
+              "name": "realtime",
+              "pass": true
+            },
+            {
+              "name": "notifications",
+              "pass": true
+            },
+            {
+              "name": "admin-data",
+              "pass": true
+            },
+            {
+              "name": "capacity-expiry",
+              "pass": true
+            },
+            {
+              "name": "frontend-perf",
+              "pass": true
+            }
+          ],
+          "passCount": 11,
+          "total": 12,
+          "artifacts": {
+            "gap-audit-admin-data": {
+              "at": "2026-06-16T17:12:14.666Z",
+              "pass": true,
+              "feedPages": [
+                {
+                  "page": 1,
+                  "ok": true,
+                  "status": 200,
+                  "total": 4631,
+                  "totalPages": 232,
+                  "dupes": [],
+                  "itemCount": 20
+                },
+                {
+                  "page": 2,
+                  "ok": true,
+                  "status": 200,
+                  "total": 4631,
+                  "totalPages": 232,
+                  "dupes": [],
+                  "itemCount": 20
+                },
+                {
+                  "page": 3,
+                  "ok": true,
+                  "status": 200,
+                  "total": 4631,
+                  "totalPages": 232,
+                  "dupes": [],
+                  "itemCount": 20
+                }
+              ],
+              "withinPageDupes": false,
+              "crossPageDuplicateIds": [],
+              "crossPageDupesLive": false,
+              "paginationStable": true,
+              "auditPaginationStable": true,
+              "note": null,
+              "auditPages": [
+                {
+                  "page": 1,
+                  "ok": true,
+                  "status": 200,
+                  "total": 2743,
+                  "totalPages": 138,
+                  "itemCount": 20
+                },
+                {
+                  "page": 2,
+                  "ok": true,
+                  "status": 200,
+                  "total": 2743,
+                  "totalPages": 138,
+                  "itemCount": 20
+                },
+                {
+                  "page": 3,
+                  "ok": true,
+                  "status": 200,
+                  "total": 2743,
+                  "totalPages": 138,
+                  "itemCount": 20
+                }
+              ],
+              "shipmentFilterOk": true
+            },
+            "gap-audit-bid-stress": {
+              "at": "2026-06-16T17:11:39.600Z",
+              "pass": true,
+              "loadId": "819d491f-e600-4215-98fb-ac16ed892619",
+              "concurrent": 50,
+              "elapsedMs": 7729,
+              "success": 50,
+              "conflict": 0,
+              "dbCount": 1,
+              "activeForLoad": 0,
+              "statusHistogram": {
+                "200": 49,
+                "201": 1
+              }
+            },
+            "gap-audit-capacity-expiry": {
+              "at": "2026-06-16T17:12:20.913Z",
+              "pass": true,
+              "marketCount": 10,
+              "mineCount": 0,
+              "closedInMarket": [],
+              "reopenBlocked": null,
+              "expiredLoadsHidden": true
+            },
+            "gap-audit-cors": {
+              "at": "2026-06-16T17:11:24.960Z",
+              "pass": true,
+              "probes": [
+                {
+                  "requestHeaders": "authorization, content-type, idempotency-key, x-idempotency-key, x-requested-with",
+                  "status": 204,
+                  "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+                  "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+                  "maxAge": 86400,
+                  "missing": [],
+                  "pass": true
+                },
+                {
+                  "requestHeaders": "authorization",
+                  "status": 204,
+                  "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+                  "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+                  "maxAge": 86400,
+                  "missing": [],
+                  "pass": true
+                },
+                {
+                  "requestHeaders": "content-type",
+                  "status": 204,
+                  "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+                  "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+                  "maxAge": 86400,
+                  "missing": [],
+                  "pass": true
+                },
+                {
+                  "requestHeaders": "idempotency-key",
+                  "status": 204,
+                  "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+                  "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+                  "maxAge": 86400,
+                  "missing": [],
+                  "pass": true
+                },
+                {
+                  "requestHeaders": "x-idempotency-key",
+                  "status": 204,
+                  "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+                  "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+                  "maxAge": 86400,
+                  "missing": [],
+                  "pass": true
+                },
+                {
+                  "requestHeaders": "x-requested-with",
+                  "status": 204,
+                  "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+                  "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+                  "maxAge": 86400,
+                  "missing": [],
+                  "pass": true
+                }
+              ],
+              "staticCheck": {
+                "pass": true,
+                "useCorsCount": 1,
+                "hasIdempotency": true,
+                "hasMaxAge": true
+              },
+              "origin": "https://910b6159.transpak-frontend.pages.dev"
+            },
+            "gap-audit-frontend-perf": {
+              "at": "2026-06-16T17:12:22.203Z",
+              "pass": true,
+              "frontend": "https://transpak-frontend.pages.dev",
+              "bundleUrl": "https://transpak-frontend.pages.dev/assets/index-nkLsKm-3.js",
+              "cold": {
+                "ok": true,
+                "status": 200,
+                "ms": 164,
+                "bytes": 520650
+              },
+              "warm": {
+                "ok": true,
+                "status": 200,
+                "ms": 178,
+                "bytes": 520650
+              },
+              "dashboardStatus": 200,
+              "thresholdMs": 2500,
+              "note": "Measurement only — no App.jsx instrumentation"
+            },
+            "gap-audit-notifications": {
+              "at": "2026-06-16T17:12:10.310Z",
+              "pass": true,
+              "dedupePass": true,
+              "dedupeDetail": {
+                "fallback": "no duplicate event_id groups",
+                "duplicates": []
+              },
+              "listDedupe": true,
+              "markReadPass": true,
+              "markReadDetail": {
+                "markStatus": 200,
+                "persistedRead": true
+              },
+              "adminMarkPass": true,
+              "syncOk": true,
+              "unreadBeforeCount": 7
+            },
+            "gap-audit-realtime": {
+              "at": "2026-06-16T17:11:59.063Z",
+              "pass": true,
+              "phase5Core": true,
+              "notifSyncPass": true,
+              "loadId": "f316bcdc-3b80-43f3-8f76-a1df301e596a",
+              "bidId": "5de59ed5-4e44-4d38-abeb-550a5219bf68",
+              "acceptOk": true,
+              "acceptStatus": 200,
+              "activeVisibleMs": 1619,
+              "activeVisible": true,
+              "notifSyncMs": 705,
+              "notifSync": true,
+              "deadlineMs": 5000,
+              "totalMs": 4204
+            },
+            "gap-audit-regression": {
+              "at": "2026-06-16T16:59:37.356Z",
+              "pass": false,
+              "steps": [
+                {
+                  "name": "validate-defect-fixes",
+                  "pass": true
+                },
+                {
+                  "name": "db-integrity-check",
+                  "pass": true
+                },
+                {
+                  "name": "release-gate-probe",
+                  "pass": true
+                },
+                {
+                  "name": "tracking-perf",
+                  "pass": false
+                },
+                {
+                  "name": "cors",
+                  "pass": true
+                },
+                {
+                  "name": "bid-stress",
+                  "pass": true
+                },
+                {
+                  "name": "status-integrity",
+                  "pass": true
+                },
+                {
+                  "name": "realtime",
+                  "pass": true
+                },
+                {
+                  "name": "notifications",
+                  "pass": true
+                },
+                {
+                  "name": "admin-data",
+                  "pass": true
+                },
+                {
+                  "name": "capacity-expiry",
+                  "pass": true
+                },
+                {
+                  "name": "frontend-perf",
+                  "pass": true
+                }
+              ],
+              "passCount": 11,
+              "total": 12,
+              "artifacts": {
+                "gap-audit-admin-data": {
+                  "at": "2026-06-16T16:59:25.564Z",
+                  "pass": true,
+                  "feedPages": [
+                    {
+                      "page": 1,
+                      "ok": true,
+                      "status": 200,
+                      "total": 3946,
+                      "totalPages": 198,
+                      "dupes": [],
+                      "itemCount": 20
+                    },
+                    {
+                      "page": 2,
+                      "ok": true,
+                      "status": 200,
+                      "total": 3946,
+                      "totalPages": 198,
+                      "dupes": [],
+                      "itemCount": 20
+                    },
+                    {
+                      "page": 3,
+                      "ok": true,
+                      "status": 200,
+                      "total": 3946,
+                      "totalPages": 198,
+                      "dupes": [],
+                      "itemCount": 20
+                    }
+                  ],
+                  "withinPageDupes": false,
+                  "crossPageDuplicateIds": [
+                    "5c63b6c5-2685-4752-ac85-b874520097fa"
+                  ],
+                  "crossPageDupesLive": true,
+                  "paginationStable": true,
+                  "auditPaginationStable": true,
+                  "note": "Cross-page duplicate ids may occur when live events insert during offset pagination",
+                  "auditPages": [
+                    {
+                      "page": 1,
+                      "ok": true,
+                      "status": 200,
+                      "total": 2362,
+                      "totalPages": 119,
+                      "itemCount": 20
+                    },
+                    {
+                      "page": 2,
+                      "ok": true,
+                      "status": 200,
+                      "total": 2362,
+                      "totalPages": 119,
+                      "itemCount": 20
+                    },
+                    {
+                      "page": 3,
+                      "ok": true,
+                      "status": 200,
+                      "total": 2362,
+                      "totalPages": 119,
+                      "itemCount": 20
+                    }
+                  ],
+                  "shipmentFilterOk": true
+                },
+                "gap-audit-bid-stress": {
+                  "at": "2026-06-16T16:58:24.780Z",
+                  "pass": true,
+                  "loadId": "7e7065a9-f893-4999-a85d-a596f2a02b2a",
+                  "concurrent": 50,
+                  "elapsedMs": 14497,
+                  "success": 40,
+                  "conflict": 0,
+                  "dbCount": 1,
+                  "activeForLoad": 0,
+                  "statusHistogram": {
+                    "200": 39,
+                    "201": 1,
+                    "429": 10
+                  }
+                },
+                "gap-audit-capacity-expiry": {
+                  "at": "2026-06-16T16:59:32.844Z",
+                  "pass": true,
+                  "marketCount": 10,
+                  "mineCount": 0,
+                  "closedInMarket": [],
+                  "reopenBlocked": null,
+                  "expiredLoadsHidden": true
+                },
+                "gap-audit-cors": {
+                  "at": "2026-06-16T16:57:51.143Z",
+                  "pass": true,
+                  "probes": [
+                    {
+                      "requestHeaders": "authorization, content-type, idempotency-key, x-idempotency-key, x-requested-with",
+                      "status": 204,
+                      "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+                      "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+                      "maxAge": 86400,
+                      "missing": [],
+                      "pass": true
+                    },
+                    {
+                      "requestHeaders": "authorization",
+                      "status": 204,
+                      "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+                      "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+                      "maxAge": 86400,
+                      "missing": [],
+                      "pass": true
+                    },
+                    {
+                      "requestHeaders": "content-type",
+                      "status": 204,
+                      "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+                      "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+                      "maxAge": 86400,
+                      "missing": [],
+                      "pass": true
+                    },
+                    {
+                      "requestHeaders": "idempotency-key",
+                      "status": 204,
+                      "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+                      "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+                      "maxAge": 86400,
+                      "missing": [],
+                      "pass": true
+                    },
+                    {
+                      "requestHeaders": "x-idempotency-key",
+                      "status": 204,
+                      "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+                      "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+                      "maxAge": 86400,
+                      "missing": [],
+                      "pass": true
+                    },
+                    {
+                      "requestHeaders": "x-requested-with",
+                      "status": 204,
+                      "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+                      "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+                      "maxAge": 86400,
+                      "missing": [],
+                      "pass": true
+                    }
+                  ],
+                  "staticCheck": {
+                    "pass": true,
+                    "useCorsCount": 1,
+                    "hasIdempotency": true,
+                    "hasMaxAge": true
+                  },
+                  "origin": "https://910b6159.transpak-frontend.pages.dev"
+                },
+                "gap-audit-frontend-perf": {
+                  "at": "2026-06-16T16:59:36.612Z",
+                  "pass": true,
+                  "frontend": "https://transpak-frontend.pages.dev",
+                  "bundleUrl": "https://transpak-frontend.pages.dev/assets/index-nkLsKm-3.js",
+                  "cold": {
+                    "ok": true,
+                    "status": 200,
+                    "ms": 187,
+                    "bytes": 520650
+                  },
+                  "warm": {
+                    "ok": true,
+                    "status": 200,
+                    "ms": 126,
+                    "bytes": 520650
+                  },
+                  "dashboardStatus": 200,
+                  "thresholdMs": 2500,
+                  "note": "Measurement only — no App.jsx instrumentation"
+                },
+                "gap-audit-notifications": {
+                  "at": "2026-06-16T16:59:17.014Z",
+                  "pass": true,
+                  "dedupePass": true,
+                  "dedupeDetail": {
+                    "fallback": "no duplicate event_id groups",
+                    "duplicates": []
+                  },
+                  "listDedupe": true,
+                  "markReadPass": true,
+                  "markReadDetail": {
+                    "markStatus": 200,
+                    "persistedRead": true
+                  },
+                  "adminMarkPass": true,
+                  "syncOk": true,
+                  "unreadBeforeCount": 153
+                },
+                "gap-audit-realtime": {
+                  "at": "2026-06-16T16:59:00.613Z",
+                  "pass": true,
+                  "phase5Core": true,
+                  "notifSyncPass": true,
+                  "loadId": "0d0e5c1e-4ac0-4948-a13c-ebb303a9a507",
+                  "bidId": "08fbf3fe-cd93-4633-9a37-a34ce7076943",
+                  "acceptOk": true,
+                  "acceptStatus": 200,
+                  "activeVisibleMs": 815,
+                  "activeVisible": true,
+                  "notifSyncMs": 672,
+                  "notifSync": true,
+                  "deadlineMs": 5000,
+                  "totalMs": 3455
+                },
+                "gap-audit-regression": {
+                  "at": "2026-06-16T16:42:24.578Z",
+                  "pass": false,
+                  "steps": [
+                    {
+                      "name": "validate-defect-fixes",
+                      "pass": true
+                    },
+                    {
+                      "name": "db-integrity-check",
+                      "pass": true
+                    },
+                    {
+                      "name": "release-gate-probe",
+                      "pass": false
+                    },
+                    {
+                      "name": "tracking-perf",
+                      "pass": true
+                    },
+                    {
+                      "name": "cors",
+                      "pass": true
+                    },
+                    {
+                      "name": "bid-stress",
+                      "pass": true
+                    },
+                    {
+                      "name": "status-integrity",
+                      "pass": true
+                    },
+                    {
+                      "name": "realtime",
+                      "pass": true
+                    },
+                    {
+                      "name": "notifications",
+                      "pass": true
+                    },
+                    {
+                      "name": "admin-data",
+                      "pass": true
+                    },
+                    {
+                      "name": "capacity-expiry",
+                      "pass": true
+                    },
+                    {
+                      "name": "frontend-perf",
+                      "pass": true
+                    }
+                  ],
+                  "passCount": 11,
+                  "total": 12,
+                  "artifacts": {
+                    "gap-audit-admin-data": {
+                      "at": "2026-06-16T16:42:16.200Z",
+                      "pass": true,
+                      "feedPages": [
+                        {
+                          "page": 1,
+                          "ok": true,
+                          "status": 200,
+                          "total": 2872,
+                          "totalPages": 144,
+                          "dupes": [],
+                          "itemCount": 20
+                        },
+                        {
+                          "page": 2,
+                          "ok": true,
+                          "status": 200,
+                          "total": 2872,
+                          "totalPages": 144,
+                          "dupes": [],
+                          "itemCount": 20
+                        },
+                        {
+                          "page": 3,
+                          "ok": true,
+                          "status": 200,
+                          "total": 2872,
+                          "totalPages": 144,
+                          "dupes": [],
+                          "itemCount": 20
+                        }
+                      ],
+                      "withinPageDupes": false,
+                      "crossPageDuplicateIds": [],
+                      "crossPageDupesLive": false,
+                      "paginationStable": true,
+                      "auditPaginationStable": true,
+                      "note": null,
+                      "auditPages": [
+                        {
+                          "page": 1,
+                          "ok": true,
+                          "status": 200,
+                          "total": 1738,
+                          "totalPages": 87,
+                          "itemCount": 20
+                        },
+                        {
+                          "page": 2,
+                          "ok": true,
+                          "status": 200,
+                          "total": 1738,
+                          "totalPages": 87,
+                          "itemCount": 20
+                        },
+                        {
+                          "page": 3,
+                          "ok": true,
+                          "status": 200,
+                          "total": 1738,
+                          "totalPages": 87,
+                          "itemCount": 20
+                        }
+                      ],
+                      "shipmentFilterOk": true
+                    },
+                    "gap-audit-bid-stress": {
+                      "at": "2026-06-16T16:41:41.692Z",
+                      "pass": true,
+                      "loadId": "13034301-3c7b-4218-a2cb-d2dd2ee373df",
+                      "concurrent": 50,
+                      "elapsedMs": 7079,
+                      "success": 25,
+                      "conflict": 25,
+                      "dbCount": 1,
+                      "activeForLoad": 0,
+                      "statusHistogram": {
+                        "200": 24,
+                        "201": 1,
+                        "409": 25
+                      }
+                    },
+                    "gap-audit-capacity-expiry": {
+                      "at": "2026-06-16T16:42:23.014Z",
+                      "pass": true,
+                      "marketCount": 10,
+                      "mineCount": 0,
+                      "closedInMarket": [],
+                      "reopenBlocked": null,
+                      "expiredLoadsHidden": true
+                    },
+                    "gap-audit-cors": {
+                      "at": "2026-06-16T16:41:27.725Z",
+                      "pass": true,
+                      "probes": [
+                        {
+                          "requestHeaders": "authorization, content-type, idempotency-key, x-idempotency-key, x-requested-with",
+                          "status": 204,
+                          "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+                          "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+                          "maxAge": 86400,
+                          "missing": [],
+                          "pass": true
+                        },
+                        {
+                          "requestHeaders": "authorization",
+                          "status": 204,
+                          "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+                          "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+                          "maxAge": 86400,
+                          "missing": [],
+                          "pass": true
+                        },
+                        {
+                          "requestHeaders": "content-type",
+                          "status": 204,
+                          "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+                          "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+                          "maxAge": 86400,
+                          "missing": [],
+                          "pass": true
+                        },
+                        {
+                          "requestHeaders": "idempotency-key",
+                          "status": 204,
+                          "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+                          "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+                          "maxAge": 86400,
+                          "missing": [],
+                          "pass": true
+                        },
+                        {
+                          "requestHeaders": "x-idempotency-key",
+                          "status": 204,
+                          "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+                          "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+                          "maxAge": 86400,
+                          "missing": [],
+                          "pass": true
+                        },
+                        {
+                          "requestHeaders": "x-requested-with",
+                          "status": 204,
+                          "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+                          "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+                          "maxAge": 86400,
+                          "missing": [],
+                          "pass": true
+                        }
+                      ],
+                      "staticCheck": {
+                        "pass": true,
+                        "useCorsCount": 1,
+                        "hasIdempotency": true,
+                        "hasMaxAge": true
+                      },
+                      "origin": "https://910b6159.transpak-frontend.pages.dev"
+                    },
+                    "gap-audit-frontend-perf": {
+                      "at": "2026-06-16T16:42:24.217Z",
+                      "pass": true,
+                      "frontend": "https://transpak-frontend.pages.dev",
+                      "bundleUrl": "https://transpak-frontend.pages.dev/assets/index-nkLsKm-3.js",
+                      "cold": {
+                        "ok": true,
+                        "status": 200,
+                        "ms": 175,
+                        "bytes": 520650
+                      },
+                      "warm": {
+                        "ok": true,
+                        "status": 200,
+                        "ms": 185,
+                        "bytes": 520650
+                      },
+                      "dashboardStatus": 200,
+                      "thresholdMs": 2500,
+                      "note": "Measurement only — no App.jsx instrumentation"
+                    },
+                    "gap-audit-notifications": {
+                      "at": "2026-06-16T16:42:11.905Z",
+                      "pass": true,
+                      "dedupePass": true,
+                      "dedupeDetail": {
+                        "fallback": "no duplicate event_id groups",
+                        "duplicates": []
+                      },
+                      "listDedupe": true,
+                      "markReadPass": true,
+                      "markReadDetail": {
+                        "markStatus": 200,
+                        "persistedRead": true
+                      },
+                      "adminMarkPass": true,
+                      "syncOk": true,
+                      "unreadBeforeCount": 7
+                    },
+                    "gap-audit-realtime": {
+                      "at": "2026-06-16T16:42:00.786Z",
+                      "pass": true,
+                      "phase5Core": true,
+                      "notifSyncPass": true,
+                      "loadId": "f2b2463e-6a22-4af5-9aed-8fa232fb0837",
+                      "bidId": "75d4eff2-03c2-4da3-9d61-2c719a073702",
+                      "acceptOk": true,
+                      "acceptStatus": 200,
+                      "activeVisibleMs": 1233,
+                      "activeVisible": true,
+                      "notifSyncMs": 703,
+                      "notifSync": true,
+                      "deadlineMs": 5000,
+                      "totalMs": 3970
+                    },
+                    "gap-audit-regression": {
+                      "at": "2026-06-16T15:34:20.429Z",
+                      "pass": true,
+                      "steps": [
+                        {
+                          "name": "validate-defect-fixes",
+                          "pass": true
+                        },
+                        {
+                          "name": "db-integrity-check",
+                          "pass": true
+                        },
+                        {
+                          "name": "release-gate-probe",
+                          "pass": true
+                        },
+                        {
+                          "name": "tracking-perf",
+                          "pass": true
+                        },
+                        {
+                          "name": "cors",
+                          "pass": true
+                        },
+                        {
+                          "name": "bid-stress",
+                          "pass": true
+                        },
+                        {
+                          "name": "status-integrity",
+                          "pass": true
+                        },
+                        {
+                          "name": "realtime",
+                          "pass": true
+                        },
+                        {
+                          "name": "notifications",
+                          "pass": true
+                        },
+                        {
+                          "name": "admin-data",
+                          "pass": true
+                        },
+                        {
+                          "name": "capacity-expiry",
+                          "pass": true
+                        },
+                        {
+                          "name": "frontend-perf",
+                          "pass": true
+                        }
+                      ],
+                      "passCount": 12,
+                      "total": 12,
+                      "artifacts": {
+                        "gap-audit-admin-data": {
+                          "at": "2026-06-16T15:34:13.113Z",
+                          "pass": true,
+                          "feedPages": [
+                            {
+                              "page": 1,
+                              "ok": true,
+                              "status": 200,
+                              "total": 754,
+                              "totalPages": 38,
+                              "dupes": [],
+                              "itemCount": 20
+                            },
+                            {
+                              "page": 2,
+                              "ok": true,
+                              "status": 200,
+                              "total": 754,
+                              "totalPages": 38,
+                              "dupes": [],
+                              "itemCount": 20
+                            },
+                            {
+                              "page": 3,
+                              "ok": true,
+                              "status": 200,
+                              "total": 754,
+                              "totalPages": 38,
+                              "dupes": [],
+                              "itemCount": 20
+                            }
+                          ],
+                          "withinPageDupes": false,
+                          "crossPageDuplicateIds": [
+                            "5707c4eb-cb31-46f1-b958-2862a62b66a5"
+                          ],
+                          "crossPageDupesLive": true,
+                          "paginationStable": true,
+                          "auditPaginationStable": true,
+                          "note": "Cross-page duplicate ids may occur when live events insert during offset pagination",
+                          "auditPages": [
+                            {
+                              "page": 1,
+                              "ok": true,
+                              "status": 200,
+                              "total": 514,
+                              "totalPages": 26,
+                              "itemCount": 20
+                            },
+                            {
+                              "page": 2,
+                              "ok": true,
+                              "status": 200,
+                              "total": 514,
+                              "totalPages": 26,
+                              "itemCount": 20
+                            },
+                            {
+                              "page": 3,
+                              "ok": true,
+                              "status": 200,
+                              "total": 514,
+                              "totalPages": 26,
+                              "itemCount": 20
+                            }
+                          ],
+                          "shipmentFilterOk": true
+                        },
+                        "gap-audit-bid-stress": {
+                          "at": "2026-06-16T15:33:26.888Z",
+                          "pass": true,
+                          "loadId": "906bc5e0-2daa-4526-b7de-9c9092a674da",
+                          "concurrent": 50,
+                          "elapsedMs": 7011,
+                          "success": 25,
+                          "conflict": 25,
+                          "dbCount": 1,
+                          "activeForLoad": 0,
+                          "statusHistogram": {
+                            "200": 24,
+                            "201": 1,
+                            "409": 25
+                          }
+                        },
+                        "gap-audit-capacity-expiry": {
+                          "at": "2026-06-16T15:34:19.281Z",
+                          "pass": true,
+                          "marketCount": 10,
+                          "mineCount": 0,
+                          "closedInMarket": [],
+                          "reopenBlocked": null,
+                          "expiredLoadsHidden": true
+                        },
+                        "gap-audit-cors": {
+                          "at": "2026-06-16T15:33:11.487Z",
+                          "pass": true,
+                          "probes": [
+                            {
+                              "requestHeaders": "authorization, content-type, idempotency-key, x-idempotency-key, x-requested-with",
+                              "status": 204,
+                              "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+                              "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+                              "maxAge": 86400,
+                              "missing": [],
+                              "pass": true
+                            },
+                            {
+                              "requestHeaders": "authorization",
+                              "status": 204,
+                              "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+                              "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+                              "maxAge": 86400,
+                              "missing": [],
+                              "pass": true
+                            },
+                            {
+                              "requestHeaders": "content-type",
+                              "status": 204,
+                              "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+                              "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+                              "maxAge": 86400,
+                              "missing": [],
+                              "pass": true
+                            },
+                            {
+                              "requestHeaders": "idempotency-key",
+                              "status": 204,
+                              "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+                              "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+                              "maxAge": 86400,
+                              "missing": [],
+                              "pass": true
+                            },
+                            {
+                              "requestHeaders": "x-idempotency-key",
+                              "status": 204,
+                              "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+                              "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+                              "maxAge": 86400,
+                              "missing": [],
+                              "pass": true
+                            },
+                            {
+                              "requestHeaders": "x-requested-with",
+                              "status": 204,
+                              "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+                              "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+                              "maxAge": 86400,
+                              "missing": [],
+                              "pass": true
+                            }
+                          ],
+                          "staticCheck": {
+                            "pass": true,
+                            "useCorsCount": 1,
+                            "hasIdempotency": true,
+                            "hasMaxAge": true
+                          },
+                          "origin": "https://910b6159.transpak-frontend.pages.dev"
+                        },
+                        "gap-audit-frontend-perf": {
+                          "at": "2026-06-16T15:34:20.320Z",
+                          "pass": true,
+                          "frontend": "https://transpak-frontend.pages.dev",
+                          "bundleUrl": "https://transpak-frontend.pages.dev/assets/index-nkLsKm-3.js",
+                          "cold": {
+                            "ok": true,
+                            "status": 200,
+                            "ms": 132,
+                            "bytes": 520650
+                          },
+                          "warm": {
+                            "ok": true,
+                            "status": 200,
+                            "ms": 119,
+                            "bytes": 520650
+                          },
+                          "dashboardStatus": 200,
+                          "thresholdMs": 2500,
+                          "note": "Measurement only — no App.jsx instrumentation"
+                        },
+                        "gap-audit-notifications": {
+                          "at": "2026-06-16T15:34:07.757Z",
+                          "pass": true,
+                          "dedupePass": true,
+                          "dedupeDetail": {
+                            "fallback": "no duplicate event_id groups",
+                            "duplicates": []
+                          },
+                          "listDedupe": true,
+                          "markReadPass": true,
+                          "markReadDetail": "skipped",
+                          "adminMarkPass": true,
+                          "syncOk": true,
+                          "unreadBeforeCount": 0
+                        },
+                        "gap-audit-realtime": {
+                          "at": "2026-06-16T15:33:55.700Z",
+                          "pass": true,
+                          "phase5Core": true,
+                          "notifSyncPass": false,
+                          "loadId": "a47105dc-7026-4f7d-9ecc-1727ef4d8ccf",
+                          "bidId": "e2a31c91-4870-44ad-b66f-737d177716b5",
+                          "acceptOk": true,
+                          "acceptStatus": 200,
+                          "activeVisibleMs": 1436,
+                          "activeVisible": true,
+                          "notifSyncMs": 5183,
+                          "notifSync": false,
+                          "deadlineMs": 5000,
+                          "totalMs": 9357
+                        },
+                        "gap-audit-status-integrity": {
+                          "at": "2026-06-16T15:33:37.679Z",
+                          "pass": true,
+                          "ref": "L-343364",
+                          "loadId": "71251807-feb1-40fd-97e7-3df25f0630e0",
+                          "dbStatus": "booked",
+                          "apiStatus": "booked",
+                          "dbApiMatch": true,
+                          "backwardAttempt": "posted",
+                          "backwardStatus": 400,
+                          "backwardRejected": true
+                        },
+                        "gap-audit-tracking-perf": {
+                          "at": "2026-06-16T15:33:09.410Z",
+                          "pass": true,
+                          "thresholdMs": 2000,
+                          "ref": "L-343364",
+                          "coldMs": 1494,
+                          "warm": {
+                            "p50": 1428,
+                            "p95": 1482,
+                            "p99": 1482,
+                            "min": 1410,
+                            "max": 1482,
+                            "samples": 9
+                          },
+                          "all": {
+                            "p50": 1428,
+                            "p95": 1494,
+                            "p99": 1494
+                          },
+                          "latencies": [
+                            {
+                              "i": 1,
+                              "ms": 1494,
+                              "status": 200,
+                              "ok": true
+                            },
+                            {
+                              "i": 2,
+                              "ms": 1482,
+                              "status": 200,
+                              "ok": true
+                            },
+                            {
+                              "i": 3,
+                              "ms": 1437,
+                              "status": 200,
+                              "ok": true
+                            },
+                            {
+                              "i": 4,
+                              "ms": 1419,
+                              "status": 200,
+                              "ok": true
+                            },
+                            {
+                              "i": 5,
+                              "ms": 1448,
+                              "status": 200,
+                              "ok": true
+                            },
+                            {
+                              "i": 6,
+                              "ms": 1428,
+                              "status": 200,
+                              "ok": true
+                            },
+                            {
+                              "i": 7,
+                              "ms": 1439,
+                              "status": 200,
+                              "ok": true
+                            },
+                            {
+                              "i": 8,
+                              "ms": 1410,
+                              "status": 200,
+                              "ok": true
+                            },
+                            {
+                              "i": 9,
+                              "ms": 1426,
+                              "status": 200,
+                              "ok": true
+                            },
+                            {
+                              "i": 10,
+                              "ms": 1410,
+                              "status": 200,
+                              "ok": true
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "gap-audit-status-integrity": {
+                      "at": "2026-06-16T16:41:49.765Z",
+                      "pass": true,
+                      "ref": "L-351168",
+                      "loadId": "a77e4be2-248b-4bf4-ba30-0f7a762fc0c9",
+                      "dbStatus": "booked",
+                      "apiStatus": "booked",
+                      "dbApiMatch": true,
+                      "backwardAttempt": "posted",
+                      "backwardStatus": 400,
+                      "backwardRejected": true
+                    },
+                    "gap-audit-tracking-perf": {
+                      "at": "2026-06-16T16:41:26.315Z",
+                      "pass": true,
+                      "thresholdMs": 2000,
+                      "ref": "L-351168",
+                      "coldMs": 1617,
+                      "warm": {
+                        "p50": 1430,
+                        "p95": 1540,
+                        "p99": 1540,
+                        "min": 1376,
+                        "max": 1540,
+                        "samples": 9
+                      },
+                      "all": {
+                        "p50": 1430,
+                        "p95": 1617,
+                        "p99": 1617
+                      },
+                      "latencies": [
+                        {
+                          "i": 1,
+                          "ms": 1617,
+                          "status": 200,
+                          "ok": true
+                        },
+                        {
+                          "i": 2,
+                          "ms": 1464,
+                          "status": 200,
+                          "ok": true
+                        },
+                        {
+                          "i": 3,
+                          "ms": 1430,
+                          "status": 200,
+                          "ok": true
+                        },
+                        {
+                          "i": 4,
+                          "ms": 1410,
+                          "status": 200,
+                          "ok": true
+                        },
+                        {
+                          "i": 5,
+                          "ms": 1432,
+                          "status": 200,
+                          "ok": true
+                        },
+                        {
+                          "i": 6,
+                          "ms": 1427,
+                          "status": 200,
+                          "ok": true
+                        },
+                        {
+                          "i": 7,
+                          "ms": 1540,
+                          "status": 200,
+                          "ok": true
+                        },
+                        {
+                          "i": 8,
+                          "ms": 1434,
+                          "status": 200,
+                          "ok": true
+                        },
+                        {
+                          "i": 9,
+                          "ms": 1421,
+                          "status": 200,
+                          "ok": true
+                        },
+                        {
+                          "i": 10,
+                          "ms": 1376,
+                          "status": 200,
+                          "ok": true
+                        }
+                      ]
+                    }
+                  }
+                },
+                "gap-audit-status-integrity": {
+                  "at": "2026-06-16T16:58:46.630Z",
+                  "pass": true,
+                  "ref": "L-135545",
+                  "loadId": "dcf734ac-90c0-40ff-a6e1-52f8b9392d35",
+                  "dbStatus": "booked",
+                  "apiStatus": "booked",
+                  "dbApiMatch": true,
+                  "backwardAttempt": "posted",
+                  "backwardStatus": 400,
+                  "backwardRejected": true
+                },
+                "gap-audit-tracking-perf": {
+                  "at": "2026-06-16T16:57:48.691Z",
+                  "pass": false,
+                  "thresholdMs": 2000,
+                  "ref": "L-250899",
+                  "coldMs": 3252,
+                  "warm": {
+                    "p50": 2870,
+                    "p95": 9500,
+                    "p99": 9500,
+                    "min": 1405,
+                    "max": 9500,
+                    "samples": 9
+                  },
+                  "all": {
+                    "p50": 2870,
+                    "p95": 9500,
+                    "p99": 9500
+                  },
+                  "latencies": [
+                    {
+                      "i": 1,
+                      "ms": 3252,
+                      "status": 200,
+                      "ok": true
+                    },
+                    {
+                      "i": 2,
+                      "ms": 1525,
+                      "status": 200,
+                      "ok": true
+                    },
+                    {
+                      "i": 3,
+                      "ms": 1429,
+                      "status": 200,
+                      "ok": true
+                    },
+                    {
+                      "i": 4,
+                      "ms": 1405,
+                      "status": 200,
+                      "ok": true
+                    },
+                    {
+                      "i": 5,
+                      "ms": 1540,
+                      "status": 200,
+                      "ok": true
+                    },
+                    {
+                      "i": 6,
+                      "ms": 2870,
+                      "status": 200,
+                      "ok": true
+                    },
+                    {
+                      "i": 7,
+                      "ms": 5498,
+                      "status": 200,
+                      "ok": true
+                    },
+                    {
+                      "i": 8,
+                      "ms": 7009,
+                      "status": 200,
+                      "ok": true
+                    },
+                    {
+                      "i": 9,
+                      "ms": 5213,
+                      "status": 200,
+                      "ok": true
+                    },
+                    {
+                      "i": 10,
+                      "ms": 9500,
+                      "status": 200,
+                      "ok": true
+                    }
+                  ]
+                }
+              }
+            },
+            "gap-audit-status-integrity": {
+              "at": "2026-06-16T17:11:47.992Z",
+              "pass": true,
+              "ref": "L-740637",
+              "loadId": "dd68478c-0ad4-4508-a0bb-6ff066c3f40d",
+              "dbStatus": "booked",
+              "apiStatus": "booked",
+              "dbApiMatch": true,
+              "backwardAttempt": "posted",
+              "backwardStatus": 400,
+              "backwardRejected": true
+            },
+            "gap-audit-tracking-perf": {
+              "at": "2026-06-16T17:11:23.362Z",
+              "pass": true,
+              "thresholdMs": 2000,
+              "ref": "L-740637",
+              "coldMs": 1499,
+              "warm": {
+                "p50": 1494,
+                "p95": 1615,
+                "p99": 1615,
+                "min": 1414,
+                "max": 1615,
+                "samples": 9
+              },
+              "all": {
+                "p50": 1494,
+                "p95": 1615,
+                "p99": 1615
+              },
+              "latencies": [
+                {
+                  "i": 1,
+                  "ms": 1499,
+                  "status": 200,
+                  "ok": true
+                },
+                {
+                  "i": 2,
+                  "ms": 1615,
+                  "status": 200,
+                  "ok": true
+                },
+                {
+                  "i": 3,
+                  "ms": 1414,
+                  "status": 200,
+                  "ok": true
+                },
+                {
+                  "i": 4,
+                  "ms": 1575,
+                  "status": 200,
+                  "ok": true
+                },
+                {
+                  "i": 5,
+                  "ms": 1427,
+                  "status": 200,
+                  "ok": true
+                },
+                {
+                  "i": 6,
+                  "ms": 1534,
+                  "status": 200,
+                  "ok": true
+                },
+                {
+                  "i": 7,
+                  "ms": 1435,
+                  "status": 200,
+                  "ok": true
+                },
+                {
+                  "i": 8,
+                  "ms": 1509,
+                  "status": 200,
+                  "ok": true
+                },
+                {
+                  "i": 9,
+                  "ms": 1455,
+                  "status": 200,
+                  "ok": true
+                },
+                {
+                  "i": 10,
+                  "ms": 1494,
+                  "status": 200,
+                  "ok": true
+                }
+              ]
+            }
+          }
+        },
+        "gap-audit-status-integrity": {
+          "at": "2026-06-16T17:16:15.248Z",
+          "pass": true,
+          "ref": "L-620357",
+          "loadId": "83c5997d-7012-46ab-98d4-f331d7756030",
+          "dbStatus": "booked",
+          "apiStatus": "booked",
+          "dbApiMatch": true,
+          "backwardAttempt": "posted",
+          "backwardStatus": 400,
+          "backwardRejected": true
+        },
+        "gap-audit-tracking-perf": {
+          "at": "2026-06-16T17:15:51.594Z",
+          "pass": true,
+          "thresholdMs": 2000,
+          "ref": "L-620357",
+          "coldMs": 1501,
+          "warm": {
+            "p50": 1528,
+            "p95": 1554,
+            "p99": 1554,
+            "min": 1434,
+            "max": 1554,
+            "samples": 9
+          },
+          "all": {
+            "p50": 1528,
+            "p95": 1554,
+            "p99": 1554
+          },
+          "latencies": [
+            {
+              "i": 1,
+              "ms": 1501,
+              "status": 200,
+              "ok": true
+            },
+            {
+              "i": 2,
+              "ms": 1545,
+              "status": 200,
+              "ok": true
+            },
+            {
+              "i": 3,
+              "ms": 1526,
+              "status": 200,
+              "ok": true
+            },
+            {
+              "i": 4,
+              "ms": 1543,
+              "status": 200,
+              "ok": true
+            },
+            {
+              "i": 5,
+              "ms": 1537,
+              "status": 200,
+              "ok": true
+            },
+            {
+              "i": 6,
+              "ms": 1528,
+              "status": 200,
+              "ok": true
+            },
+            {
+              "i": 7,
+              "ms": 1528,
+              "status": 200,
+              "ok": true
+            },
+            {
+              "i": 8,
+              "ms": 1554,
+              "status": 200,
+              "ok": true
+            },
+            {
+              "i": 9,
+              "ms": 1523,
+              "status": 200,
+              "ok": true
+            },
+            {
+              "i": 10,
+              "ms": 1434,
+              "status": 200,
+              "ok": true
+            }
+          ]
+        }
+      }
+    },
+    "gap-audit-status-integrity": {
+      "at": "2026-06-16T17:44:36.937Z",
+      "pass": true,
+      "ref": "L-622258",
+      "loadId": "f3f5e857-a43d-4305-b74e-2e4676ce5e66",
+      "dbStatus": "booked",
+      "apiStatus": "booked",
+      "dbApiMatch": true,
+      "backwardAttempt": "posted",
+      "backwardStatus": 400,
+      "backwardRejected": true
+    },
+    "gap-audit-tracking-perf": {
+      "at": "2026-06-16T17:44:13.495Z",
+      "pass": true,
+      "thresholdMs": 2000,
+      "ref": "L-622258",
+      "coldMs": 1509,
+      "warm": {
+        "p50": 1434,
+        "p95": 1776,
+        "p99": 1776,
+        "min": 1378,
+        "max": 1776,
+        "samples": 9
+      },
+      "all": {
+        "p50": 1434,
+        "p95": 1776,
+        "p99": 1776
+      },
+      "latencies": [
+        {
+          "i": 1,
+          "ms": 1509,
+          "status": 200,
+          "ok": true
+        },
+        {
+          "i": 2,
+          "ms": 1547,
+          "status": 200,
+          "ok": true
+        },
+        {
+          "i": 3,
+          "ms": 1504,
+          "status": 200,
+          "ok": true
+        },
+        {
+          "i": 4,
+          "ms": 1776,
+          "status": 200,
+          "ok": true
+        },
+        {
+          "i": 5,
+          "ms": 1449,
+          "status": 200,
+          "ok": true
+        },
+        {
+          "i": 6,
+          "ms": 1400,
+          "status": 200,
+          "ok": true
+        },
+        {
+          "i": 7,
+          "ms": 1434,
+          "status": 200,
+          "ok": true
+        },
+        {
+          "i": 8,
+          "ms": 1421,
+          "status": 200,
+          "ok": true
+        },
+        {
+          "i": 9,
+          "ms": 1419,
+          "status": 200,
+          "ok": true
+        },
+        {
+          "i": 10,
+          "ms": 1378,
+          "status": 200,
+          "ok": true
+        }
+      ]
+    }
+  }
+}

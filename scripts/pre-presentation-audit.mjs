@@ -323,10 +323,45 @@ async function runStaticChecks() {
   }
 }
 
+async function auditPhase7Enterprise() {
+  console.log('\n=== Phase 7 Enterprise gates ===\n');
+  const fs = await import('node:fs');
+  const gates = [
+    ['strict distributed modules', 'transpak-backend/utils/distributedMode.js'],
+    ['causal event graph', 'transpak-backend/utils/causalEventGraph.js'],
+    ['consistency engine', 'transpak-backend/utils/consistencyEngine.js'],
+    ['trace middleware', 'transpak-backend/middleware/traceMiddleware.js'],
+    ['alert engine', 'transpak-backend/utils/alertEngine.js'],
+    ['causal replay engine', 'transpak-backend/services/causalReplayEngine.js'],
+    ['migration 028', 'transpak-backend/db/migrations/028_phase7_causal_tracing_alerts.sql'],
+    ['frontend trace context', 'transpak-frontend/src/utils/traceContext.js']
+  ];
+  for (const [label, rel] of gates) {
+    const ok = fs.existsSync(path.join(root, rel));
+    record(`Phase7: ${label}`, 'static', ok ? 'PASS' : 'FAIL', ok ? '—' : 'missing file', ok ? 'Low' : 'High', rel);
+  }
+
+  const { spawnSync } = await import('node:child_process');
+  const test = spawnSync(
+    process.execPath,
+    ['--test', 'test/phase7-enterprise.static.test.js', 'test/phase7-enterprise.causal.test.js'],
+    { cwd: backendRoot, encoding: 'utf8' }
+  );
+  record(
+    'Phase7 enterprise unit tests',
+    'static',
+    test.status === 0 ? 'PASS' : 'FAIL',
+    test.status === 0 ? '—' : 'test failure',
+    test.status === 0 ? 'Low' : 'High',
+    `exit=${test.status ?? 1}`
+  );
+}
+
 async function main() {
   console.log('TransPAK Pre-Presentation Audit\n');
   await auditDatabaseSchema();
   await runStaticChecks();
+  await auditPhase7Enterprise();
   for (const t of targets) {
     await auditTarget(t);
   }

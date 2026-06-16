@@ -1,0 +1,21 @@
+{
+  "at": "2026-06-16T17:45:12.105Z",
+  "pass": true,
+  "frontend": "https://transpak-frontend.pages.dev",
+  "bundleUrl": "https://transpak-frontend.pages.dev/assets/index-nkLsKm-3.js",
+  "cold": {
+    "ok": true,
+    "status": 200,
+    "ms": 140,
+    "bytes": 520650
+  },
+  "warm": {
+    "ok": true,
+    "status": 200,
+    "ms": 118,
+    "bytes": 520650
+  },
+  "dashboardStatus": 200,
+  "thresholdMs": 2500,
+  "note": "Measurement only — no App.jsx instrumentation"
+}

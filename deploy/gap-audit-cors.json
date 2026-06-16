@@ -1,0 +1,67 @@
+{
+  "at": "2026-06-16T17:44:15.427Z",
+  "pass": true,
+  "probes": [
+    {
+      "requestHeaders": "authorization, content-type, idempotency-key, x-idempotency-key, x-requested-with",
+      "status": 204,
+      "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+      "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+      "maxAge": 86400,
+      "missing": [],
+      "pass": true
+    },
+    {
+      "requestHeaders": "authorization",
+      "status": 204,
+      "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+      "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+      "maxAge": 86400,
+      "missing": [],
+      "pass": true
+    },
+    {
+      "requestHeaders": "content-type",
+      "status": 204,
+      "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+      "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+      "maxAge": 86400,
+      "missing": [],
+      "pass": true
+    },
+    {
+      "requestHeaders": "idempotency-key",
+      "status": 204,
+      "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+      "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+      "maxAge": 86400,
+      "missing": [],
+      "pass": true
+    },
+    {
+      "requestHeaders": "x-idempotency-key",
+      "status": 204,
+      "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+      "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+      "maxAge": 86400,
+      "missing": [],
+      "pass": true
+    },
+    {
+      "requestHeaders": "x-requested-with",
+      "status": 204,
+      "allowHeaders": "Content-Type,Authorization,Idempotency-Key,X-Idempotency-Key,X-Requested-With,X-TransPak-Workspace,X-TransPak-User-Id,X-Trace-Id,X-Request-Id",
+      "allowOrigin": "https://910b6159.transpak-frontend.pages.dev",
+      "maxAge": 86400,
+      "missing": [],
+      "pass": true
+    }
+  ],
+  "staticCheck": {
+    "pass": true,
+    "useCorsCount": 1,
+    "hasIdempotency": true,
+    "hasMaxAge": true
+  },
+  "origin": "https://910b6159.transpak-frontend.pages.dev"
+}

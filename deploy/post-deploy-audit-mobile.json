@@ -1,0 +1,58 @@
+{
+  "at": "2026-06-16T12:05:29.416Z",
+  "frontend": "https://transpak-frontend.pages.dev",
+  "results": [
+    {
+      "viewport": "320px",
+      "httpStatus": 200,
+      "hasViewportMeta": true,
+      "bundleLoaded": true,
+      "markers": {
+        "mobileDrawer": false,
+        "responsiveGrid": true,
+        "pagination": true,
+        "adminWidget": true
+      },
+      "pass": true
+    },
+    {
+      "viewport": "375px",
+      "httpStatus": 200,
+      "hasViewportMeta": true,
+      "bundleLoaded": true,
+      "markers": {
+        "mobileDrawer": false,
+        "responsiveGrid": true,
+        "pagination": true,
+        "adminWidget": true
+      },
+      "pass": true
+    },
+    {
+      "viewport": "768px",
+      "httpStatus": 200,
+      "hasViewportMeta": true,
+      "bundleLoaded": true,
+      "markers": {
+        "mobileDrawer": false,
+        "responsiveGrid": true,
+        "pagination": true,
+        "adminWidget": true
+      },
+      "pass": true
+    },
+    {
+      "viewport": "1024px",
+      "httpStatus": 200,
+      "hasViewportMeta": true,
+      "bundleLoaded": true,
+      "markers": {
+        "mobileDrawer": false,
+        "responsiveGrid": true,
+        "pagination": true,
+        "adminWidget": true
+      },
+      "pass": true
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "at": "2026-06-16T17:44:28.545Z",
+  "pass": true,
+  "loadId": "e11a45f4-590b-467d-a646-db3c776ab906",
+  "concurrent": 50,
+  "elapsedMs": 6418,
+  "success": 12,
+  "conflict": 37,
+  "dbCount": 1,
+  "activeForLoad": 0,
+  "statusHistogram": {
+    "200": 11,
+    "201": 1,
+    "409": 37,
+    "520": 1
+  }
+}

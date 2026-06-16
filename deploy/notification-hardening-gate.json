@@ -1,0 +1,55 @@
+{
+  "at": "2026-06-16T17:47:18.626Z",
+  "api": "https://transpak-backend-1.onrender.com",
+  "phases": {
+    "phase1-schema-guard": {
+      "pass": true,
+      "detail": {
+        "ok": true,
+        "constraint": "uq_notifications_receiver_dedupe_full",
+        "message": null
+      }
+    },
+    "phase1-db-constraint": {
+      "pass": true,
+      "detail": "uq_notifications_receiver_dedupe_full"
+    },
+    "phase5-stress-50": {
+      "pass": true,
+      "detail": "accepts=50/50 dbRows=50 uniqueKeys=50"
+    },
+    "phase6-sync-fallback": {
+      "pass": true,
+      "detail": "cycles=10 counts=60,60,60,60,60,60,60,60,60,60 dupes=0"
+    },
+    "phase7-cross-role": {
+      "pass": true,
+      "detail": "carrierBid=true carrierLeak=false shipperContract=true"
+    },
+    "phase8-perf-insert": {
+      "pass": true,
+      "detail": "insertDeltaP95=143ms (DB round-trip adjusted)"
+    },
+    "phase8-perf-sync": {
+      "pass": true,
+      "detail": "syncP95=726ms (remote probe)"
+    },
+    "phase8-perf-list": {
+      "pass": true,
+      "detail": "listP95=596ms (remote probe)"
+    },
+    "phase4-sync-order": {
+      "pass": true,
+      "detail": "items=20 desc=true"
+    }
+  },
+  "verdict": "STABLE",
+  "metrics": {
+    "syncP95": 726,
+    "listP95": 596,
+    "insertP95": 143,
+    "burstOk": 50,
+    "burstDb": 50,
+    "burstUnique": 50
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "static": [
+    {
+      "name": "joinSession_import",
+      "pass": true,
+      "detail": "useTrackingSocket imports session manager"
+    },
+    {
+      "name": "no_joinTrackingSession",
+      "pass": true,
+      "detail": "API uses joinSession not joinTrackingSession"
+    },
+    {
+      "name": "composes_useTrackingSocket",
+      "pass": true,
+      "detail": "useShipmentTracking composes socket hook"
+    },
+    {
+      "name": "no_duplicate_emit_in_effect",
+      "pass": true,
+      "detail": "duplicate emitTrackingJoin removed from mount effect"
+    }
+  ],
+  "live": [
+    {
+      "name": "auth",
+      "pass": true,
+      "detail": "shipper and carrier tokens obtained"
+    },
+    {
+      "name": "tracking_payload",
+      "pass": true,
+      "detail": "GET tracking L-174278 HTTP 200"
+    },
+    {
+      "name": "tracking_refresh",
+      "pass": true,
+      "detail": "refresh HTTP 200"
+    }
+  ],
+  "at": "2026-06-16T11:51:26.009Z"
+}

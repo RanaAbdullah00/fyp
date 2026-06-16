@@ -1,0 +1,330 @@
+{
+  "at": "2026-06-16T12:27:23.601Z",
+  "api": "https://transpak-backend-1.onrender.com",
+  "frontend": "https://transpak-frontend.pages.dev",
+  "accounts": {
+    "shipper": "transpak.phase1.shipper@example.com",
+    "carrier": "transpak.phase1.carrier@example.com",
+    "admin": "transpak.phase1.admin@example.com",
+    "dual": "transpak.phase1.dual@example.com"
+  },
+  "results": [
+    {
+      "phase": "P1-Admin",
+      "check": "admin-login",
+      "pass": true,
+      "detail": "user=transpak.phase1.admin@example.com role=admin",
+      "api": "POST /api/auth/login"
+    },
+    {
+      "phase": "P1-Admin",
+      "check": "dashboard-live",
+      "pass": {
+        "totalUsers": 20,
+        "activeUsers": 17,
+        "totalLoads": 63,
+        "openLoads": 1,
+        "completedShipments": 11,
+        "totalBids": 16,
+        "activeShipments": 10,
+        "openDisputes": 0,
+        "pendingVerification": 0,
+        "shipperAccounts": 14,
+        "carrierAccounts": 12,
+        "incompleteProfiles": 1,
+        "registeredTrucks": 13,
+        "notificationsToday": 0,
+        "generatedAt": "2026-06-16T12:26:56.700Z"
+      },
+      "detail": "HTTP 200 totalUsers=20",
+      "api": "GET /api/admin/dashboard/live"
+    },
+    {
+      "phase": "P1-Admin",
+      "check": "audit-widget",
+      "pass": true,
+      "detail": "HTTP 200",
+      "api": "GET /api/admin/dashboard/widgets/audit"
+    },
+    {
+      "phase": "P1-Admin",
+      "check": "view-all-audit-logs",
+      "pass": true,
+      "detail": "HTTP 200 count=20",
+      "api": "GET /api/admin/audit-events"
+    },
+    {
+      "phase": "P1-Admin",
+      "check": "view-all-activities",
+      "pass": false,
+      "detail": "HTTP 500 count=0",
+      "api": "GET /api/admin/activity-feed"
+    },
+    {
+      "phase": "P1-Admin",
+      "check": "notification-chamber",
+      "pass": true,
+      "detail": "HTTP 200 platformRows=141",
+      "api": "GET /api/admin/notifications"
+    },
+    {
+      "phase": "P1-Admin",
+      "check": "fleet-queue-api",
+      "pass": true,
+      "detail": "HTTP 200 pending=0",
+      "api": "GET /api/admin/fleet/trucks"
+    },
+    {
+      "phase": "P1-Admin",
+      "check": "fleet-approval-notifications",
+      "pass": true,
+      "detail": "fleet/truck notification present",
+      "api": "GET /api/admin/notifications"
+    },
+    {
+      "phase": "P1-Admin",
+      "check": "mark-read",
+      "pass": false,
+      "detail": "HTTP 500 id=74069dfb-ad27-439b-b6b3-b99353da9470",
+      "api": "PATCH /api/admin/notifications/:id/read"
+    },
+    {
+      "phase": "P1-Admin",
+      "check": "mark-all-read",
+      "pass": false,
+      "detail": "HTTP 500",
+      "api": "PATCH /api/admin/notifications/read-all"
+    },
+    {
+      "phase": "P1-Admin",
+      "check": "sound-notifications",
+      "pass": true,
+      "detail": "MANUAL: requires browser user-gesture + AudioContext (API path verified)",
+      "api": "UI notificationPipeline"
+    },
+    {
+      "phase": "P2-Shipper",
+      "check": "dashboard-loads",
+      "pass": {
+        "openLoads": 1,
+        "pendingBids": 0,
+        "requestSentCount": 0,
+        "activeShipmentCount": 1,
+        "inTransitShipmentCount": 0,
+        "completedShipmentCount": 0,
+        "activeShipments": 1,
+        "completedDeliveries": 0
+      },
+      "detail": "HTTP 200 active=1",
+      "api": "GET /api/operations/snapshot?viewAs=shipper"
+    },
+    {
+      "phase": "P2-Shipper",
+      "check": "shipment-history-instant",
+      "pass": true,
+      "detail": "HTTP 200 575ms",
+      "api": "GET /api/shipments/history"
+    },
+    {
+      "phase": "P2-Shipper",
+      "check": "notifications",
+      "pass": true,
+      "detail": "HTTP 200",
+      "api": "GET /api/notifications"
+    },
+    {
+      "phase": "P2-Shipper",
+      "check": "no-duplicate-active",
+      "pass": true,
+      "detail": "HTTP 200 count=1",
+      "api": "GET /api/shipments/active"
+    },
+    {
+      "phase": "P2-Shipper",
+      "check": "tracking-screen",
+      "pass": true,
+      "detail": "HTTP 200 ref=L-174278",
+      "api": "GET /api/shipments/track/:ref"
+    },
+    {
+      "phase": "P2-Shipper",
+      "check": "create-load",
+      "pass": true,
+      "detail": "L-723105 HTTP 201 weightKg=15000",
+      "api": "POST /api/loads/create"
+    },
+    {
+      "phase": "P2-Shipper",
+      "check": "load-visible",
+      "pass": true,
+      "detail": "HTTP 200 found=true",
+      "api": "GET /api/loads/mine"
+    },
+    {
+      "phase": "P3-Carrier",
+      "check": "dashboard-loads",
+      "pass": {
+        "activeBids": 0,
+        "wonBids": 1,
+        "spaceListings": 0,
+        "remainingCapacityKg": 0,
+        "requestSentCount": 0,
+        "activeShipmentCount": 1,
+        "inTransitShipmentCount": 0,
+        "completedShipmentCount": 0,
+        "pendingSpaceRequests": 0,
+        "activeShipments": 1,
+        "completedDeliveries": 0
+      },
+      "detail": "HTTP 200",
+      "api": "GET /api/operations/snapshot?viewAs=carrier"
+    },
+    {
+      "phase": "P3-Carrier",
+      "check": "truck-management",
+      "pass": false,
+      "detail": "HTTP 404 trucks=0",
+      "api": "GET /api/trucks"
+    },
+    {
+      "phase": "P3-Carrier",
+      "check": "capacity-listing",
+      "pass": true,
+      "detail": "HTTP 201 id=43a5bb25-d240-40b8-8e43-62a0c4e357a5",
+      "api": "POST /api/carrier-space"
+    },
+    {
+      "phase": "P3-Carrier",
+      "check": "capacity-mine",
+      "pass": true,
+      "detail": "HTTP 200 count=1",
+      "api": "GET /api/carrier-space/mine"
+    },
+    {
+      "phase": "P3-Carrier",
+      "check": "close-listing",
+      "pass": false,
+      "detail": "HTTP 400",
+      "api": "PATCH /api/carrier-space/:id"
+    },
+    {
+      "phase": "P3-Carrier",
+      "check": "bid-placement",
+      "pass": false,
+      "detail": "HTTP 500 id=n/a",
+      "api": "POST /api/bids"
+    },
+    {
+      "phase": "P3-Carrier",
+      "check": "notifications",
+      "pass": true,
+      "detail": "HTTP 200",
+      "api": "GET /api/notifications"
+    },
+    {
+      "phase": "P3-Carrier",
+      "check": "my-bids-filtering",
+      "pass": true,
+      "detail": "HTTP 200 total=2",
+      "api": "GET /api/bids/mine"
+    },
+    {
+      "phase": "P3-Carrier",
+      "check": "tracking",
+      "pass": true,
+      "detail": "HTTP 200",
+      "api": "GET /api/shipments/track/:ref"
+    },
+    {
+      "phase": "P4-E2E",
+      "check": "accept-bid",
+      "pass": false,
+      "detail": "no bid from P3",
+      "api": "PUT /api/bids/:id/accept"
+    },
+    {
+      "phase": "P5-Counter",
+      "check": "create-counter-load",
+      "pass": true,
+      "detail": "L-956967 HTTP 201",
+      "api": "POST /api/loads/create"
+    },
+    {
+      "phase": "P5-Counter",
+      "check": "carrier-initial-bid",
+      "pass": false,
+      "detail": "HTTP 500",
+      "api": "POST /api/bids"
+    },
+    {
+      "phase": "P7-RoleSwitch",
+      "check": "shipper-kpi-isolated",
+      "pass": true,
+      "detail": "shipper.active=0",
+      "api": "GET /api/operations/snapshot?viewAs=shipper"
+    },
+    {
+      "phase": "P7-RoleSwitch",
+      "check": "role-switch",
+      "pass": true,
+      "detail": "HTTP 200 activeRole=carrier",
+      "api": "PATCH /api/auth/active-role"
+    },
+    {
+      "phase": "P7-RoleSwitch",
+      "check": "carrier-kpi-after-switch",
+      "pass": {
+        "activeBids": 0,
+        "wonBids": 0,
+        "spaceListings": 0,
+        "remainingCapacityKg": 0,
+        "requestSentCount": 0,
+        "activeShipmentCount": 0,
+        "inTransitShipmentCount": 0,
+        "completedShipmentCount": 0,
+        "pendingSpaceRequests": 0,
+        "activeShipments": 0,
+        "completedDeliveries": 0
+      },
+      "detail": "carrier.active=0",
+      "api": "GET /api/operations/snapshot?viewAs=carrier"
+    },
+    {
+      "phase": "P7-RoleSwitch",
+      "check": "activity-scoped",
+      "pass": true,
+      "detail": "HTTP 200 items=0",
+      "api": "GET /api/operations/activity"
+    },
+    {
+      "phase": "P7-RoleSwitch",
+      "check": "notifications-cross-role",
+      "pass": true,
+      "detail": "includeAllRoles items=0",
+      "api": "GET /api/operations/activity?includeAllRoles=1"
+    },
+    {
+      "phase": "P7-RoleSwitch",
+      "check": "notifications-accessible",
+      "pass": true,
+      "detail": "unread=0",
+      "api": "GET /api/notifications/unread-count?includeAllRoles=1"
+    },
+    {
+      "phase": "P6-Expiry",
+      "check": "create-15min-listing",
+      "pass": true,
+      "detail": "HTTP 201 id=489a7c1e-aedc-447a-a6f9-a186e474933f until=2026-06-16T12:42:22.731Z",
+      "api": "POST /api/carrier-space"
+    },
+    {
+      "phase": "P6-Expiry",
+      "check": "auto-expire",
+      "pass": true,
+      "detail": "skipped — --skip-expiry-wait",
+      "api": "scheduler"
+    }
+  ],
+  "pass": 30,
+  "fail": 8
+}

@@ -1,0 +1,106 @@
+{
+  "at": "2026-06-16T17:46:23.765Z",
+  "api": "https://transpak-backend-1.onrender.com",
+  "phases": {
+    "phase1-deploy": {
+      "pass": true,
+      "detail": "commit=af39e03dfeba (was 547c541960ec)"
+    },
+    "phase2-db-insert": {
+      "pass": true,
+      "detail": "rows=3 uniqueDedupe=3 uniqueEntity=3 legacyOnly=false",
+      "dbRows": [
+        {
+          "id": "b92caad1-0349-495e-b806-a9dbeb690aa0",
+          "title": "BID_ACCEPTED",
+          "dedupe_key": "BID_ACCEPTED|ee10c937-24f4-46ba-b006-548aaab44547|d772f7d7-be15-4ce3-8c3f-9c33ea184f77",
+          "event_id": "6b768f24-7d36-413f-98a3-13c4e7c90e44",
+          "created_at": "2026-06-16 17:46:48.578026+00"
+        },
+        {
+          "id": "cdea74ca-0ce9-4391-a8c7-90c6bb05c8b4",
+          "title": "BID_ACCEPTED",
+          "dedupe_key": "BID_ACCEPTED|4ca5e1b9-79a1-4629-9f2e-cfb2e6d60fcf|d772f7d7-be15-4ce3-8c3f-9c33ea184f77",
+          "event_id": "d2c0ca4d-41fd-479b-8aaf-6bbd67ed024b",
+          "created_at": "2026-06-16 17:46:43.368264+00"
+        },
+        {
+          "id": "ae178c34-b39b-4eee-89a1-85f9e09832a2",
+          "title": "BID_ACCEPTED",
+          "dedupe_key": "BID_ACCEPTED|489f8847-3647-4c9c-a610-919bf53e4828|d772f7d7-be15-4ce3-8c3f-9c33ea184f77",
+          "event_id": "d5d4710d-6a6e-4e0a-af8e-7e41a59b4d67",
+          "created_at": "2026-06-16 17:46:38.921618+00"
+        }
+      ],
+      "bidIds": [
+        "489f8847-3647-4c9c-a610-919bf53e4828",
+        "4ca5e1b9-79a1-4629-9f2e-cfb2e6d60fcf",
+        "ee10c937-24f4-46ba-b006-548aaab44547"
+      ]
+    },
+    "phase3-identity": {
+      "pass": true,
+      "detail": {
+        "parsed": [
+          {
+            "eventType": "BID_ACCEPTED",
+            "entityId": "ee10c937-24f4-46ba-b006-548aaab44547",
+            "receiverId": "d772f7d7-be15-4ce3-8c3f-9c33ea184f77",
+            "eventVersion": null,
+            "legacy": false
+          },
+          {
+            "eventType": "BID_ACCEPTED",
+            "entityId": "4ca5e1b9-79a1-4629-9f2e-cfb2e6d60fcf",
+            "receiverId": "d772f7d7-be15-4ce3-8c3f-9c33ea184f77",
+            "eventVersion": null,
+            "legacy": false
+          },
+          {
+            "eventType": "BID_ACCEPTED",
+            "entityId": "489f8847-3647-4c9c-a610-919bf53e4828",
+            "receiverId": "d772f7d7-be15-4ce3-8c3f-9c33ea184f77",
+            "eventVersion": null,
+            "legacy": false
+          }
+        ],
+        "bidIds": [
+          "489f8847-3647-4c9c-a610-919bf53e4828",
+          "4ca5e1b9-79a1-4629-9f2e-cfb2e6d60fcf",
+          "ee10c937-24f4-46ba-b006-548aaab44547"
+        ],
+        "totalRows": 3
+      }
+    },
+    "phase4-sync-triple": {
+      "pass": true,
+      "detail": "BID_ACCEPTED in sync=true elapsed=709ms count=3"
+    },
+    "phase4-sync-status": {
+      "pass": true,
+      "detail": "statusSync=true ref=L-655754"
+    },
+    "phase4-sync": {
+      "pass": true
+    },
+    "phase5-rest-align": {
+      "pass": true,
+      "detail": "list=30 sync=30 overlap=30"
+    },
+    "phase6-reconnect": {
+      "pass": true,
+      "detail": "recovered BID_ACCEPTED=3 since=2026-06-16T17:46:30.833Z"
+    },
+    "phase7-burst": {
+      "pass": true,
+      "detail": "accepts=20/20 fails=0 dbRows=20 uniqueKeys=20"
+    }
+  },
+  "verdict": "APPROVED",
+  "deploy": {
+    "commit": "af39e03dfeba3633d42a753a23484f80eba87d35",
+    "commitShort": "af39e03dfeba",
+    "previous": "547c541960ec",
+    "changed": true
+  }
+}

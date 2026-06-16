@@ -1,0 +1,60 @@
+{
+  "at": "2026-06-16T11:35:18.518Z",
+  "api": "https://transpak-backend-1.onrender.com",
+  "results": [
+    {
+      "name": "dashboard-snapshot-shipper",
+      "path": "/api/operations/snapshot?viewAs=shipper",
+      "n": 30,
+      "p50": 701,
+      "p95": 1494,
+      "p99": 1512,
+      "pass": true
+    },
+    {
+      "name": "dashboard-snapshot-carrier",
+      "path": "/api/operations/snapshot?viewAs=carrier",
+      "n": 30,
+      "p50": 684,
+      "p95": 749,
+      "p99": 762,
+      "pass": true
+    },
+    {
+      "name": "shipment-history",
+      "path": "/api/shipments/history",
+      "n": 30,
+      "p50": 580,
+      "p95": 650,
+      "p99": 690,
+      "pass": true
+    },
+    {
+      "name": "shipments-active",
+      "path": "/api/shipments/active",
+      "n": 30,
+      "p50": 565,
+      "p95": 639,
+      "p99": 797,
+      "pass": true
+    },
+    {
+      "name": "notifications",
+      "path": "/api/notifications?limit=50",
+      "n": 30,
+      "p50": 564,
+      "p95": 702,
+      "p99": 1338,
+      "pass": true
+    },
+    {
+      "name": "tracking",
+      "path": "/api/shipments/track/L-174278",
+      "n": 30,
+      "p50": 1681,
+      "p95": 1983,
+      "p99": 2008,
+      "pass": true
+    }
+  ]
+}
