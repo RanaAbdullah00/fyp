@@ -50,7 +50,7 @@ function buildCarrierMatchSql(fleet, startIndex) {
 
   const cap = fleet?.maxCapacityTons != null ? Number(fleet.maxCapacityTons) : null;
   if (cap != null && Number.isFinite(cap) && cap > 0) {
-    params.push(cap);
+    params.push(cap * 1000);
     clauses.push(`(l.weight IS NULL OR l.weight <= $${i++})`);
   }
 
@@ -104,6 +104,14 @@ async function validateBidPlacement({ carrierUserId, load, existingBid }) {
   }
   if (String(load.status) !== "open") {
     return { ok: false, status: 409, message: "Load is not open for bidding", code: "LOAD_NOT_OPEN" };
+  }
+  if (load.accepted_bid_id || load.acceptedBidId) {
+    return {
+      ok: false,
+      status: 409,
+      message: "This load already has an accepted carrier",
+      code: "BID_ALREADY_ACCEPTED"
+    };
   }
   if (!isBiddingOpen(load)) {
     return { ok: false, status: 409, message: "Bidding deadline has passed", code: "BID_DEADLINE_PASSED" };

@@ -1,27 +1,72 @@
 const { query } = require("../db/pool");
+const {
+  createNotificationDedupeAdapter,
+  buildEventDedupeKey,
+  buildLegacyContentDedupeKey
+} = require("./notificationDedupeAdapter");
 const { buildDedupeKey, newEventId, emitDispatchEvent, DISPATCH_TYPES } = require("./realtimeDispatch");
 const { resolveEventType } = require("./eventContractRegistry");
 const { roleNotifyGuard } = require("./roleNotifyGuard");
+const notifyAudit = require("./notifyAuditLog");
+
+const MAX_INSERT_RETRIES = 3;
+const RETRY_BASE_MS = 25;
+
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    String(value || "")
+  );
+}
+
+function isRetryableDbError(err) {
+  const code = String(err?.code || "");
+  return code === "40P01" || code === "40001" || code === "55P03";
+}
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/** Pre-insert safety net — no business logic change; skip invalid payloads safely. */
+function validateNotifyInsertPayload({ receiverId, eventType, dedupeKey, entityId }) {
+  if (!receiverId || !isUuid(receiverId)) {
+    return { ok: false, reason: "invalid_receiver_id" };
+  }
+  if (!eventType || !String(eventType).trim()) {
+    return { ok: false, reason: "empty_event_type" };
+  }
+  const key = dedupeKey != null ? String(dedupeKey).trim() : "";
+  if (!key) {
+    return { ok: false, reason: "missing_dedupe_key" };
+  }
+  return { ok: true, entityId: entityId || null };
+}
 
 const MAX_CARRIER_BROADCAST = Number(process.env.LOAD_NOTIFY_CARRIER_LIMIT || 250);
 const SOCKET_FLUSH_MS = Number(process.env.NOTIFY_SOCKET_FLUSH_MS || 400);
-const DEDUPE_WINDOW_MS = Number(process.env.NOTIFY_DEDUPE_MS || 120000);
 
 /** @type {Map<string, { payloads: object[], timer: NodeJS.Timeout|null, roleType: string|null, seen: Set<string> }>} */
 const socketQueues = new Map();
 
-/** In-memory idempotency (per process) */
-const memoryDedupe = new Map();
+/** In-memory idempotency (per process). Adapter preserves Phase 3 behavior; Redis-ready for multi-instance. */
+const notificationDedupe = createNotificationDedupeAdapter();
 
 function dedupeKeyFromContent(receiverId, title, message) {
-  return buildDedupeKey([receiverId, title, String(message).slice(0, 120)]);
+  return buildLegacyContentDedupeKey(receiverId, title, message);
 }
 
-function pruneMemoryDedupe(now) {
-  if (memoryDedupe.size < 5000) return;
-  for (const [k, ts] of memoryDedupe) {
-    if (now - ts > DEDUPE_WINDOW_MS) memoryDedupe.delete(k);
-  }
+function resolveNotificationDedupeKey({
+  eventType,
+  receiverId,
+  title,
+  message,
+  idempotencyKey,
+  entityId,
+  eventVersion
+}) {
+  if (idempotencyKey) return String(idempotencyKey).trim();
+  if (entityId) return buildEventDedupeKey(eventType, entityId, receiverId, eventVersion);
+  return dedupeKeyFromContent(receiverId, title, message);
 }
 
 function toSocketPayload(row, eventType) {
@@ -116,36 +161,56 @@ async function findRecentNotification(receiverId, title, message) {
 }
 
 async function insertNotification({ receiverId, senderId, roleType, title, message, dedupeKey, eventId }) {
-  try {
-    const { rows } = await query(
-      `INSERT INTO notifications (receiver_id, sender_id, role_type, title, message, dedupe_key, event_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       ON CONFLICT (receiver_id, dedupe_key) DO NOTHING
-       RETURNING id, event_id AS "eventId", sender_id AS "senderId", receiver_id AS "receiverId",
-                 role_type AS "roleType", title, message, read, created_at AS "createdAt"`,
-      [
-        receiverId,
-        senderId || null,
-        roleType || null,
-        String(title).slice(0, 200),
-        String(message).slice(0, 2000),
-        dedupeKey,
-        eventId
-      ]
-    );
-    if (rows[0]) return rows[0];
-    if (dedupeKey) return findByDedupeKey(receiverId, dedupeKey);
-    return null;
-  } catch (err) {
-    if (String(err.code) === "23505") {
-      if (dedupeKey) return findByDedupeKey(receiverId, dedupeKey);
-      return findRecentNotification(receiverId, title, message);
+  const safeKey = dedupeKey ? String(dedupeKey).trim() : null;
+  let lastErr = null;
+  for (let attempt = 0; attempt < MAX_INSERT_RETRIES; attempt++) {
+    try {
+      const { rows } = await query(
+        `INSERT INTO notifications (receiver_id, sender_id, role_type, title, message, dedupe_key, event_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT ON CONSTRAINT uq_notifications_receiver_dedupe_full DO NOTHING
+         RETURNING id, event_id AS "eventId", sender_id AS "senderId", receiver_id AS "receiverId",
+                   role_type AS "roleType", title, message, read, created_at AS "createdAt"`,
+        [
+          receiverId,
+          senderId || null,
+          roleType || null,
+          String(title).slice(0, 200),
+          String(message).slice(0, 2000),
+          safeKey,
+          eventId
+        ]
+      );
+      if (rows[0]) return rows[0];
+      if (safeKey) return findByDedupeKey(receiverId, safeKey);
+      return null;
+    } catch (err) {
+      lastErr = err;
+      if (String(err.code) === "23505") {
+        if (safeKey) return findByDedupeKey(receiverId, safeKey);
+        return findRecentNotification(receiverId, title, message);
+      }
+      if (isRetryableDbError(err) && attempt < MAX_INSERT_RETRIES - 1) {
+        await sleep(RETRY_BASE_MS * 2 ** attempt);
+        continue;
+      }
+      throw err;
     }
-    throw err;
   }
+  throw lastErr || new Error("insert notification failed");
 }
 
-async function notifyUser({ receiverId, senderId, roleType, title, message, type, idempotencyKey }) {
+async function notifyUser({
+  receiverId,
+  senderId,
+  roleType,
+  title,
+  message,
+  type,
+  idempotencyKey,
+  entityId,
+  eventVersion
+}) {
   if (!receiverId || !title || !message) return null;
 
   try {
@@ -166,23 +231,60 @@ async function notifyUser({ receiverId, senderId, roleType, title, message, type
   }
 
   const eventType = resolveEventType(type || title);
-  const dedupeKey = idempotencyKey || dedupeKeyFromContent(receiverId, title, message);
+  const hasEventIdentity = Boolean(idempotencyKey || entityId);
+  const dedupeKey = resolveNotificationDedupeKey({
+    eventType,
+    receiverId,
+    title,
+    message,
+    idempotencyKey,
+    entityId,
+    eventVersion
+  });
+
+  const precheck = validateNotifyInsertPayload({
+    receiverId,
+    eventType,
+    dedupeKey,
+    entityId
+  });
+  if (!precheck.ok) {
+    // eslint-disable-next-line no-console
+    console.warn("[notify] precheck skipped insert", {
+      reason: precheck.reason,
+      receiverId,
+      eventType,
+      entityId: entityId || null
+    });
+    notifyAudit.record({
+      eventType,
+      entityId,
+      receiverId,
+      dedupeKey,
+      status: "fail",
+      error: precheck.reason
+    });
+    return null;
+  }
+
   const now = Date.now();
-  pruneMemoryDedupe(now);
-  if (memoryDedupe.has(dedupeKey) && now - memoryDedupe.get(dedupeKey) < DEDUPE_WINDOW_MS) {
+  notificationDedupe.clearExpired(now);
+  if (await notificationDedupe.has(dedupeKey)) {
     const cached = await findByDedupeKey(receiverId, dedupeKey);
     if (cached) {
       queueSocketEmit(receiverId, toSocketPayload(cached, eventType), cached.roleType);
+      return cached;
     }
-    return cached;
+    // Stale in-memory/redis dedupe entry without DB row — fall through to insert
   }
 
   try {
-    const existing =
-      (await findByDedupeKey(receiverId, dedupeKey)) ||
-      (await findRecentNotification(receiverId, title, message));
+    let existing = await findByDedupeKey(receiverId, dedupeKey);
+    if (!existing && !hasEventIdentity) {
+      existing = await findRecentNotification(receiverId, title, message);
+    }
     if (existing) {
-      memoryDedupe.set(dedupeKey, now);
+      await notificationDedupe.set(dedupeKey, now);
       queueSocketEmit(receiverId, toSocketPayload(existing, eventType), existing.roleType);
       return existing;
     }
@@ -197,12 +299,55 @@ async function notifyUser({ receiverId, senderId, roleType, title, message, type
       dedupeKey,
       eventId
     });
-    memoryDedupe.set(dedupeKey, now);
+    await notificationDedupe.set(dedupeKey, now);
     if (row) {
       queueSocketEmit(receiverId, toSocketPayload(row, eventType), row.roleType);
+      notifyAudit.record({
+        eventType,
+        entityId,
+        receiverId,
+        dedupeKey,
+        status: "success"
+      });
+      return row;
     }
-    return row;
-  } catch {
+    // eslint-disable-next-line no-console
+    console.error("[notify] insert returned no row", {
+      receiverId,
+      dedupeKey,
+      eventType,
+      title
+    });
+    notifyAudit.record({
+      eventType,
+      entityId,
+      receiverId,
+      dedupeKey,
+      status: "fail",
+      error: "insert_no_row"
+    });
+    return null;
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[notify] insert failed", {
+      code: err?.code,
+      receiverId,
+      dedupeKey,
+      eventType,
+      title,
+      message: err?.message || String(err)
+    });
+    notifyAudit.record({
+      eventType,
+      entityId,
+      receiverId,
+      dedupeKey,
+      status: "fail",
+      error: err?.message || String(err)
+    });
+    if (String(err?.code) === "23505" && dedupeKey) {
+      return findByDedupeKey(receiverId, dedupeKey);
+    }
     return null;
   }
 }
@@ -249,12 +394,23 @@ function flushAllNotificationQueues() {
   }
 }
 
-const { notifyAdmins } = require("./adminNotify");
-
 module.exports = {
   notifyUser,
   notifyLoadPostedToCarriers,
-  notifyAdmins,
   flushAllNotificationQueues,
-  dedupeKeyFromContent
+  dedupeKeyFromContent,
+  buildEventDedupeKey,
+  resolveNotificationDedupeKey,
+  validateNotifyInsertPayload,
+  getNotifyAuditSnapshot: notifyAudit.snapshot,
+  getNotifyAuditStats: notifyAudit.stats
 };
+
+/** Lazy re-export — avoids circular init with adminNotify breaking notifyUser exports. */
+Object.defineProperty(module.exports, "notifyAdmins", {
+  enumerable: true,
+  configurable: true,
+  get() {
+    return require("./adminNotify").notifyAdmins;
+  }
+});

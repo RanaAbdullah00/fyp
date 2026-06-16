@@ -5,15 +5,16 @@ const { sendSuccess, sendError } = require("../utils/apiResponse");
 const { query: dbQuery } = require("../db/pool");
 const userRepo = require("../repositories/userRepo");
 const { notifyUser, notifyAdmins } = require("../utils/notifyEvent");
-const { buildDedupeKey } = require("../utils/realtimeDispatch");
+const { buildDedupeKey, newEventId } = require("../utils/realtimeDispatch");
+const { emitContractDispatch, emitContractEntityDispatch } = require("../utils/eventContractRegistry");
 const {
   canMutateCarrierSpaceListing,
   hasAdminRole,
   sendForbidden,
   FORBIDDEN_CODES
 } = require("../utils/resourceAuth");
-const { closeExpiredCapacityListings } = require("../utils/capacityListingLifecycle");
 const { validateAvailabilitySlots } = require("../utils/availabilitySlots");
+const { withIdempotencyKey } = require("../middleware/withIdempotencyKey");
 
 const router = express.Router();
 
@@ -31,8 +32,7 @@ function validate(req, res, next) {
   return next();
 }
 
-router.get("/", protect, requireAnyRole(["shipper", "carrier", "admin"]), async (req, res) => {
-  await closeExpiredCapacityListings();
+router.get("/", protect, requireAnyRole(["shipper", "admin"]), async (req, res) => {
   const origin = String(req.query?.origin || "").trim();
   const destination = String(req.query?.destination || "").trim();
   const vehicleType = String(req.query?.vehicleType || "").trim();
@@ -61,10 +61,16 @@ router.get("/", protect, requireAnyRole(["shipper", "carrier", "admin"]), async 
     clauses.push(`(s.available_from IS NULL OR s.available_from <= $${params.length}::date)`);
   }
   const roles = req.auth?.roles || [];
-  if (roles.includes("shipper") && !hasAdminRole(req.auth)) {
+  if (!hasAdminRole(req.auth)) {
     params.push(req.auth.userId);
     clauses.push(`s.carrier_id <> $${params.length}`);
   }
+  clauses.push(`NOT EXISTS (
+    SELECT 1 FROM jsonb_array_elements(COALESCE(s.availability_slots, '[]'::jsonb)) elem
+    WHERE elem->>'type' = 'visibility'
+      AND elem->>'visibleUntil' IS NOT NULL
+      AND (elem->>'visibleUntil')::timestamptz < now()
+  )`);
   const { rows } = await dbQuery(
     `SELECT s.id, s.carrier_id AS "carrierId", s.origin, s.destination,
             s.truck_capacity_kg AS "truckCapacityKg", s.remaining_space_kg AS "remainingSpaceKg",
@@ -91,12 +97,29 @@ router.get("/mine", protect, requireRole("carrier"), async (req, res) => {
             created_at AS "createdAt", updated_at AS "updatedAt",
             (SELECT COUNT(*)::int FROM carrier_space_requests r
              WHERE r.listing_id = carrier_space_listings.id
+               AND r.status = 'request_sent') AS "pendingRequestCount",
+            (SELECT COUNT(*)::int FROM carrier_space_requests r
+             WHERE r.listing_id = carrier_space_listings.id
                AND r.status IN ('active', 'in_transit', 'completed')) AS "acceptedRequestCount",
             (SELECT COUNT(*)::int FROM carrier_space_requests r
              WHERE r.listing_id = carrier_space_listings.id
                AND r.status IN ('active', 'in_transit')) AS "activeRequestCount"
      FROM carrier_space_listings
      WHERE carrier_id = $1
+       AND status <> 'closed'
+       AND NOT (
+         status = 'open'
+         AND (
+           (available_from IS NOT NULL AND available_from < CURRENT_DATE)
+           OR EXISTS (
+             SELECT 1
+             FROM jsonb_array_elements(COALESCE(availability_slots, '[]'::jsonb)) elem
+             WHERE elem->>'type' = 'visibility'
+               AND elem->>'visibleUntil' IS NOT NULL
+               AND (elem->>'visibleUntil')::timestamptz < now()
+           )
+         )
+       )
      ORDER BY created_at DESC
      LIMIT 100`,
     [req.auth.userId]
@@ -120,6 +143,7 @@ router.post(
   "/",
   protect,
   requireRole("carrier"),
+  withIdempotencyKey("capacity_post"),
   createValidators,
   validate,
   async (req, res) => {
@@ -167,13 +191,30 @@ router.post(
       ]
     );
 
-    await notifyUser({
+    void notifyUser({
       receiverId: req.auth.userId,
       senderId: req.auth.userId,
       roleType: "carrier",
       title: "SPACE_LISTED",
       type: "SPACE_LISTED",
       message: `Capacity listed: ${origin} → ${destination}`
+    });
+
+    emitContractDispatch({
+      eventId: newEventId(),
+      type: "SPACE_LISTED",
+      receiverId: req.auth.userId,
+      roleType: "carrier",
+      entityType: "space",
+      entityId: rows[0].id,
+      payload: { listingId: rows[0].id, origin, destination, status: "open" }
+    });
+    emitContractEntityDispatch({
+      entityType: "space",
+      entityId: rows[0].id,
+      type: "SPACE_LISTED",
+      eventId: newEventId(),
+      payload: { listingId: rows[0].id, origin, destination }
     });
 
     void notifyAdmins({
@@ -351,6 +392,21 @@ router.delete(
       [id, req.auth.userId]
     );
     if (!found[0]) return sendError(res, 404, "Not found");
+    const { rows: activeAgreements } = await dbQuery(
+      `SELECT 1 FROM carrier_space_requests
+       WHERE listing_id = $1 AND status IN ('active', 'in_transit')
+       LIMIT 1`,
+      [id]
+    );
+    if (activeAgreements.length) {
+      return sendError(
+        res,
+        409,
+        "Listing has an active agreement and cannot be deleted",
+        null,
+        "LISTING_ACTIVE"
+      );
+    }
     const { rowCount } = await dbQuery(
       `DELETE FROM carrier_space_listings WHERE id = $1 AND carrier_id = $2`,
       [id, req.auth.userId]

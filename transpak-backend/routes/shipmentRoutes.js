@@ -10,7 +10,8 @@ const {
 } = require("../middleware/validateShipmentBody");
 const { query } = require("../db/pool");
 const { notifyUser, notifyAdmins } = require("../utils/notifyEvent");
-const { buildDedupeKey } = require("../utils/realtimeDispatch");
+const { buildDedupeKey, newEventId } = require("../utils/realtimeDispatch");
+const { emitContractDispatch, emitContractEntityDispatch } = require("../utils/eventContractRegistry");
 const { emitToTracking, emitToShipment } = require("../services/realtimeHub");
 const {
   buildRouteCoordinates,
@@ -25,8 +26,11 @@ const {
   assertAssignedCarrierForGps
 } = require("../utils/gpsTracking");
 const { shipmentsRouteLimiter } = require("../middleware/apiRateLimit");
+const { withIdempotencyKey } = require("../middleware/withIdempotencyKey");
+const { publishTrackingEvent } = require("../utils/trackingEventPublisher");
 const { appendShipmentLocationLog } = require("../utils/shipmentLocationLog");
 const { writeAudit } = require("../utils/auditLog");
+const { invalidateAdminDashboardCache } = require("../utils/adminDashboardCache");
 const {
   hasAdminRole,
   assertShipmentParties,
@@ -246,6 +250,39 @@ router.get(
 );
 
 router.get(
+  "/history",
+  protect,
+  requireAnyRole(["shipper", "carrier", "admin"]),
+  async (req, res) => {
+    try {
+      const uid = req.auth.userId;
+      const { rows } = await query(
+        `SELECT l.id, l.code, l.cargo, l.origin, l.destination,
+                l.vehicle_type AS "vehicleType", l.pickup_date AS "pickupDate",
+                l.shipper_id AS "shipperId", l.assigned_carrier_id AS "assignedCarrierId",
+                COALESCE(uc.full_name, uc.email, 'Carrier') AS "carrierName",
+                COALESCE(us.full_name, us.email, 'Shipper') AS "shipperName",
+                uc.profile_image AS "carrierAvatar",
+                us.profile_image AS "shipperAvatar",
+                s.status AS "shipmentStatus", s.updated_at AS "completedAt"
+         FROM shipments s
+         JOIN loads l ON l.id = s.load_id
+         LEFT JOIN users uc ON uc.id = l.assigned_carrier_id
+         LEFT JOIN users us ON us.id = l.shipper_id
+         WHERE s.status IN ('delivered', 'closed')
+           AND (l.shipper_id = $1 OR l.assigned_carrier_id = $1)
+         ORDER BY s.updated_at DESC
+         LIMIT 100`,
+        [uid]
+      );
+      return sendSuccess(res, 200, rows);
+    } catch (err) {
+      return sendError(res, 500, err.message || "Server error");
+    }
+  }
+);
+
+router.get(
   "/completed",
   protect,
   requireAnyRole(["shipper", "carrier", "admin"]),
@@ -352,6 +389,7 @@ router.put(
   "/:id/status",
   protect,
   requireRole("carrier"),
+  withIdempotencyKey("shipment_status"),
   shipmentIdParam,
   shipmentStatusPutValidators,
   handleValidationErrors,
@@ -434,24 +472,66 @@ router.put(
         const p = parties[0];
         const ref = load.code || String(load.id).slice(0, 8);
         const msg = `Shipment ${ref} — ${canonical}`;
+        const loadCode = load.code || ref;
+        const statusPayload = { loadId: load.id, loadCode, status: canonical, ref: loadCode };
         if (p?.shipper_id) {
-          await notifyUser({
+          void notifyUser({
             receiverId: p.shipper_id,
             senderId: req.auth.userId,
             roleType: "shipper",
             title: notifyMeta.title,
             type: notifyMeta.type,
-            message: msg
+            message: msg,
+            entityId: shipment.id,
+            eventVersion: canonical
+          });
+          emitContractDispatch({
+            eventId: newEventId(),
+            type: notifyMeta.type,
+            receiverId: p.shipper_id,
+            roleType: "shipper",
+            entityType: "shipment",
+            entityId: load.id,
+            payload: statusPayload
+          });
+          emitContractDispatch({
+            eventId: newEventId(),
+            type: "SHIPMENT_STATUS",
+            receiverId: p.shipper_id,
+            roleType: "shipper",
+            entityType: "shipment",
+            entityId: load.id,
+            payload: statusPayload
           });
         }
         if (p?.assigned_carrier_id) {
-          await notifyUser({
+          void notifyUser({
             receiverId: p.assigned_carrier_id,
             senderId: req.auth.userId,
             roleType: "carrier",
             title: notifyMeta.title,
             type: notifyMeta.type,
-            message: msg
+            message: msg,
+            entityId: shipment.id,
+            eventVersion: canonical
+          });
+          emitContractDispatch({
+            eventId: newEventId(),
+            type: notifyMeta.type,
+            receiverId: p.assigned_carrier_id,
+            roleType: "carrier",
+            entityType: "shipment",
+            entityId: load.id,
+            payload: statusPayload
+          });
+          emitContractDispatch({
+            eventId: newEventId(),
+            type: "SHIPMENT_STATUS",
+            receiverId: p.assigned_carrier_id,
+            roleType: "carrier",
+            entityType: "shipment",
+            entityId: load.id,
+            payload: statusPayload
           });
         }
         void notifyAdmins({
@@ -464,15 +544,21 @@ router.put(
       }
 
       const history = await getShipmentHistory(shipment.id);
-      const core = await buildTrackingUpdatePayload(load.id, null, null);
+      const core = await publishTrackingEvent({
+        loadId: load.id,
+        shipmentId: shipment.id,
+        lat: null,
+        lng: null,
+        source: "api",
+        eventId: req.eventId,
+        idempotencyKey: req.idempotencyKey,
+        extra: { trackingState: "SYNCED" }
+      });
       const payload = toTrackResponse(req, {
-        ...core,
+        ...(core || (await buildTrackingUpdatePayload(load.id, null, null)) || {}),
         refKey: trackingRefKey(load),
         history
       });
-      const room = trackRoomKey(load);
-      if (room && core) emitToTracking(room, "tracking:update", core);
-      if (shipment?.id && core) emitToShipment(shipment.id, "tracking:update", core);
       const auditActionMap = {
         pickedup: "shipment.picked_up",
         intransit: "shipment.in_transit",
@@ -490,6 +576,7 @@ router.put(
           metadata: { loadId: load.id, status: canonical }
         });
       }
+      invalidateAdminDashboardCache();
       return sendSuccess(res, 200, payload);
     } catch (err) {
       const status = err.statusCode || 500;
@@ -504,6 +591,7 @@ router.put(
   "/:id/location",
   protect,
   requireRole("carrier"),
+  withIdempotencyKey("shipment_location"),
   shipmentIdParam,
   [
     body("lat").isFloat({ min: -90, max: 90 }).withMessage("Invalid lat"),
@@ -544,17 +632,21 @@ router.put(
       await appendShipmentLocationLog(load.id, lat, lng);
 
       const history = await getShipmentHistory(shipment.id);
-      const core = await buildTrackingUpdatePayload(load.id, lat, lng);
+      const core = await publishTrackingEvent({
+        loadId: load.id,
+        shipmentId: shipment.id,
+        lat,
+        lng,
+        source: "api",
+        eventId: req.eventId,
+        idempotencyKey: req.idempotencyKey
+      });
       const payload = toTrackResponse(req, {
-        ...core,
+        ...(core || (await buildTrackingUpdatePayload(load.id, lat, lng)) || {}),
         refKey: trackingRefKey(load),
         history
       });
 
-      const room = trackRoomKey(load);
-      if (room && core) {
-        emitToTracking(room, "tracking:update", core);
-      }
       return sendSuccess(res, 200, payload);
     } catch (err) {
       const status = err.statusCode || 500;

@@ -100,9 +100,13 @@ function buildCorsMiddlewareConfig() {
     allowedHeaders: [
       "Content-Type",
       "Authorization",
+      "Idempotency-Key",
+      "X-Idempotency-Key",
       "X-Requested-With",
       "X-TransPak-Workspace",
-      "X-TransPak-User-Id"
+      "X-TransPak-User-Id",
+      "X-Trace-Id",
+      "X-Request-Id"
     ],
     exposedHeaders: ["X-TransPak-Version", "X-TransPak-Build"],
     optionsSuccessStatus: 204,
@@ -137,6 +141,8 @@ function createApp({ uploadsDir, dbState = { ready: true, error: null } }) {
   app.options(/.*/, cors(corsOptions));
 
   app.use(deployHeaders);
+  const { traceMiddleware } = require("../middleware/traceMiddleware");
+  app.use(traceMiddleware);
   app.use(requestLogger);
 
   app.use(
@@ -180,11 +186,12 @@ function createApp({ uploadsDir, dbState = { ready: true, error: null } }) {
   app.use("/api", globalApiLimiter);
 
   app.get("/api/health", async (req, res) => {
-    const { resolveDatabaseHealth } = require("../utils/healthStatus");
+    const { resolveDatabaseHealth, resolveDistributedHealthForApi } = require("../utils/healthStatus");
     const { getOpsSnapshot } = require("../utils/opsTelemetry");
     const realtimeHub = require("../services/realtimeHub");
     const uptime = process.uptime();
     const dbHealth = await resolveDatabaseHealth(dbState, uptime);
+    const distributed = resolveDistributedHealthForApi();
 
     if (!dbHealth.booting) {
       if (dbHealth.dbReady && !dbState.ready) {
@@ -213,17 +220,25 @@ function createApp({ uploadsDir, dbState = { ready: true, error: null } }) {
           schemaOk: schema.ok === true
         });
 
-    return res.json({
-      success: true,
-      message: "ok",
-      data: {
-        status: dbHealth.booting
+    let status = dbHealth.booting
+      ? "starting"
+      : dbHealth.dbReady
+        ? "ok"
+        : dbHealth.db === "connecting"
           ? "starting"
-          : dbHealth.dbReady
-            ? "ok"
-            : dbHealth.db === "connecting"
-              ? "starting"
-              : "degraded",
+          : "degraded";
+
+    if (distributed.requiresRedis && !distributed.ok) {
+      status = "critical";
+    }
+
+    const httpStatus = status === "critical" ? 503 : 200;
+
+    return res.status(httpStatus).json({
+      success: status !== "critical",
+      message: status === "critical" ? "critical" : "ok",
+      data: {
+        status,
         healthPhase: dbHealth.healthPhase || (dbHealth.booting ? "booting" : "ready"),
         version: APP_VERSION,
         build: BUILD_ID,
@@ -239,15 +254,40 @@ function createApp({ uploadsDir, dbState = { ready: true, error: null } }) {
           missing: Array.isArray(schema.missing) ? schema.missing : [],
           requiredMigration: schema.requiredMigration || null,
           message: schema.message || null,
-          booting: Boolean(schema.booting)
+          booting: Boolean(schema.booting),
+          notificationDedupeConstraint:
+            schema.notificationDedupeConstraint || dbHealth.notificationDedupeConstraint || null
         },
         schemaVersion: dbHealth.schemaVersion || schema.version || "023",
         migrationRequired: dbHealth.migrationRequired,
         deploymentStatus,
         deploy,
+        distributed,
         socketEngine: realtimeHub.isEngineReady() ? "ready" : "missing",
         sockets: realtimeHub.getConnectedSocketCount(),
         ops: getOpsSnapshot({ includeRecent: false })
+      }
+    });
+  });
+
+  app.get("/api/health/db", async (req, res) => {
+    const { resolveDatabaseHealth } = require("../utils/healthStatus");
+    const { verifyNotificationDedupeConstraint } = require("../db/schemaGuard");
+    const { getPool } = require("../db/pool");
+    const dbHealth = await resolveDatabaseHealth(dbState, process.uptime());
+    let constraint = dbHealth.notificationDedupeConstraint || null;
+    if (!constraint && getPool()) {
+      constraint = await verifyNotificationDedupeConstraint(getPool());
+    }
+    const ok = dbHealth.db === "ready" && Boolean(constraint?.ok);
+    return res.status(ok ? 200 : 503).json({
+      success: ok,
+      data: {
+        db: dbHealth.db,
+        dbPing: dbHealth.dbPing,
+        schema: dbHealth.schema,
+        notificationDedupeConstraint: constraint,
+        schemaDrift: constraint?.ok === false
       }
     });
   });
@@ -257,27 +297,33 @@ function createApp({ uploadsDir, dbState = { ready: true, error: null } }) {
 
   app.use("/api", (req, res, next) => {
     if (req.method === "OPTIONS") return next();
-    if (req.path === "/health") return next();
-    if (req.path === "/system/policy-health") return next();
+    const { isDbGateExemptPath } = require("../utils/dbGatePolicy");
+    if (isDbGateExemptPath(req.path)) return next();
     if (dbState?.ready) return next();
     const lastErr = dbState?.error;
     const isProd = process.env.NODE_ENV === "production";
+    const booting = !dbState?.initSettled;
     if (!isProd && lastErr) {
       // eslint-disable-next-line no-console
       console.error("[db] request blocked (DB not ready):", req.method, req.originalUrl, lastErr?.message || lastErr);
     }
+    const code = booting ? "SERVICE_BOOTING" : "DATABASE_UNAVAILABLE";
+    const message = booting
+      ? "Service is starting, try again shortly"
+      : isProd
+        ? "Service temporarily unavailable"
+        : "Database unavailable. Set DATABASE_URL on Render (Supabase Session pooler URI) and run: npm run db:migrate";
     return res.status(503).json({
       success: false,
-      message: isProd
-        ? "Service temporarily unavailable"
-        : "Database unavailable. Set DATABASE_URL on Render (Supabase Session pooler URI) and run: npm run db:migrate",
-      code: "DATABASE_UNAVAILABLE",
+      message,
+      code,
       data: isProd
         ? null
         : {
             databaseUrlConfigured: isDatabaseUrlConfigured(),
             hint: "transpak-backend: npm run db:migrate",
-            lastError: lastErr?.message || String(lastErr || "")
+            lastError: lastErr?.message || String(lastErr || ""),
+            booting
           }
     });
   });
@@ -295,6 +341,10 @@ function createApp({ uploadsDir, dbState = { ready: true, error: null } }) {
   app.use("/api/carrier-space", forbidAdminOnlyCommercial, require("../routes/carrierSpaceRoutes"));
   app.use("/api/carrier-space", forbidAdminOnlyCommercial, require("../routes/spaceBookingRoutes"));
   app.use("/api/operations", forbidAdminOnlyCommercial, require("../routes/operationsRoutes"));
+  app.use("/api/metrics", forbidAdminOnlyCommercial, require("../routes/metricsRoutes"));
+  app.use("/api/replay", forbidAdminOnlyCommercial, require("../routes/replayRoutes"));
+  app.use("/api/traces", forbidAdminOnlyCommercial, require("../routes/traceRoutes"));
+  app.use("/api/alerts", require("../routes/alertRoutes"));
   app.use("/api/admin", adminRoutes);
   app.use("/api/reviews", forbidAdminOnlyCommercial, reviewRoutes);
   app.use("/api/ratings", forbidAdminOnlyCommercial, reviewRoutes);

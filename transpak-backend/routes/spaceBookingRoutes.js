@@ -5,7 +5,7 @@ const { sendSuccess, sendError } = require("../utils/apiResponse");
 const { query, getPool } = require("../db/pool");
 const { notifyUser, notifyAdmins } = require("../utils/notifyEvent");
 const { buildDedupeKey } = require("../utils/realtimeDispatch");
-const { assertSpaceTransition } = require("../utils/spaceRequestState");
+const { assertSpaceTransition, REQUEST_SENT_OPS_SQL } = require("../utils/spaceRequestState");
 const { createShipmentFromCapacityAccept } = require("../utils/capacityShipmentBridge");
 const { asyncHandler } = require("../utils/asyncHandler");
 const { writeAudit } = require("../utils/auditLog");
@@ -17,6 +17,8 @@ const {
   sendForbidden,
   FORBIDDEN_CODES
 } = require("../utils/resourceAuth");
+
+const { withIdempotencyKey } = require("../middleware/withIdempotencyKey");
 
 const router = express.Router();
 
@@ -36,6 +38,7 @@ router.post(
   "/:listingId/request",
   protect,
   requireRole("shipper"),
+  withIdempotencyKey("capacity_request"),
   [
     param("listingId").custom((v) => (isUuid(v) ? true : (() => { throw new Error("Invalid listing"); })())),
     body("requestedKg").toFloat().isFloat({ gt: 0 }),
@@ -62,18 +65,48 @@ router.post(
       return sendError(res, 403, "Cannot request your own listing");
     }
 
-    const { rows } = await query(
-      `INSERT INTO carrier_space_requests (listing_id, shipper_id, requested_kg, message, status)
-       VALUES ($1, $2, $3, $4, 'request_sent')
-       ON CONFLICT (listing_id, shipper_id)
-       DO UPDATE SET requested_kg = EXCLUDED.requested_kg, message = EXCLUDED.message,
-                     status = 'request_sent', updated_at = now()
-       RETURNING id, listing_id AS "listingId", shipper_id AS "shipperId",
-                 requested_kg AS "requestedKg", message, status, created_at AS "createdAt"`,
-      [listingId, req.auth.userId, requestedKg, message]
+    const { rows: existingRows } = await query(
+      `SELECT id, status FROM carrier_space_requests
+       WHERE listing_id = $1 AND shipper_id = $2`,
+      [listingId, req.auth.userId]
     );
+    const existing = existingRows[0];
+    const lockedStatuses = new Set(["active", "in_transit", "completed"]);
+    if (existing && lockedStatuses.has(String(existing.status))) {
+      return sendError(
+        res,
+        409,
+        "This capacity request is already active or completed",
+        null,
+        "SPACE_REQUEST_LOCKED"
+      );
+    }
 
-    await notifyUser({
+    let rows;
+    if (existing) {
+      ({ rows } = await query(
+        `UPDATE carrier_space_requests
+         SET requested_kg = $3, message = $4, status = 'request_sent', updated_at = now()
+         WHERE id = $1 AND listing_id = $2 AND shipper_id = $5
+         RETURNING id, listing_id AS "listingId", shipper_id AS "shipperId",
+                   requested_kg AS "requestedKg", message, status, created_at AS "createdAt"`,
+        [existing.id, listingId, requestedKg, message, req.auth.userId]
+      ));
+    } else {
+      ({ rows } = await query(
+        `INSERT INTO carrier_space_requests (listing_id, shipper_id, requested_kg, message, status)
+         VALUES ($1, $2, $3, $4, 'request_sent')
+         RETURNING id, listing_id AS "listingId", shipper_id AS "shipperId",
+                   requested_kg AS "requestedKg", message, status, created_at AS "createdAt"`,
+        [listingId, req.auth.userId, requestedKg, message]
+      ));
+    }
+
+    if (!rows?.[0]) {
+      return sendError(res, 409, "Could not create or update capacity request", null, "SPACE_REQUEST_FAILED");
+    }
+
+    void notifyUser({
       receiverId: listing.carrier_id,
       senderId: req.auth.userId,
       roleType: "carrier",
@@ -83,7 +116,7 @@ router.post(
       idempotencyKey: buildDedupeKey(["SPACE_REQUEST", rows[0].id, listing.carrier_id])
     });
 
-    await notifyUser({
+    void notifyUser({
       receiverId: req.auth.userId,
       senderId: req.auth.userId,
       roleType: "shipper",
@@ -128,12 +161,13 @@ router.get("/requests/incoming", protect, requireRole("carrier"), async (req, re
             r.load_id AS "loadId", l.code AS "loadCode",
             sl.origin, sl.destination, sl.remaining_space_kg AS "remainingSpaceKg",
             sl.rate_per_kg AS "ratePerKg", sl.available_from AS "availableFrom", sl.notes AS "listingNotes",
-            COALESCE(u.full_name, u.email, 'Shipper') AS "shipperName"
+            COALESCE(u.full_name, u.email, 'Shipper') AS "shipperName",
+            u.profile_image AS "shipperAvatar"
      FROM carrier_space_requests r
      JOIN carrier_space_listings sl ON sl.id = r.listing_id
      JOIN users u ON u.id = r.shipper_id
      LEFT JOIN loads l ON l.id = r.load_id
-     WHERE sl.carrier_id = $1 AND r.status NOT IN ('rejected', 'completed')
+     WHERE sl.carrier_id = $1 AND ${REQUEST_SENT_OPS_SQL}
      ORDER BY r.created_at DESC
      LIMIT 100`,
     [req.auth.userId]
@@ -148,12 +182,13 @@ router.get("/requests/sent", protect, requireRole("shipper"), async (req, res) =
             r.load_id AS "loadId", ld.code AS "loadCode",
             l.origin, l.destination, l.carrier_id AS "carrierId",
             l.rate_per_kg AS "ratePerKg", l.available_from AS "availableFrom",
-            COALESCE(u.full_name, u.email, 'Carrier') AS "carrierName"
+            COALESCE(u.full_name, u.email, 'Carrier') AS "carrierName",
+            u.profile_image AS "carrierAvatar"
      FROM carrier_space_requests r
      JOIN carrier_space_listings l ON l.id = r.listing_id
      JOIN users u ON u.id = l.carrier_id
      LEFT JOIN loads ld ON ld.id = r.load_id
-     WHERE r.shipper_id = $1
+     WHERE r.shipper_id = $1 AND ${REQUEST_SENT_OPS_SQL}
      ORDER BY r.created_at DESC
      LIMIT 100`,
     [req.auth.userId]
@@ -193,7 +228,7 @@ async function transitionRequest(req, res, nextStatus) {
 
     assertSpaceTransition(row.status, nextStatus);
 
-    if (nextStatus === "accepted" || nextStatus === "active") {
+    if (nextStatus === "active") {
       const rem = Number(row.remaining_space_kg);
       if (Number(row.requested_kg) > rem) {
         await client.query("ROLLBACK");
@@ -210,7 +245,7 @@ async function transitionRequest(req, res, nextStatus) {
     }
 
     let shipmentBridge = null;
-    if (nextStatus === "accepted" && !row.load_id) {
+    if (nextStatus === "active" && !row.load_id) {
       shipmentBridge = await createShipmentFromCapacityAccept(client, row, {
         carrier_id: row.carrier_id,
         origin: row.origin,
@@ -221,7 +256,7 @@ async function transitionRequest(req, res, nextStatus) {
       });
     }
 
-    const dbStatus = nextStatus === "accepted" ? "active" : nextStatus;
+    const dbStatus = nextStatus;
 
     await client.query(
       `UPDATE carrier_space_requests SET status = $2, updated_at = now() WHERE id = $1`,
@@ -238,8 +273,7 @@ async function transitionRequest(req, res, nextStatus) {
     await client.query("COMMIT");
 
     const notifyMap = {
-      accepted: ["SPACE_ACCEPTED", "Your capacity request was accepted"],
-      active: ["CONTRACT_STARTED", "Capacity contract is now active"],
+      active: ["SPACE_ACCEPTED", "Your capacity request was accepted"],
       rejected: ["SPACE_REJECTED", "Your capacity request was declined"],
       in_transit: ["SPACE_IN_TRANSIT", "Shipment is in transit on shared capacity"],
       completed: ["SPACE_COMPLETED", "Capacity contract completed — leave a review"]
@@ -247,13 +281,15 @@ async function transitionRequest(req, res, nextStatus) {
     const [title, msgBase] = notifyMap[nextStatus] || ["SPACE_UPDATE", "Request updated"];
     const dispatchType = shipmentBridge ? "CONTRACT_STARTED" : title;
     const refSuffix = shipmentBridge?.loadCode ? ` (${shipmentBridge.loadCode})` : '';
-    await notifyUser({
+    void notifyUser({
       receiverId: row.shipper_id,
       senderId: row.carrier_id,
       roleType: "shipper",
       title: dispatchType,
       type: dispatchType,
-      message: `${msgBase}${refSuffix}: ${row.origin} → ${row.destination}`
+      message: `${msgBase}${refSuffix}: ${row.origin} → ${row.destination}`,
+      entityId: requestId,
+      eventVersion: nextStatus
     });
 
     if (shipmentBridge) {
@@ -279,7 +315,8 @@ async function transitionRequest(req, res, nextStatus) {
         title: "CONTRACT_STARTED",
         type: "CONTRACT_STARTED",
         message: `Capacity contract is now active${refSuffix}: ${row.origin} → ${row.destination}`,
-        idempotencyKey: buildDedupeKey(["CONTRACT_STARTED", "carrier", requestId, shipmentBridge.loadId])
+        entityId: requestId,
+        eventVersion: shipmentBridge.shipmentId || shipmentBridge.loadId
       });
       emitContractDispatch({
         eventId: newEventId(),
@@ -389,7 +426,7 @@ async function partyTransition(req, res, nextStatus) {
   ]);
   const otherId = isShipper ? row.carrier_id : row.shipper_id;
   const receiverRole = isShipper ? "carrier" : "shipper";
-  await notifyUser({
+  void notifyUser({
     receiverId: otherId,
     senderId: uid,
     roleType: receiverRole,
@@ -427,7 +464,7 @@ router.put(
   requireRole("carrier"),
   [param("id").custom((v) => (isUuid(v) ? true : (() => { throw new Error("Invalid id"); })()))],
   validate,
-  asyncHandler((req, res) => transitionRequest(req, res, "accepted"))
+  asyncHandler((req, res) => transitionRequest(req, res, "active"))
 );
 
 router.put(

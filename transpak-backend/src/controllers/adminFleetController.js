@@ -2,12 +2,15 @@ const { param, query: qv, validationResult } = require("express-validator");
 const { sendSuccess, sendError } = require("../../utils/apiResponse");
 const { writeAudit } = require("../../utils/auditLog");
 const { notifyUser } = require("../../utils/notifyEvent");
+const { emitContractDispatch } = require("../../utils/eventContractRegistry");
+const { newEventId } = require("../../utils/realtimeDispatch");
 const {
   TRUCK_STATUS,
   hasRequiredDocuments,
   apiTruckStatus
 } = require("../../utils/truckLifecycle");
 const fleetRepo = require("../../utils/fleetRepo");
+const { invalidateAdminDashboardCache } = require("../../utils/adminDashboardCache");
 
 function isUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -77,7 +80,16 @@ async function approve(req, res) {
     targetId: truckId,
     metadata: { carrierId: truck.user_id }
   });
-  await notifyUser({
+  emitContractDispatch({
+    eventId: newEventId(),
+    type: "TRUCK_APPROVED",
+    receiverId: truck.user_id,
+    roleType: "carrier",
+    entityType: "truck",
+    entityId: truckId,
+    payload: { truckId, status: TRUCK_STATUS.APPROVED }
+  });
+  void notifyUser({
     receiverId: truck.user_id,
     senderId: req.auth.userId,
     roleType: "carrier",
@@ -85,6 +97,7 @@ async function approve(req, res) {
     type: "TRUCK_APPROVED",
     message: "Your truck registration was approved — you can bid on matching loads"
   });
+  invalidateAdminDashboardCache();
   return sendSuccess(res, 200, { ok: true, statusLabel: "APPROVED", id: updated?.id });
 }
 
@@ -105,7 +118,16 @@ async function reject(req, res) {
     targetId: truckId,
     metadata: { carrierId: truck.user_id, reason: String(req.body?.reason || "").slice(0, 200) }
   });
-  await notifyUser({
+  emitContractDispatch({
+    eventId: newEventId(),
+    type: "TRUCK_REJECTED",
+    receiverId: truck.user_id,
+    roleType: "carrier",
+    entityType: "truck",
+    entityId: truckId,
+    payload: { truckId, status: TRUCK_STATUS.SUSPENDED }
+  });
+  void notifyUser({
     receiverId: truck.user_id,
     senderId: req.auth.userId,
     roleType: "carrier",
@@ -133,7 +155,16 @@ async function suspend(req, res) {
     targetId: truckId,
     metadata: { carrierId: truck.user_id, reason: String(req.body?.reason || "").slice(0, 200) }
   });
-  await notifyUser({
+  emitContractDispatch({
+    eventId: newEventId(),
+    type: "TRUCK_SUSPENDED",
+    receiverId: truck.user_id,
+    roleType: "carrier",
+    entityType: "truck",
+    entityId: truckId,
+    payload: { truckId, status: TRUCK_STATUS.SUSPENDED }
+  });
+  void notifyUser({
     receiverId: truck.user_id,
     senderId: req.auth.userId,
     roleType: "carrier",

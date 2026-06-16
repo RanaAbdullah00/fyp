@@ -89,7 +89,69 @@ describe("Phase 8 — deployment headers", () => {
     assert.ok(corsIdx >= 0 && apiIdx > corsIdx, "CORS middleware must run before /api rate limiter");
     assert.ok(src.includes("X-TransPak-Workspace"));
     assert.ok(src.includes("X-TransPak-User-Id"));
+    assert.ok(src.includes("Idempotency-Key"));
+    assert.ok(src.includes("X-Idempotency-Key"));
     assert.ok(src.includes(".pages.dev"));
     assert.ok(src.includes("optionsSuccessStatus"));
+  });
+});
+
+describe("Phase 2 — BidList regression", () => {
+  it("BidList imports isCounterOffered when sorting counter bids", () => {
+    const src = readFe("components/loadboard/BidList.jsx");
+    assert.ok(src.includes("isCounterOffered"), "BidList must import isCounterOffered");
+    assert.ok(/import\s*\{[^}]*isCounterOffered[^}]*\}\s*from\s*['"].*bidStatus/.test(src));
+    assert.ok(src.includes("isCounterOffered(bid.status)"));
+  });
+});
+
+describe("Phase 2 — shipment timeline merge", () => {
+  it("exports mergeShipmentTimelineEvents from optimistic status module", () => {
+    const src = readFe("utils/shipmentStatusOptimistic.js");
+    assert.ok(src.includes("export function mergeShipmentTimelineEvents"));
+  });
+
+  it("ActiveShipmentPanel and ShipmentTracking use shared merge helper", () => {
+    const panel = readFe("components/dashboard/ActiveShipmentPanel.jsx");
+    const tracking = readFe("pages/shipments/ShipmentTracking.jsx");
+    assert.ok(panel.includes("mergeShipmentTimelineEvents"));
+    assert.ok(tracking.includes("mergeShipmentTimelineEvents"));
+    assert.ok(!panel.includes("if (historyEvents.length) return historyEvents"));
+  });
+
+  it("StatusTimeline dot colors use canonical status not translated labels", () => {
+    const src = readFe("components/shipment/StatusTimeline.jsx");
+    assert.ok(src.includes("timelineDotClassForStatus(e?.status || currentStatus)"));
+    assert.ok(!src.includes("e?.label || currentStatus"));
+  });
+
+  it("carrier capacity browse is shipper-only on GET /carrier-space", () => {
+    const src = read("routes/carrierSpaceRoutes.js");
+    assert.ok(src.includes('requireAnyRole(["shipper", "admin"])'));
+    assert.ok(!src.includes('requireAnyRole(["shipper", "carrier", "admin"])'));
+  });
+
+  it("reviews pending query exposes partner avatar field", () => {
+    const src = read("routes/reviewRoutes.js");
+    assert.ok(src.includes('"toUserAvatar"'));
+  });
+
+  it("reviews summary batch exposes lastReviewAt", () => {
+    const src = read("routes/reviewRoutes.js");
+    assert.ok(src.includes('router.get("/summary"'));
+    assert.ok(src.includes('"lastReviewAt"'));
+    assert.ok(src.includes("MAX(created_at)"));
+  });
+
+  it("list parents batch rating summaries at list level", () => {
+    assert.ok(readFe("components/reviews/UserRatingBadge.jsx").includes("ratingMap"));
+    assert.ok(!readFe("components/reviews/UserRatingBadge.jsx").includes("useReceivedRatingSummary"));
+    assert.ok(readFe("hooks/useRatingSummaryBatch.js").includes("/reviews/summary"));
+    assert.ok(readFe("components/loadboard/BidList.jsx").includes("useRatingSummaryBatch"));
+  });
+
+  it("tracking coordinator batches socket updates", () => {
+    assert.ok(readFe("hooks/useTrackingCoordinator.js").includes("scheduleBufferedUpdate"));
+    assert.ok(readFe("hooks/useShipmentTracking.js").includes("useTrackingCoordinator"));
   });
 });

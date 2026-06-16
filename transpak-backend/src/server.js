@@ -187,7 +187,26 @@ async function start() {
   });
 
   realtimeHub.setIO(io);
+  const { initDistributedSocketBus } = require("../services/distributedSocketBus");
+  initDistributedSocketBus();
   registerSocketHandlers(io);
+
+  const { requiresRedis } = require("../utils/distributedMode");
+  if (requiresRedis()) {
+    try {
+      const { runDistributedBootstrapGuard } = require("../utils/distributedBootstrapGuard");
+      await runDistributedBootstrapGuard({ throwOnFail: true });
+    } catch (err) {
+      console.error("[server] Distributed bootstrap guard failed:", err?.message || err);
+      process.exit(1);
+    }
+  }
+
+  const { startAlertEngine } = require("../utils/alertEngine");
+  startAlertEngine();
+
+  const { pruneOldSpans } = require("../utils/traceStore");
+  setInterval(() => pruneOldSpans().catch(() => {}), 6 * 60 * 60 * 1000).unref?.();
 
   if (process.env.NODE_ENV === "production" && !realtimeHub.isEngineReady()) {
     console.error("[server] Socket.io engine failed to initialize — aborting deploy boot");
@@ -262,6 +281,15 @@ async function start() {
       console.log(
         `TransPak backend running - version ${APP_VERSION} - build ${BUILD_ID} - build OK - port ${listenAttemptPort}`
       );
+
+      if (!paasPortLock) {
+        try {
+          const portFile = path.join(__dirname, "..", "..", ".dev-backend-port");
+          fs.writeFileSync(portFile, String(listenAttemptPort), "utf8");
+        } catch {
+          /* non-fatal — discovery falls back to port probe */
+        }
+      }
 
       if (process.env.NODE_ENV === "production" && !realtimeHub.isEngineReady()) {
         console.error("[server] Socket.io not ready after listen — failing deploy health");
