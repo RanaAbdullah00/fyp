@@ -1,13 +1,13 @@
 {
-  "at": "2026-06-16T18:31:25.489Z",
+  "at": "2026-06-16T19:14:00.276Z",
   "pass": true,
   "feedPages": [
     {
       "page": 1,
       "ok": true,
       "status": 200,
-      "total": 6547,
-      "totalPages": 328,
+      "total": 6607,
+      "totalPages": 331,
       "dupes": [],
       "itemCount": 20
     },
@@ -15,8 +15,8 @@
       "page": 2,
       "ok": true,
       "status": 200,
-      "total": 6548,
-      "totalPages": 328,
+      "total": 6608,
+      "totalPages": 331,
       "dupes": [],
       "itemCount": 20
     },
@@ -24,15 +24,15 @@
       "page": 3,
       "ok": true,
       "status": 200,
-      "total": 6548,
-      "totalPages": 328,
+      "total": 6608,
+      "totalPages": 331,
       "dupes": [],
       "itemCount": 20
     }
   ],
   "withinPageDupes": false,
   "crossPageDuplicateIds": [
-    "c4a60bb9-a3b2-40ff-b9b7-cb694d9cf9d6"
+    "e939a66e-54d1-4072-8a9b-0bdfa50b94c7"
   ],
   "crossPageDupesLive": true,
   "paginationStable": false,
@@ -43,24 +43,24 @@
       "page": 1,
       "ok": true,
       "status": 200,
-      "total": 3872,
-      "totalPages": 194,
+      "total": 3916,
+      "totalPages": 196,
       "itemCount": 20
     },
     {
       "page": 2,
       "ok": true,
       "status": 200,
-      "total": 3872,
-      "totalPages": 194,
+      "total": 3916,
+      "totalPages": 196,
       "itemCount": 20
     },
     {
       "page": 3,
       "ok": true,
       "status": 200,
-      "total": 3872,
-      "totalPages": 194,
+      "total": 3916,
+      "totalPages": 196,
       "itemCount": 20
     }
   ],

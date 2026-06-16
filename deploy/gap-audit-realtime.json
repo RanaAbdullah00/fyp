@@ -1,16 +1,16 @@
 {
-  "at": "2026-06-16T18:31:08.334Z",
+  "at": "2026-06-16T19:13:45.017Z",
   "pass": true,
   "phase5Core": true,
   "notifSyncPass": true,
-  "loadId": "bc1abe64-283c-4766-ac81-a714880430ea",
-  "bidId": "e7703dfe-8b7a-4281-9065-1ecf63323171",
+  "loadId": "d70f31f0-a466-436f-9e46-d59742825c11",
+  "bidId": "f1553484-4220-47e1-bc22-0e3b2efaa7b4",
   "acceptOk": true,
   "acceptStatus": 200,
-  "activeVisibleMs": 803,
+  "activeVisibleMs": 832,
   "activeVisible": true,
-  "notifSyncMs": 693,
+  "notifSyncMs": 688,
   "notifSync": true,
   "deadlineMs": 5000,
-  "totalMs": 3414
+  "totalMs": 3508
 }

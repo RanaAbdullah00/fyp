@@ -1,19 +1,19 @@
 {
-  "at": "2026-06-16T18:31:31.898Z",
+  "at": "2026-06-16T19:14:06.434Z",
   "pass": true,
   "frontend": "https://transpak-frontend.pages.dev",
-  "bundleUrl": "https://transpak-frontend.pages.dev/assets/index-Bv1uEzEP.js",
+  "bundleUrl": "https://transpak-frontend.pages.dev/assets/index-BTQhp2dC.js",
   "cold": {
     "ok": true,
     "status": 200,
-    "ms": 130,
-    "bytes": 520553
+    "ms": 96,
+    "bytes": 520633
   },
   "warm": {
     "ok": true,
     "status": 200,
     "ms": 119,
-    "bytes": 520553
+    "bytes": 520633
   },
   "dashboardStatus": 200,
   "thresholdMs": 2500,
