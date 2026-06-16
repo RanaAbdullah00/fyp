@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import TrackingMap from '../../components/shipment/TrackingMap.jsx';
-import RouteInfo from '../../components/shipment/RouteInfo.jsx';
 import ShipmentCard from '../../components/shipment/ShipmentCard.jsx';
+import ProfileLink from '../../components/profile/ProfileLink.jsx';
 import StatusTimeline from '../../components/shipment/StatusTimeline.jsx';
 import ShipmentProgressBox from '../../components/shipment/ShipmentProgressBox.jsx';
 import LifecycleBadge from '../../components/shipment/LifecycleBadge.jsx';
@@ -13,12 +13,14 @@ import { useLanguage } from '../../hooks/useLanguage.js';
 import { useApi } from '../../hooks/useApi.js';
 import { estimateLocalFare } from '../../utils/localFareEstimate.js';
 import { useShipmentTracking } from '../../hooks/useShipmentTracking.js';
+import TrackingDebugOverlay from '../../components/debug/TrackingDebugOverlay.jsx';
+import CausalReplayPanel from '../../components/debug/CausalReplayPanel.jsx';
 import { getNextAllowedActions } from '../../utils/stateNormalizationEngine.js';
 import { isValidShipmentTrackRef } from '../../utils/shipmentStatus.js';
 import {
   commitOptimisticStatusAdvance,
   emitShipmentStatusUpdated,
-  getOptimisticStatusTimeline,
+  mergeShipmentTimelineEvents,
   resolveEffectiveShipmentStatus,
   subscribeOptimisticShipmentStatus
 } from '../../utils/shipmentStatusOptimistic.js';
@@ -35,6 +37,7 @@ import {
 } from '../../utils/activeShipmentStore.js';
 import { dashboardPathForRole } from '../../utils/dashboardPath.js';
 import { triggerStatusActivationSync } from '../../utils/contractActivation.js';
+import { emitReviewPrompt } from '../../utils/reviewPrompt.js';
 import { FLOW_TYPE } from '../../utils/flowSession.js';
 import {
   buildOptimisticTrackingRow,
@@ -111,14 +114,6 @@ const ShipmentTracking = () => {
   }, [refreshActiveRow]);
 
   useEffect(() => {
-    const onShipmentsRefresh = () => refreshActiveRow({ silent: true });
-    const onTrackingRefresh = () => refreshActiveRow({ silent: true });
-    const onLegacyRefresh = (e) => {
-      const scope = e?.detail?.scope;
-      if (!scope || scope === 'all' || scope === 'shipments' || scope === 'tracking') {
-        refreshActiveRow({ silent: true });
-      }
-    };
     const onHydrate = (e) => {
       const tick = ++hydrateTickRef.current;
       const rows = e?.detail?.rows;
@@ -144,21 +139,25 @@ const ShipmentTracking = () => {
         if (!hasOptimisticActivation(id)) refreshActiveRow({ silent: true });
       });
     };
-    const onContractSync = (e) => {
+    const onActivated = (e) => {
       const ref = String(e?.detail?.ref || '').trim();
-      if (ref && ref === id) refreshActiveRow({ silent: true });
+      if (ref && ref === id) {
+        bumpOptimistic((n) => n + 1);
+      }
     };
-    window.addEventListener('tp:shipments-refresh', onShipmentsRefresh);
-    window.addEventListener('tp:tracking-refresh', onTrackingRefresh);
-    window.addEventListener('tp:realtime-refresh', onLegacyRefresh);
+    const onStatusUpdated = (e) => {
+      const ref = String(e?.detail?.ref || '').trim();
+      if (ref && ref === id) {
+        bumpOptimistic((n) => n + 1);
+      }
+    };
     window.addEventListener('tp:active-shipments-hydrate', onHydrate);
-    window.addEventListener('tp:contract-sync', onContractSync);
+    window.addEventListener('tp:contract-activated', onActivated);
+    window.addEventListener('tp:shipment-status-updated', onStatusUpdated);
     return () => {
-      window.removeEventListener('tp:shipments-refresh', onShipmentsRefresh);
-      window.removeEventListener('tp:tracking-refresh', onTrackingRefresh);
-      window.removeEventListener('tp:realtime-refresh', onLegacyRefresh);
       window.removeEventListener('tp:active-shipments-hydrate', onHydrate);
-      window.removeEventListener('tp:contract-sync', onContractSync);
+      window.removeEventListener('tp:contract-activated', onActivated);
+      window.removeEventListener('tp:shipment-status-updated', onStatusUpdated);
     };
   }, [refreshActiveRow, id, user?.id, workspaceRole]);
 
@@ -186,29 +185,6 @@ const ShipmentTracking = () => {
   useEffect(() => subscribeOptimisticActivation(() => bumpOptimistic((n) => n + 1)), []);
 
   useEffect(() => subscribeOptimisticShipmentStatus(() => bumpOptimistic((n) => n + 1)), []);
-
-  useEffect(() => {
-    const onActivated = (e) => {
-      const ref = String(e?.detail?.ref || '').trim();
-      if (ref && ref === id) {
-        bumpOptimistic((n) => n + 1);
-        refreshActiveRow({ silent: true });
-      }
-    };
-    const onStatusUpdated = (e) => {
-      const ref = String(e?.detail?.ref || '').trim();
-      if (ref && ref === id) {
-        bumpOptimistic((n) => n + 1);
-        refreshActiveRow({ silent: true });
-      }
-    };
-    window.addEventListener('tp:contract-activated', onActivated);
-    window.addEventListener('tp:shipment-status-updated', onStatusUpdated);
-    return () => {
-      window.removeEventListener('tp:contract-activated', onActivated);
-      window.removeEventListener('tp:shipment-status-updated', onStatusUpdated);
-    };
-  }, [id, refreshActiveRow]);
 
   const hasOptimistic = hasOptimisticActivation(id);
   const isHydrating = (activeLoading || backgroundHydrating) && !hasOptimistic;
@@ -300,12 +276,44 @@ const ShipmentTracking = () => {
       });
       await triggerStatusActivationSync(id);
       emitShipmentStatusUpdated(id, upcomingStatus, { source: 'api' });
+      if (upcomingStatus === 'closed') {
+        const counterpartyId =
+          workspaceRole === 'carrier'
+            ? payload?.shipperId || rowForTracking?.shipperId
+            : payload?.carrierId || rowForTracking?.assignedCarrierId || rowForTracking?.carrierId;
+        if (counterpartyId) {
+          emitReviewPrompt({
+            toUserId: counterpartyId,
+            shipmentRef: id,
+            shipmentId: payload?.shipmentId || rowForTracking?.shipmentId || null,
+            loadId: payload?.loadId || rowForTracking?.loadId || null,
+            roleType: workspaceRole === 'carrier' ? 'shipper' : 'carrier'
+          });
+        }
+      }
     } catch (err) {
       notifyError(formatUserError(err, t, { fallback: t('pages.tracking.loadFailed') }));
     } finally {
       setAdvancing(false);
     }
-  }, [id, primaryAction, canEnableButton, request, t, workspaceRole]);
+  }, [id, primaryAction, canEnableButton, request, t, workspaceRole, payload, rowForTracking]);
+
+  const counterpartyProfileLink = useMemo(() => {
+    const shipperId = payload?.shipperId || rowForTracking?.shipperId;
+    const carrierId =
+      payload?.carrierId || rowForTracking?.assignedCarrierId || rowForTracking?.carrierId;
+    if (workspaceRole === 'shipper' && carrierId) {
+      return (
+        <ProfileLink userId={carrierId} name={payload?.carrierName || t('pages.tracking.viewCarrierProfile')} />
+      );
+    }
+    if (workspaceRole === 'carrier' && shipperId) {
+      return (
+        <ProfileLink userId={shipperId} name={payload?.shipperName || t('pages.tracking.viewShipperProfile')} />
+      );
+    }
+    return null;
+  }, [workspaceRole, payload, rowForTracking, t]);
 
   const tracking = payload?.tracking;
   const mapFields = useMemo(() => {
@@ -360,46 +368,28 @@ const ShipmentTracking = () => {
       origin: originName || t('common.emDash'),
       destination: destinationName || t('common.emDash'),
       status: effectiveStatus,
-      driverName: t('common.emDash'),
-      vehicleReg: t('common.emDash'),
-      eta: tracking?.eta || t('common.emDash'),
+      eta: tracking?.eta
+        ? new Date(tracking.eta).toLocaleString()
+        : estimatedTravelHours
+          ? `${estimatedTravelHours}h`
+          : t('common.emDash'),
       lastUpdate: tracking?.locationUpdatedAt || payload?.history?.[0]?.time || t('common.emDash')
     }),
-    [id, payload?.refKey, tracking, payload?.history, originName, destinationName, effectiveStatus, t]
+    [id, payload?.refKey, tracking, payload?.history, originName, destinationName, effectiveStatus, estimatedTravelHours, t]
   );
 
   const timelineEvents = useMemo(() => {
     try {
       const h = Array.isArray(payload?.history) ? payload.history : [];
-      const optimisticLog = getOptimisticStatusTimeline(id);
-      const merged = [...h, ...optimisticLog].filter((ev) => ev && typeof ev === 'object');
-      if (!merged.length) return [];
-      return merged.map((ev) => ({
-        label: ev.event || ev.label || t('pages.tracking.timelineUpdate'),
-        time: ev.time || '',
-        done: true,
-        note: ev.location ?? null
-      }));
+      const { events } = mergeShipmentTimelineEvents(id, h, {
+        apiStatus: effectiveStatus,
+        fallbackLabel: t('pages.tracking.timelineUpdate')
+      });
+      return events;
     } catch {
       return [];
     }
   }, [payload?.history, id, effectiveStatus, t]);
-
-  const checkpoints = useMemo(() => {
-    const originLabel = originName?.trim() || '';
-    const destLabel = destinationName?.trim() || '';
-    if (originLabel && destLabel) {
-      return [t('pages.tracking.originCity') + `: ${originLabel}`, t('pages.tracking.destinationCity') + `: ${destLabel}`];
-    }
-    if (coords.length >= 2) {
-      return [
-        originLabel || t('pages.tracking.originCity'),
-        destLabel || t('pages.tracking.destinationCity')
-      ];
-    }
-    if (coords.length === 1) return [t('pages.tracking.lastReportedPosition')];
-    return [];
-  }, [coords, originName, destinationName, t]);
 
   const trackingDataForMap = useMemo(
     () => ({
@@ -514,7 +504,7 @@ const ShipmentTracking = () => {
           <TranslatedText text={userError} as="span" />
         </p>
       ) : null}
-      <ShipmentCard shipment={shipment} uiState={ui} />
+      <ShipmentCard shipment={shipment} uiState={ui} profileLink={counterpartyProfileLink} />
       <div className="tp-tracking-progress mb-3">
         <ShipmentProgressBox uiState={ui} eta={shipment.eta} />
       </div>
@@ -551,11 +541,12 @@ const ShipmentTracking = () => {
           </Button>
         </div>
       ) : null}
-      <RouteInfo
-        distance={routeDistanceKm}
-        estimatedHours={estimatedTravelHours}
-        checkpoints={checkpoints}
-      />
+      {import.meta.env.DEV ? (
+        <>
+          <CausalReplayPanel shipmentId={id} />
+          <TrackingDebugOverlay payload={payload} shipmentId={id} />
+        </>
+      ) : null}
     </div>
     </TrackingSafeBoundary>
   );

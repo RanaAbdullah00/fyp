@@ -66,13 +66,9 @@ const Sidebar = () => {
         )}
         {isCarrier && (
           <>
-            <NavLink to="/loads/manage?tab=freight" className={navLinkClass}>
+            <NavLink to="/loads/manage?tab=marketplace&sub=loads" className={navLinkClass}>
               <FaListUl />
-              {t('pages.dashboard.statOpenMarketplace')}
-            </NavLink>
-            <NavLink to="/loads/manage?tab=capacity" className={navLinkClass}>
-              <FaTruck />
-              {t('loadsHub.navCapacityHub')}
+              {t('loadsHub.marketplaceTitle')}
             </NavLink>
             <NavLink to="/bids/mine" className={navLinkClass}>
               <FaGavel />
@@ -98,10 +94,12 @@ const Sidebar = () => {
               <FaHistory />
               {t('nav.shipmentsHistory')}
             </NavLink>
-            <NavLink to="/shipments/tracking" className={navLinkClass}>
-              <FaMapMarkedAlt />
-              {t('nav.shipmentsTracking')}
-            </NavLink>
+            {isShipper ? (
+              <NavLink to="/shipments/tracking" className={navLinkClass}>
+                <FaMapMarkedAlt />
+                {t('nav.shipmentsTracking')}
+              </NavLink>
+            ) : null}
           </>
         )}
         <NavLink to="/support" className={navLinkClass}>

@@ -5,6 +5,7 @@ import {
   joinSession,
   leaveSession
 } from '../utils/trackingSessionManager.js';
+import { getOrCreateTraceId } from '../utils/traceContext.js';
 
 /**
  * Join tracking room + publish lat/lng. Updates via AppContext registerTrackingHandler.
@@ -52,7 +53,12 @@ export function useTrackingSocket({ socket, sessionRef, aliasRefs = [], enabled 
       const la = Number(lat);
       const ln = Number(lng);
       if (!Number.isFinite(la) || !Number.isFinite(ln)) return;
-      socket.emit('tracking:location', { refKey: primaryRef, lat: la, lng: ln });
+      socket.emit('tracking:location', {
+        refKey: primaryRef,
+        lat: la,
+        lng: ln,
+        traceId: getOrCreateTraceId()
+      });
     },
     [socket, primaryRef, enabled]
   );

@@ -5,11 +5,12 @@ import Button from '../ui/Button.jsx';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import VehicleTypeLabel from '../loadboard/VehicleTypeLabel.jsx';
 import ProfileAccessLayer from '../profile/ProfileAccessLayer.jsx';
+import UserRatingBadge from '../reviews/UserRatingBadge.jsx';
 import { formatTons, ratePerKgToTon } from '../../utils/weightUnits.js';
 import { canCloseListingWithContract } from '../../utils/contractMapper.js';
-import { formatSlotsSummary } from './AvailabilitySlotPicker.jsx';
+import { formatVisibilitySummary } from '../../utils/capacityVisibility.js';
 
-const CarrierSpaceCard = memo(({ listing, mine, onClose, onRequest, onEdit, onViewDetails }) => {
+const CarrierSpaceCard = memo(({ listing, mine, onClose, onRequest, onEdit, onViewDetails, onViewRequests, ratingMap = null, ratingsLoading = false }) => {
   const { t } = useLanguage();
   const remTons = formatTons(listing.remainingSpaceKg ?? 0);
   const capTons = formatTons(listing.truckCapacityKg ?? 0);
@@ -17,6 +18,7 @@ const CarrierSpaceCard = memo(({ listing, mine, onClose, onRequest, onEdit, onVi
   const cap = Number(listing.truckCapacityKg ?? 0);
   const pct = cap > 0 ? Math.round((rem / cap) * 100) : 0;
   const canCloseListing = canCloseListingWithContract(listing);
+  const pendingCount = Number(listing.pendingRequestCount ?? 0);
 
   return (
     <Card className="p-3 h-100 tp-space-card">
@@ -25,14 +27,22 @@ const CarrierSpaceCard = memo(({ listing, mine, onClose, onRequest, onEdit, onVi
           {listing.status === 'open' ? t('loadsHub.statusOpen') : t('loadsHub.statusClosed')}
         </Badge>
         {!mine && listing.carrierId ? (
-          <ProfileAccessLayer
-            userId={listing.carrierId}
-            name={listing.carrierName}
-            avatarSrc={listing.carrierAvatar}
-            className="small text-truncate"
-            showBadge
-            role={t('auth.carrier')}
-          />
+          <div className="d-flex align-items-center gap-1 min-w-0">
+            <ProfileAccessLayer
+              userId={listing.carrierId}
+              name={listing.carrierName}
+              avatarSrc={listing.carrierAvatar}
+              className="small text-truncate"
+              showBadge
+              role={t('auth.carrier')}
+            />
+            <UserRatingBadge
+              userId={listing.carrierId}
+              ratingMap={ratingMap}
+              loading={ratingsLoading}
+              className="small"
+            />
+          </div>
         ) : null}
       </div>
       <div className="fw-semibold mb-1">
@@ -47,7 +57,7 @@ const CarrierSpaceCard = memo(({ listing, mine, onClose, onRequest, onEdit, onVi
           className="progress-bar bg-success tp-progress-bar"
           role="progressbar"
           style={{ '--tp-progress': `${Math.min(100, pct)}%` }}
-          aria-valuenow={pct}
+          aria-valnow={pct}
         />
       </div>
       {listing.ratePerKg != null ? (
@@ -57,19 +67,29 @@ const CarrierSpaceCard = memo(({ listing, mine, onClose, onRequest, onEdit, onVi
           })}
         </div>
       ) : null}
-      {listing.availableFrom || listing.availabilitySlots?.length ? (
+      {listing.availableFrom || formatVisibilitySummary(listing.availabilitySlots, t) ? (
         <div className="small text-muted mb-2">
           {listing.availableFrom ? (
             <span>
               {t('loadsHub.availableFrom')}: {String(listing.availableFrom).slice(0, 10)}
             </span>
           ) : null}
-          {formatSlotsSummary(listing.availabilitySlots, t) ? (
+          {formatVisibilitySummary(listing.availabilitySlots, t) ? (
             <span className={listing.availableFrom ? ' ms-1' : ''}>
-              · {formatSlotsSummary(listing.availabilitySlots, t)}
+              · {formatVisibilitySummary(listing.availabilitySlots, t)}
             </span>
           ) : null}
         </div>
+      ) : null}
+      {mine && pendingCount > 0 && onViewRequests ? (
+        <Button
+          variant="outline-warning"
+          size="sm"
+          className="w-100 mb-2"
+          onClick={() => onViewRequests(listing)}
+        >
+          {t('loadsHub.pendingRequests', { count: pendingCount })}
+        </Button>
       ) : null}
       {mine && listing.status === 'open' ? (
         <div className="d-grid gap-2">

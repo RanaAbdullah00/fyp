@@ -1,16 +1,15 @@
-import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { AppContext } from '../context/AppContext.jsx';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApi } from './useApi.js';
 import { useAuth } from './useAuth.js';
 
-/** Single operations snapshot + recent notifications for dashboards. */
+/** Single operations snapshot + server-backed 24h activity feed for dashboards. */
 export function useDashboardMetrics() {
   const { user } = useAuth();
   const { request } = useApi();
-  const app = useContext(AppContext);
   const activeRole = user?.activeRole ?? user?.roles?.[0];
   const [ops, setOps] = useState(null);
   const [loadingOps, setLoadingOps] = useState(true);
+  const [activities, setActivities] = useState([]);
 
   const refreshOps = useCallback(async () => {
     try {
@@ -23,11 +22,36 @@ export function useDashboardMetrics() {
     }
   }, [request]);
 
+  const refreshActivity = useCallback(async () => {
+    if (!user?.id) {
+      setActivities([]);
+      return;
+    }
+    try {
+      const rows = await request({
+        url: '/operations/activity',
+        params: { since: '24h', limit: 3 },
+        skipGlobalErrorToast: true
+      });
+      const list = Array.isArray(rows) ? rows : [];
+      setActivities(
+        list.map((n) => ({
+          id: n.id,
+          message: n.message || n.title || '',
+          time: n.createdAt ? new Date(n.createdAt).toLocaleString() : ''
+        }))
+      );
+    } catch {
+      setActivities([]);
+    }
+  }, [request, user?.id]);
+
   useEffect(() => {
     setOps(null);
     setLoadingOps(true);
     refreshOps();
-  }, [refreshOps, activeRole]);
+    refreshActivity();
+  }, [refreshOps, refreshActivity, activeRole]);
 
   useEffect(() => {
     const onRefresh = (e) => {
@@ -43,19 +67,21 @@ export function useDashboardMetrics() {
         return;
       }
       refreshOps();
+      refreshActivity();
+    };
+    const onStatusUpdated = () => {
+      refreshOps();
+      refreshActivity();
     };
     window.addEventListener('tp:realtime-refresh', onRefresh);
-    return () => window.removeEventListener('tp:realtime-refresh', onRefresh);
-  }, [refreshOps]);
+    window.addEventListener('tp:shipment-status-updated', onStatusUpdated);
+    return () => {
+      window.removeEventListener('tp:realtime-refresh', onRefresh);
+      window.removeEventListener('tp:shipment-status-updated', onStatusUpdated);
+    };
+  }, [refreshOps, refreshActivity]);
 
-  const activities = useMemo(() => {
-    const rows = Array.isArray(app?.notifications) ? app.notifications : [];
-    return rows.slice(0, 8).map((n) => ({
-      id: n.id,
-      message: n.message || n.title || '',
-      time: n.createdAt ? new Date(n.createdAt).toLocaleString() : ''
-    }));
-  }, [app?.notifications]);
+  const activityRows = useMemo(() => activities, [activities]);
 
-  return { ops, loadingOps, activities, activeRole, refreshOps };
+  return { ops, loadingOps, activities: activityRows, activeRole, refreshOps };
 }

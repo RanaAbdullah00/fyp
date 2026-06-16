@@ -6,13 +6,13 @@ import { useAuth } from '../../hooks/useAuth.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { notifyError, notifySuccess } from '../ui/ToastProvider.jsx';
 import { formatUserError } from '../../utils/userErrors.js';
-import { triggerAcceptActivationSync, emitRealtimeRefresh } from '../../utils/spaceFlow.js';
+import { triggerAcceptActivationSync, emitRealtimeRefresh, isOpsRequestSentRow } from '../../utils/spaceFlow.js';
 import { commitOptimisticSpaceAccept } from '../../utils/contractActivationLayer.js';
 import { emitReviewPrompt } from '../../utils/reviewPrompt.js';
 import SpaceRequestLifecycle from './SpaceRequestLifecycle.jsx';
 import { isCapacityFlowPending } from '../../utils/flowSession.js';
 
-const SpaceRequestsPanel = () => {
+const SpaceRequestsPanel = ({ embedded = false, onRowCount, listingIdFilter = null }) => {
   const { t } = useLanguage();
   const { user } = useAuth();
   const { request } = useApi();
@@ -22,7 +22,7 @@ const SpaceRequestsPanel = () => {
   const refresh = useCallback(async () => {
     try {
       const data = await request({ method: 'GET', url: '/carrier-space/requests/incoming' });
-      setRows(Array.isArray(data) ? data : []);
+      setRows((Array.isArray(data) ? data : []).filter(isOpsRequestSentRow));
     } catch {
       setRows([]);
     }
@@ -31,6 +31,16 @@ const SpaceRequestsPanel = () => {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  const visibleRows = React.useMemo(() => {
+    if (!listingIdFilter) return rows;
+    const target = String(listingIdFilter);
+    return rows.filter((r) => String(r?.listingId || '') === target);
+  }, [rows, listingIdFilter]);
+
+  useEffect(() => {
+    onRowCount?.(visibleRows.length);
+  }, [visibleRows.length, onRowCount]);
 
   useEffect(() => {
     const socket = getSocket?.();
@@ -100,6 +110,8 @@ const SpaceRequestsPanel = () => {
           spaceRequestId: id,
           toUserId: row.shipperId,
           toUserName: row.shipperName,
+          toUserAvatar: row.shipperAvatar,
+          toUserRole: 'shipper',
           label: `${row.origin} → ${row.destination}`
         });
       }
@@ -109,7 +121,7 @@ const SpaceRequestsPanel = () => {
     }
   };
 
-  const pendingCount = rows.filter((r) => isCapacityFlowPending(r)).length;
+  const pendingCount = visibleRows.filter((r) => isCapacityFlowPending(r)).length;
 
   return (
     <Card className={`p-3 mb-3 ${pendingCount > 0 ? 'tp-space-requests-panel--priority border-warning' : ''}`}>
@@ -119,11 +131,11 @@ const SpaceRequestsPanel = () => {
           <span className="badge text-bg-warning">{t('loadsHub.pendingRequests', { count: pendingCount })}</span>
         ) : null}
       </div>
-      {!rows.length ? (
+      {!visibleRows.length ? (
         <p className="small text-muted mb-0">{t('loadsHub.noIncomingRequests')}</p>
       ) : (
         <div className="d-flex flex-column gap-3">
-          {rows.map((r) => (
+          {visibleRows.map((r) => (
             <SpaceRequestLifecycle
               key={r.id}
               row={r}

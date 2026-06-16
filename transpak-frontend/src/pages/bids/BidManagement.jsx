@@ -11,12 +11,21 @@ import { useLanguage } from '../../hooks/useLanguage.js';
 import { formatUserError } from '../../utils/userErrors.js';
 import { mergeWorkspaceParams } from '../../utils/workspaceApi.js';
 import { usePollingAllowed } from '../../hooks/useSocketPolling.js';
+import {
+  BID_STATUS,
+  isActiveBidStatus,
+  isBidExpired,
+  isCounterOffered,
+  isTerminalBidStatus,
+  normalizeBidStatus
+} from '../../utils/bidStatus.js';
 import { triggerAcceptActivationSync } from '../../utils/contractActivation.js';
 import {
   commitOptimisticBidAccept,
   commitOptimisticBidReject,
   commitOptimisticBidSuggest
 } from '../../utils/contractActivationLayer.js';
+import { createDebouncedRefresh } from '../../utils/refreshDebounce.js';
 
 // Screen summarising bids across loads.
 const BidManagement = () => {
@@ -27,6 +36,29 @@ const BidManagement = () => {
   const profileComplete = user?.profileComplete === true;
   const { request, loading } = useApi();
   const pollingAllowed = usePollingAllowed();
+  const [tab, setTab] = useState('open');
+
+  const tabFilteredBids = useMemo(() => {
+    return bids.filter((bid) => {
+      const st = normalizeBidStatus(bid.status);
+      if (tab === 'open') {
+        return isActiveBidStatus(st) && !isCounterOffered(st) && !isBidExpired(bid);
+      }
+      if (tab === 'counter') return isCounterOffered(st) && !isBidExpired(bid);
+      if (tab === 'active') {
+        if (st !== BID_STATUS.ACCEPTED) return false;
+        const loadStatus = String(loadMetaByLoad[bid.loadId]?.load?.status || '').toLowerCase();
+        if (['booked', 'assigned', 'in_transit', 'delivered', 'closed', 'completed'].includes(loadStatus)) {
+          return false;
+        }
+        return true;
+      }
+      if (tab === 'history') {
+        return isTerminalBidStatus(st) || isBidExpired(bid);
+      }
+      return true;
+    });
+  }, [bids, tab, loadMetaByLoad]);
 
   const fetchBidsData = useCallback(async () => {
     try {
@@ -121,7 +153,7 @@ const BidManagement = () => {
     };
   }, [bids, request]);
 
-  const bidsWithDistance = bids.map((b) => {
+  const bidsWithDistance = tabFilteredBids.map((b) => {
     const lid = b.loadId ? String(b.loadId) : null;
     const distanceKm = lid ? loadMetaByLoad[lid]?.distanceKm : null;
     return distanceKm != null && distanceKm > 0 ? { ...b, distanceKm } : b;
@@ -138,9 +170,9 @@ const BidManagement = () => {
   }, [bidsWithDistance]);
 
   useEffect(() => {
-    const reconcile = () => {
+    const reconcile = createDebouncedRefresh(() => {
       void fetchBidsData();
-    };
+    });
     const onBidsRefresh = () => reconcile();
     const onLegacyRefresh = (e) => {
       const scope = e?.detail?.scope;
@@ -171,6 +203,24 @@ const BidManagement = () => {
   return (
     <div className={`container py-3 ${isUrdu ? 'tp-rtl' : ''}`}>
       <h5 className="mb-3">{t('pages.bids.bidManagementTitle')}</h5>
+      <ul className="nav nav-pills gap-1 mb-3 flex-wrap">
+        {[
+          ['open', t('pages.bids.tabOpen')],
+          ['counter', t('pages.bids.tabCounter')],
+          ['active', t('pages.bids.tabActive')],
+          ['history', t('pages.bids.tabHistory')]
+        ].map(([id, label]) => (
+          <li className="nav-item" key={id}>
+            <button
+              type="button"
+              className={`nav-link py-1 px-3 small ${tab === id ? 'active' : ''}`}
+              onClick={() => setTab(id)}
+            >
+              {label}
+            </button>
+          </li>
+        ))}
+      </ul>
       {loading ? (
         <div className="d-flex justify-content-center py-5">
           <Loader />

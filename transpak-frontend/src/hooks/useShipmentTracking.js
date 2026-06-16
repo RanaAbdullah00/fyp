@@ -24,12 +24,11 @@ import {
   EMPTY_UNIFIED_SNAPSHOT,
   getUnifiedShipmentSnapshot
 } from '../utils/shipmentUIState.js';
-import { canEmitGps, emitTrackingJoin } from '../utils/trackingSessionManager.js';
+import { canEmitGps } from '../utils/trackingSessionManager.js';
 import {
   requestTrackingJoin,
   clearTrackingJoinRequest,
-  clearTrackingJoinQueue,
-  flushTrackingJoinQueue
+  clearTrackingJoinQueue
 } from '../utils/trackingJoinQueue.js';
 import {
   emptyTrackingPayload,
@@ -54,9 +53,19 @@ import {
 } from '../utils/contractActivationLayer.js';
 import {
   emitShipmentStatusUpdated,
+  rehydrateShipmentStatusFromApi,
   resolveEffectiveShipmentStatus,
   subscribeOptimisticShipmentStatus
 } from '../utils/shipmentStatusOptimistic.js';
+import { useTrackingCoordinator } from './useTrackingCoordinator.js';
+import { trackingEventDedupeCache } from '../utils/eventDedupeCache.js';
+import {
+  normalizeTrackingEvent,
+  rememberTrackingEvent,
+  shouldAcceptTrackingEvent
+} from '../utils/trackingEventContract.js';
+import { createSequenceAuthorityGate } from '../utils/trackingSequenceAuthority.js';
+import { recordTrackingEventDeduped } from './usePerformanceTelemetry.js';
 
 /**
  * Coordinates + live GPS only. State gates come exclusively from GET /shipments/active row.
@@ -141,7 +150,13 @@ export function useShipmentTracking({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const fetchGenerationRef = useRef(0);
+  const hydratedRefsRef = useRef(new Set());
   const fetchTrackRef = useRef(null);
+  const trackingDedupeCtxRef = useRef({
+    cache: trackingEventDedupeCache,
+    lastTimestampByShipment: new Map()
+  });
+  const sequenceGateRef = useRef(createSequenceAuthorityGate());
   const prevTrackingGateRef = useRef(false);
   const socketKey = payload?.refKey || localRef;
 
@@ -227,6 +242,32 @@ export function useShipmentTracking({
     [localRef]
   );
 
+  const socket = getSocket?.() || null;
+  const socketReady = isTrackingSocketReady(socketStatus, socket);
+  const coordinator = useTrackingCoordinator(localRef, { socketReady, trackingGate });
+  const {
+    beginRehydrate,
+    markRehydrated,
+    scheduleBufferedUpdate,
+    registerFlushHandler
+  } = coordinator;
+
+  const applyPipelineRef = useRef(applyPipeline);
+  applyPipelineRef.current = applyPipeline;
+
+  useEffect(() => {
+    registerFlushHandler((incoming) => {
+      if (!incoming) return;
+      setPayload((prev) => {
+        if (!matchesTrackingPayload(incoming, localRef, socketKey, prev?.refKey, prev?.loadId)) {
+          return prev;
+        }
+        const next = applyPipelineRef.current(prev, incoming, 'socket', false);
+        return trackingPayloadEqual(prev, next) ? prev : next;
+      });
+    });
+  }, [registerFlushHandler, localRef, socketKey]);
+
   const fetchTrack = useCallback(
     async ({ silent = false, reconnectSnapshot = false } = {}) => {
       if (!enabled || !localRef) {
@@ -237,6 +278,7 @@ export function useShipmentTracking({
         setError('');
         return;
       }
+      if (reconnectSnapshot) beginRehydrate();
       const generation = fetchGenerationRef.current;
       if (!silent) setLoading(true);
       if (!silent) setError('');
@@ -247,9 +289,21 @@ export function useShipmentTracking({
         if (generation !== fetchGenerationRef.current) return;
         const normalized = sanitizeTrackingPayload(normalizeTracking(res?.data) || res?.data);
         const apiStatus = normalized?.tracking?.status;
+        const forceHydrate = reconnectSnapshot || !hydratedRefsRef.current.has(localRef);
+        rehydrateShipmentStatusFromApi(
+          localRef,
+          {
+            status: apiStatus,
+            history: normalized?.history,
+            updatedAt: normalized?.tracking?.locationUpdatedAt || normalized?.history?.[0]?.time
+          },
+          { force: forceHydrate }
+        );
+        if (forceHydrate) hydratedRefsRef.current.add(localRef);
         if (apiStatus) {
           emitShipmentStatusUpdated(localRef, apiStatus, { source: 'api' });
         }
+        markRehydrated();
         setPayload((prev) => {
           const base = hydrateTrackingFromCache(localRef, prev);
           const next = applyPipeline(base, normalized, 'rest', reconnectSnapshot);
@@ -261,11 +315,12 @@ export function useShipmentTracking({
           setError(e?.message || t('pages.tracking.loadFailed'));
         }
         setPayload((prev) => prev || getCachedTrackingPayload(localRef));
+        if (reconnectSnapshot) markRehydrated();
       } finally {
         if (generation === fetchGenerationRef.current && !silent) setLoading(false);
       }
     },
-    [enabled, localRef, t, applyPipeline]
+    [enabled, localRef, t, applyPipeline, beginRehydrate, markRehydrated]
   );
 
   fetchTrackRef.current = fetchTrack;
@@ -311,17 +366,21 @@ export function useShipmentTracking({
   }, [fetchTrack, trackingGate, localRef, enabled, contractActivated, trackingEnabled]);
 
   const applyUpdate = useCallback(
-    (incoming) => {
-      if (!incoming) return;
-      setPayload((prev) => {
-        if (!matchesTrackingPayload(incoming, localRef, socketKey, prev?.refKey, prev?.loadId)) {
-          return prev;
-        }
-        const next = applyPipeline(prev, incoming, 'socket', false);
-        return trackingPayloadEqual(prev, next) ? prev : next;
-      });
+    (incoming, meta = {}) => {
+      const event = normalizeTrackingEvent(incoming, meta.source || 'socket');
+      const ctx = trackingDedupeCtxRef.current;
+      if (!shouldAcceptTrackingEvent(event, ctx)) {
+        recordTrackingEventDeduped();
+        return;
+      }
+      rememberTrackingEvent(event, ctx);
+      if (!sequenceGateRef.current.accept(incoming)) {
+        recordTrackingEventDeduped();
+        return;
+      }
+      scheduleBufferedUpdate(incoming);
     },
-    [localRef, socketKey, applyPipeline]
+    [scheduleBufferedUpdate]
   );
 
   useEffect(() => {
@@ -384,8 +443,6 @@ export function useShipmentTracking({
     return () => window.removeEventListener('tp:tracking-snapshot', onReconnectSnapshot);
   }, [trackingGate, localRef, socketKey, fetchTrack]);
 
-  const socket = getSocket?.() || null;
-  const socketReady = isTrackingSocketReady(socketStatus, socket);
   const { publishLocation } = useTrackingSocket({
     socket,
     sessionRef: localRef,
@@ -412,35 +469,10 @@ export function useShipmentTracking({
     const aliasRefs = [socketKey].filter(Boolean);
     requestTrackingJoin(localRef, aliasRefs);
 
-    const performJoin = () => {
-      if (!isTrackingSocketReady(socketStatus, getSocket?.())) return false;
-      const activeSocket = getSocket?.();
-      if (!activeSocket?.connected) return false;
-      emitTrackingJoin(activeSocket, localRef, aliasRefs);
-      flushTrackingJoinQueue(activeSocket, emitTrackingJoin);
-      return true;
-    };
-
-    const onSocketReady = () => performJoin();
-    const onConnected = () => performJoin();
-
-    if (socketReady) {
-      performJoin();
-    }
-
-    window.addEventListener('tp:socket-ready', onSocketReady);
-    const activeSocket = getSocket?.();
-    activeSocket?.on?.('connect', onConnected);
-
     return () => {
-      window.removeEventListener('tp:socket-ready', onSocketReady);
-      try {
-        activeSocket?.off?.('connect', onConnected);
-      } catch {
-        /* ignore */
-      }
+      clearTrackingJoinRequest(localRef);
     };
-  }, [trackingGate, localRef, socketKey, socketReady, socketStatus, getSocket]);
+  }, [trackingGate, localRef, socketKey]);
 
   const liveLat = livePos?.[0];
   const liveLng = livePos?.[1];

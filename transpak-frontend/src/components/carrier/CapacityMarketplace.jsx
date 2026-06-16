@@ -4,12 +4,15 @@ import Button from '../ui/Button.jsx';
 import Modal from '../ui/Modal.jsx';
 import { SkeletonCard } from '../ui/Skeleton.jsx';
 import { useApi } from '../../hooks/useApi.js';
+import { useAuth } from '../../hooks/useAuth.js';
 import { useLanguage } from '../../hooks/useLanguage.js';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue.js';
 import { notifyError, notifySuccess } from '../ui/ToastProvider.jsx';
 import { formatUserError } from '../../utils/userErrors.js';
 import TranslatedText from '../ui/TranslatedText.jsx';
 import { emitRealtimeRefresh } from '../../utils/spaceFlow.js';
+import { useRatingSummaryBatch } from '../../hooks/useRatingSummaryBatch.js';
+import VirtualListBody from '../ui/VirtualListBody.jsx';
 import CitySelect from '../ui/CitySearchSelect.jsx';
 import CarrierSpaceCard from './CarrierSpaceCard.jsx';
 import { kgToTons, tonsToKg, ratePerKgToTon } from '../../utils/weightUnits.js';
@@ -30,7 +33,10 @@ function filterCityParam(value) {
 
 const CapacityMarketplace = ({ hubLayout = false, children = null }) => {
   const { t } = useLanguage();
+  const { user } = useAuth();
   const { request, loading } = useApi();
+  const activeRole = user?.activeRole ?? user?.roles?.[0];
+  const canRequestCapacity = activeRole === 'shipper';
   const [filters, setFilters] = useState(() => ({ ...DEFAULT_FILTERS }));
   const [listings, setListings] = useState([]);
   const [listError, setListError] = useState(null);
@@ -81,8 +87,15 @@ const CapacityMarketplace = ({ hubLayout = false, children = null }) => {
       if (scope && scope !== 'all' && scope !== 'space' && scope !== 'loads') return;
       refreshMarketplace();
     };
+    const onScoped = () => refreshMarketplace();
     window.addEventListener('tp:realtime-refresh', onRefresh);
-    return () => window.removeEventListener('tp:realtime-refresh', onRefresh);
+    window.addEventListener('tp:loads-refresh', onScoped);
+    window.addEventListener('tp:space-refresh', onScoped);
+    return () => {
+      window.removeEventListener('tp:realtime-refresh', onRefresh);
+      window.removeEventListener('tp:loads-refresh', onScoped);
+      window.removeEventListener('tp:space-refresh', onScoped);
+    };
   }, [refreshMarketplace]);
 
   const activeFilterBadges = useMemo(() => {
@@ -99,6 +112,14 @@ const CapacityMarketplace = ({ hubLayout = false, children = null }) => {
   }, [filters, t]);
 
   const empty = useMemo(() => !loading && !listError && listings.length === 0, [loading, listError, listings.length]);
+  const ratingUserIds = useMemo(() => {
+    const ids = new Set();
+    for (const row of listings) {
+      if (row?.carrierId) ids.add(String(row.carrierId));
+    }
+    return [...ids];
+  }, [listings]);
+  const { ratingMap, loading: ratingsLoading } = useRatingSummaryBatch(ratingUserIds);
 
   const setField = (name, value) => setFilters((prev) => ({ ...prev, [name]: value }));
 
@@ -216,22 +237,33 @@ const CapacityMarketplace = ({ hubLayout = false, children = null }) => {
       ) : empty ? (
         <Card className="p-4 text-center text-muted small">{t('loadsHub.noCapacity')}</Card>
       ) : (
-        <div className="row g-3">
-          {listings.map((row) => (
-            <div key={row.id} className="col-md-6 col-lg-4">
+        <VirtualListBody
+          className="row g-3"
+          items={listings}
+          itemHeight={220}
+          threshold={60}
+          getItemKey={(row) => row.id}
+          renderItem={(row) => (
+            <div className="col-md-6 col-lg-4">
               <CarrierSpaceCard
                 listing={row}
+                ratingMap={ratingMap}
+                ratingsLoading={ratingsLoading}
                 onViewDetails={setDetailsTarget}
-                onRequest={(l) => {
-                  setDetailsTarget(null);
-                  setRequestTarget(l);
-                  setRequestTons('');
-                  setRequestMessage('');
-                }}
+                onRequest={
+                  canRequestCapacity
+                    ? (l) => {
+                        setDetailsTarget(null);
+                        setRequestTarget(l);
+                        setRequestTons('');
+                        setRequestMessage('');
+                      }
+                    : undefined
+                }
               />
             </div>
-          ))}
-        </div>
+          )}
+        />
       )}
     </div>
   );

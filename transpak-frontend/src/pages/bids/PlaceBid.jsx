@@ -11,6 +11,7 @@ import { notifySuccess, notifyError, notifyInfo } from '../../components/ui/Toas
 import { notifyProfileIncomplete, notifySystem, SystemNotifyType } from '../../utils/notifySystem.js';
 import { formatUserError } from '../../utils/userErrors.js';
 import { emitRealtimeRefresh } from '../../utils/realtimeRefresh.js';
+import { useRatingSummaryBatch } from '../../hooks/useRatingSummaryBatch.js';
 
 // Carrier bid placement page. Expects "load" object from AvailableLoads route state.
 const PlaceBid = () => {
@@ -20,12 +21,16 @@ const PlaceBid = () => {
   const location = useLocation();
   const load = location.state?.load;
   const { request, loading } = useApi();
+  const [submitting, setSubmitting] = useState(false);
+  const { ratingMap, loading: ratingsLoading } = useRatingSummaryBatch(
+    load?.shipperId ? [load.shipperId] : []
+  );
 
   useEffect(() => {
     const role = user?.activeRole ?? user?.roles?.[0];
     if (role === 'carrier' && !load) {
       notifyInfo(t('pages.loads.carrierUseFreightBoard'));
-      navigate('/loads/manage?tab=freight', { replace: true });
+      navigate('/loads/manage?tab=marketplace&sub=loads', { replace: true });
       return;
     }
     if (user && user.profileComplete === false) {
@@ -66,6 +71,12 @@ const PlaceBid = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submitting || loading) return;
+    setSubmitting(true);
+    const idempotencyKey =
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? `bid-${crypto.randomUUID()}`
+        : `bid-${Date.now()}`;
     try {
       const bid = await request({
         url: '/bids',
@@ -74,6 +85,7 @@ const PlaceBid = () => {
           loadId: load.id,
           amount: Number(amount)
         },
+        headers: { 'Idempotency-Key': idempotencyKey },
         skipGlobalErrorToast: true
       });
       if (!bid?.id && !bid?.loadId) {
@@ -89,6 +101,8 @@ const PlaceBid = () => {
       navigate('/loads');
     } catch (error) {
       notifyError(formatUserError(error, t, { fallback: t('pages.placeBid.bidFailed') }));
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -122,7 +136,7 @@ const PlaceBid = () => {
               <TranslatedText text={load.cargo} />
             </span>
           </h5>
-          <LoadCard load={load} />
+          <LoadCard load={load} ratingMap={ratingMap} ratingsLoading={ratingsLoading} />
         </div>
 
         <div className="col-lg-5">
@@ -202,7 +216,7 @@ const PlaceBid = () => {
                 variant="success"
                 className="w-100 py-3 fw-bold fs-5 shadow-sm"
                 type="submit"
-                disabled={!isValidBid || loading}
+                disabled={!isValidBid || loading || submitting}
               >
                 {isValidBid
                   ? t('pages.placeBid.submitCta', {

@@ -28,6 +28,7 @@ import Settings from '../pages/settings/Settings.jsx';
 import Support from '../pages/support/Support.jsx';
 import Feedback from '../pages/support/Feedback.jsx';
 import Notifications from '../pages/notifications/Notifications.jsx';
+import OperationsActivity from '../pages/operations/OperationsActivity.jsx';
 
 function commercial(name, children) {
   return <AtomicRoute name={name}>{children}</AtomicRoute>;
@@ -46,7 +47,7 @@ export const commercialRoutes = [
     path="/loads"
     element={protectedCommercial(
       'loads-redirect',
-      <Navigate to="/loads/manage?tab=freight" replace />,
+      <Navigate to="/loads/manage?tab=marketplace&sub=loads" replace />,
       ['carrier']
     )}
   />,
@@ -60,6 +61,7 @@ export const commercialRoutes = [
   <Route key="fleet" path="/fleet" element={protectedCommercial('fleet', <FleetMonitoring />, ['carrier'])} />,
   <Route key="carrier-truck-details" path="/carrier/truck-details" element={protectedCommercial('carrier-truck-details', <TruckDetails />, ['carrier'])} />,
   <Route key="carrier-verification" path="/carrier/verification" element={protectedCommercial('carrier-verification', <CarrierVerification />, ['carrier'])} />,
+  <Route key="carrier-trust-redirect" path="/carrier/trust" element={<Navigate to="/carrier/verification" replace />} />,
   <Route key="fleet-add" path="/fleet/add" element={protectedCommercial('fleet-add', <AddTruck />, ['carrier'])} />,
   <Route key="shipments-active" path="/shipments/active" element={protectedCommercial('shipments-active', <ShipmentsActive />, ['shipper', 'carrier'])} />,
   <Route key="shipments-tracking" path="/shipments/tracking/:trackId?" element={protectedCommercial('shipments-tracking', <ShipmentTracking />, ['shipper', 'carrier'])} />,
@@ -69,6 +71,11 @@ export const commercialRoutes = [
   <Route key="support" path="/support" element={commercial('support', <ProtectedRoute><Support /></ProtectedRoute>)} />,
   <Route key="feedback" path="/feedback" element={commercial('feedback', <ProtectedRoute><Feedback /></ProtectedRoute>)} />,
   <Route key="notifications" path="/notifications" element={commercial('notifications', <ProtectedRoute><Notifications /></ProtectedRoute>)} />,
+  <Route
+    key="operations-activity"
+    path="/operations/activity"
+    element={protectedCommercial('operations-activity', <OperationsActivity />, ['shipper', 'carrier', 'admin'])}
+  />,
   <Route key="messages" path="/messages" element={commercial('messages', <ProtectedRoute><Messages /></ProtectedRoute>)} />,
   <Route key="public-profile" path="/profile/u/:id" element={commercial('public-profile', <ProtectedRoute><PublicProfile /></ProtectedRoute>)} />
 ];

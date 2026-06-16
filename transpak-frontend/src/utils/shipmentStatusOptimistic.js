@@ -66,6 +66,7 @@ export function emitShipmentStatusUpdated(ref, status, { source = 'unknown', pre
     return false;
   }
   lastEmitByRef.set(key, { status: normalized, ts: now });
+  socketStatusByRef.set(key, { status: normalized, ts: now, source });
 
   window.dispatchEvent(
     new CustomEvent('tp:shipment-status-updated', {
@@ -118,4 +119,117 @@ export function resolveEffectiveShipmentStatus(ref, apiStatus) {
 
 export function resolveUpcomingShipmentStatus(ref, currentStatus) {
   return nextShipmentStatus(resolveEffectiveShipmentStatus(ref, currentStatus));
+}
+
+/** Seed optimistic store from API on load/refresh (server truth unless local opt is further). */
+export function rehydrateShipmentStatusFromApi(
+  ref,
+  { status, history = [], updatedAt = null } = {},
+  { force = false } = {}
+) {
+  const key = refKey(ref);
+  if (!key) return;
+  const apiStatus = normalizeShipmentStatus(status);
+  if (!apiStatus) return;
+  const opt = getOptimisticShipmentStatus(key);
+  if (!force && opt && statusRank(opt) > statusRank(apiStatus)) {
+    return;
+  }
+  statusByRef.set(key, apiStatus);
+  const historyList = Array.isArray(history) ? history : [];
+  if (force || historyList.length || !timelineByRef.get(key)?.length) {
+    const entries = historyList
+      .filter((h) => h && typeof h === 'object')
+      .map((h) => ({
+        event: h.event || h.label || h.status || apiStatus,
+        time: h.time || updatedAt || null,
+        location: h.location ?? null,
+        status: h.status || apiStatus
+      }));
+    timelineByRef.set(key, entries);
+  }
+  notify();
+}
+
+function inferTimelineEventStatus(ev, fallbackStatus) {
+  const fromField = normalizeShipmentStatus(ev?.status);
+  if (fromField) return fromField;
+  const fromEvent = normalizeShipmentStatus(ev?.event || ev?.label);
+  if (fromEvent && SHIPMENT_ORDER.includes(fromEvent)) return fromEvent;
+  return fallbackStatus;
+}
+
+/** Collapse duplicate status rows within a time window; enforce monotonic pipeline order. */
+export function dedupeTimelineEvents(events, { windowMs = 120_000 } = {}) {
+  const list = (Array.isArray(events) ? events : []).filter((ev) => ev && typeof ev === 'object');
+  const seen = new Map();
+  const out = [];
+  for (const ev of list) {
+    const status = inferTimelineEventStatus(ev, null);
+    const label = String(ev.event || ev.label || status || '').trim().toLowerCase();
+    const key = status || label;
+    if (!key) {
+      out.push(ev);
+      continue;
+    }
+    const ts = ev.time ? new Date(ev.time).getTime() : 0;
+    const prev = seen.get(key);
+    if (prev != null && ts && Math.abs(ts - prev) < windowMs) continue;
+    seen.set(key, ts || Date.now());
+    out.push(ev);
+  }
+  return out.sort((a, b) => {
+    const ra = statusRank(inferTimelineEventStatus(a, 'booked'));
+    const rb = statusRank(inferTimelineEventStatus(b, 'booked'));
+    if (ra !== rb) return ra - rb;
+    const ta = a.time ? new Date(a.time).getTime() : 0;
+    const tb = b.time ? new Date(b.time).getTime() : 0;
+    return ta - tb;
+  });
+}
+
+/**
+ * Merge API history + optimistic timeline; terminal effective status wins over stale rows.
+ */
+export function mergeShipmentTimelineEvents(
+  ref,
+  history = [],
+  { apiStatus = null, fallbackLabel = 'Update', updatedAt = null } = {}
+) {
+  const key = refKey(ref);
+  const historyList = Array.isArray(history) ? history : [];
+  const optimisticLog = key ? getOptimisticStatusTimeline(key) : [];
+  const baseStatus =
+    normalizeShipmentStatus(apiStatus) ||
+    normalizeShipmentStatus(historyList[0]?.status) ||
+    'booked';
+  const effectiveStatus = resolveEffectiveShipmentStatus(key, baseStatus);
+  const merged = dedupeTimelineEvents(
+    [...historyList, ...optimisticLog].filter((ev) => ev && typeof ev === 'object')
+  );
+  const events = merged.map((ev) => ({
+    label: ev.event || ev.label || fallbackLabel,
+    time: ev.time || '',
+    done: true,
+    note: ev.location ?? null,
+    status: inferTimelineEventStatus(ev, effectiveStatus)
+  }));
+  const terminal = effectiveStatus === 'closed' || effectiveStatus === 'delivered';
+  if (terminal) {
+    const lastStatus = events.length ? normalizeShipmentStatus(events[events.length - 1]?.status) : null;
+    if (lastStatus !== effectiveStatus) {
+      const terminalTime =
+        updatedAt ||
+        (historyList.length ? historyList[historyList.length - 1]?.time : null) ||
+        new Date().toISOString();
+      events.push({
+        label: effectiveStatus,
+        time: terminalTime,
+        done: true,
+        note: null,
+        status: effectiveStatus
+      });
+    }
+  }
+  return { events, effectiveStatus };
 }

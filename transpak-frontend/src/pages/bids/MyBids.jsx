@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Loader from '../../components/ui/Loader.jsx';
 import BidList from '../../components/loadboard/BidList.jsx';
@@ -18,9 +18,17 @@ import {
   commitOptimisticBidSuggest,
   emitScopedRefresh
 } from '../../utils/contractActivationLayer.js';
+import { createDebouncedRefresh } from '../../utils/refreshDebounce.js';
 
 import { isTruckMatchingEligible } from '../../utils/fleetApi.js';
-import { isActiveBidStatus } from '../../utils/bidStatus.js';
+import {
+  BID_STATUS,
+  isActiveBidStatus,
+  isBidExpired,
+  isCounterOffered,
+  isTerminalBidStatus,
+  normalizeBidStatus
+} from '../../utils/bidStatus.js';
 
 const isTruckComplete = (t) =>
   isTruckMatchingEligible(t) &&
@@ -37,6 +45,21 @@ const MyBids = () => {
   const [bids, setBids] = useState([]);
   const [trucks, setTrucks] = useState([]);
   const [loadMetaByLoad, setLoadMetaByLoad] = useState({});
+  const [tab, setTab] = useState('active');
+
+  const tabFilteredBids = useMemo(() => {
+    return bids.filter((bid) => {
+      const st = normalizeBidStatus(bid.status);
+      if (tab === 'active') {
+        return isActiveBidStatus(st) && !isBidExpired(bid);
+      }
+      if (tab === 'accepted') return st === BID_STATUS.ACCEPTED;
+      if (tab === 'history') {
+        return isTerminalBidStatus(st) || isBidExpired(bid);
+      }
+      return true;
+    });
+  }, [bids, tab]);
 
   const fetchTrucks = useCallback(async () => {
     try {
@@ -64,9 +87,9 @@ const MyBids = () => {
   }, [fetchBidsData]);
 
   useEffect(() => {
-    const reconcile = () => {
+    const reconcile = createDebouncedRefresh(() => {
       void fetchBidsData();
-    };
+    });
     const onBidsRefresh = () => reconcile();
     const onLegacyRefresh = (e) => {
       const scope = e?.detail?.scope;
@@ -142,7 +165,7 @@ const MyBids = () => {
   const distanceByLoadId = Object.fromEntries(
     Object.entries(loadMetaByLoad).map(([k, v]) => [k, v.distanceKm ?? null])
   );
-  const bidsWithDistance = bids.map((b) => {
+  const bidsWithDistance = tabFilteredBids.map((b) => {
     const lid = b.loadId ? String(b.loadId) : null;
     const meta = lid ? loadMetaByLoad[lid] : null;
     const distanceKm = lid ? distanceByLoadId[lid] : null;
@@ -207,6 +230,23 @@ const MyBids = () => {
   return (
     <div className={`container py-3 ${isUrdu ? 'tp-rtl' : ''}`}>
       <h5 className="mb-3">{t('pages.bids.myBidsTitle')}</h5>
+      <ul className="nav nav-tabs mb-3 flex-nowrap overflow-auto">
+        {[
+          { id: 'active', label: t('pages.bids.tabOpen') },
+          { id: 'accepted', label: t('pages.bids.tabActive') },
+          { id: 'history', label: t('pages.bids.tabHistory') }
+        ].map(({ id, label }) => (
+          <li className="nav-item" key={id}>
+            <button
+              type="button"
+              className={`nav-link ${tab === id ? 'active' : ''}`}
+              onClick={() => setTab(id)}
+            >
+              {label}
+            </button>
+          </li>
+        ))}
+      </ul>
       {loading ? (
         <div className="d-flex justify-content-center py-5">
           <Loader />
