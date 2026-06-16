@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getRequiredSchemaVersion, isSchemaVersionAtLeast } from './gate-schema-policy.mjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const feRoot = path.join(root, 'transpak-frontend');
@@ -85,8 +86,8 @@ async function main() {
   const loadsHub = read('src/pages/loads/LoadsHub.jsx');
   phase(
     'P5-capacity-layout',
-    loadsHub.includes('my-capacity-requests') && loadsHub.includes("id: 'capacity'"),
-    'LoadsHub shipper/carrier tabs'
+    loadsHub.includes('marketplace') && loadsHub.includes('openLoadsTab') && loadsHub.includes('availableCapacityTab'),
+    'LoadsHub marketplace subtabs'
   );
 
   const grepProfileLink = (dir) => {
@@ -123,10 +124,11 @@ async function main() {
     health = await res.json();
     const d = health?.data || {};
     phase('P1-backend-up', res.ok, `commit=${d.commit || '?'} schema=${d.schema?.version || '?'}`);
+    const requiredSchema = getRequiredSchemaVersion();
     phase(
-      'P1-schema-026',
-      d.schema?.version === '026',
-      `live schema ${d.schema?.version || '?'} (local code expects 026)`
+      'P1-schema-version',
+      isSchemaVersionAtLeast(d.schema?.version, requiredSchema),
+      `live schema ${d.schema?.version || '?'} (required >= ${requiredSchema})`
     );
     phase('P1-migration-safe', d.deploy?.migrationSafe === true, `migrationSafe=${d.deploy?.migrationSafe}`);
   } catch (e) {

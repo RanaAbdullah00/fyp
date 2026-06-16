@@ -6,8 +6,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
+import {
+  getRequiredSchemaVersion,
+  isSchemaVersionAtLeast,
+  NOTIFICATION_DEDUPE_CONSTRAINT
+} from "./gate-schema-policy.mjs";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+const REQUIRED_SCHEMA = getRequiredSchemaVersion();
 
 function loadEnvFile(relPath) {
   const p = path.join(root, relPath);
@@ -25,7 +32,13 @@ function loadEnvFile(relPath) {
 
 const env = { ...loadEnvFile("transpak-backend/.env"), ...process.env };
 
-const apiOrigin = (process.argv[2] || env.VITE_API_URL || "https://transpak-backend-1.onrender.com")
+const argv = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+const strictIntegrity =
+  process.argv.includes("--strict-integrity") ||
+  String(process.env.RELEASE_GATE_DB_INTEGRITY || "").toLowerCase() === "1" ||
+  String(process.env.RELEASE_GATE_DB_INTEGRITY || "").toLowerCase() === "true";
+
+const apiOrigin = (argv[0] || env.VITE_API_URL || "https://transpak-backend-1.onrender.com")
   .replace(/\/api\/?.*$/i, "")
   .replace(/\/$/, "");
 
@@ -90,7 +103,19 @@ async function main() {
   record("schema-ok", d.schema?.ok === true, `schemaVersion=${d.schema?.version} missing=${(d.schema?.missing || []).join(",") || "none"}`);
   record("migration-safe", d.deploy?.migrationSafe === true, `migrationSafe=${d.deploy?.migrationSafe}`);
   record("socket-engine", d.socketEngine === "ready", `socketEngine=${d.socketEngine} sockets=${d.sockets}`);
-  record("schema-version", ["028", "029"].includes(String(d.schema?.version)), `expected 028+ (got ${d.schema?.version})`);
+  record(
+    "schema-version",
+    isSchemaVersionAtLeast(d.schema?.version, REQUIRED_SCHEMA),
+    `required >= ${REQUIRED_SCHEMA} (got ${d.schema?.version})`
+  );
+  const dedupeConstraint = d.schema?.notificationDedupeConstraint;
+  record(
+    "notification-dedupe-constraint",
+    dedupeConstraint?.ok === true && dedupeConstraint?.constraint === NOTIFICATION_DEDUPE_CONSTRAINT,
+    dedupeConstraint?.ok
+      ? `constraint=${dedupeConstraint.constraint}`
+      : `missing or invalid (expected ${NOTIFICATION_DEDUPE_CONSTRAINT})`
+  );
   if (d.distributed) {
     record(
       "distributed-health",
@@ -235,6 +260,29 @@ async function main() {
     }
   } catch (e) {
     record("frontend-http", false, e.message);
+  }
+
+  const strictIntegrity =
+    process.argv.includes("--strict-integrity") ||
+    String(process.env.RELEASE_GATE_DB_INTEGRITY || "").toLowerCase() === "1" ||
+    String(process.env.RELEASE_GATE_DB_INTEGRITY || "").toLowerCase() === "true";
+  if (strictIntegrity) {
+    try {
+      const integrityScript = path.join(root, "transpak-backend", "scripts", "db-integrity-check.mjs");
+      const proc = spawnSync(process.execPath, [integrityScript, "--strict"], {
+        cwd: root,
+        encoding: "utf8",
+        env: { ...process.env, ...env }
+      });
+      const pass = proc.status === 0;
+      record(
+        "db-integrity-strict",
+        pass,
+        pass ? "all duplicate/orphan checks passed" : (proc.stderr || proc.stdout || "integrity check failed").trim().slice(0, 200)
+      );
+    } catch (e) {
+      record("db-integrity-strict", false, e.message);
+    }
   }
 
   printSummary();

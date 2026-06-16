@@ -19,24 +19,27 @@ function readFrontend(rel) {
 
 describe("Phase 7 — RBAC & IDOR static guards", () => {
   it("bid accept uses row-level FOR UPDATE", () => {
-    const src = read("routes/bidRoutes.js");
+    const src = read("utils/bidAcceptance.js");
     assert.ok(src.includes("FOR UPDATE OF l, b"));
   });
 
   it("bid insert uses ON CONFLICT for carrier+load uniqueness", () => {
-    const src = read("routes/bidRoutes.js");
-    assert.ok(src.includes("ON CONFLICT (load_id, carrier_id)"));
+    const bidRoutes = read("routes/bidRoutes.js");
+    assert.ok(bidRoutes.includes("ON CONFLICT (load_id, carrier_id)"));
   });
 
   it("bookings and shipments use ON CONFLICT on load_id", () => {
-    const src = read("routes/bidRoutes.js");
+    const src = read("utils/bidAcceptance.js");
     assert.ok(src.includes("ON CONFLICT (load_id)"));
   });
 
   it("notifications use dedupe_key unique constraint handling", () => {
     const src = read("utils/notifyEvent.js");
-    assert.ok(src.includes("ON CONFLICT (receiver_id, dedupe_key)"));
+    const guard = read("db/schemaGuard.js");
+    assert.ok(src.includes("ON CONFLICT ON CONSTRAINT uq_notifications_receiver_dedupe_full"));
     assert.ok(src.includes("findByDedupeKey"));
+    assert.ok(guard.includes("verifyNotificationDedupeConstraint"));
+    assert.ok(guard.includes("uq_notifications_receiver_dedupe_full"));
   });
 
   it("notification routes resolve workspace header", () => {
