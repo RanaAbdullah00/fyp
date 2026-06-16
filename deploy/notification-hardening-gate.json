@@ -1,5 +1,5 @@
 {
-  "at": "2026-06-16T17:47:18.626Z",
+  "at": "2026-06-16T18:16:33.545Z",
   "api": "https://transpak-backend-1.onrender.com",
   "phases": {
     "phase1-schema-guard": {
@@ -28,15 +28,15 @@
     },
     "phase8-perf-insert": {
       "pass": true,
-      "detail": "insertDeltaP95=143ms (DB round-trip adjusted)"
+      "detail": "insertDeltaP95=127ms (DB round-trip adjusted)"
     },
     "phase8-perf-sync": {
       "pass": true,
-      "detail": "syncP95=726ms (remote probe)"
+      "detail": "syncP95=706ms (remote probe)"
     },
     "phase8-perf-list": {
       "pass": true,
-      "detail": "listP95=596ms (remote probe)"
+      "detail": "listP95=914ms (remote probe)"
     },
     "phase4-sync-order": {
       "pass": true,
@@ -45,9 +45,9 @@
   },
   "verdict": "STABLE",
   "metrics": {
-    "syncP95": 726,
-    "listP95": 596,
-    "insertP95": 143,
+    "syncP95": 706,
+    "listP95": 914,
+    "insertP95": 127,
     "burstOk": 50,
     "burstDb": 50,
     "burstUnique": 50

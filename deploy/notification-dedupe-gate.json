@@ -1,5 +1,5 @@
 {
-  "at": "2026-06-16T17:46:23.765Z",
+  "at": "2026-06-16T18:15:11.098Z",
   "api": "https://transpak-backend-1.onrender.com",
   "phases": {
     "phase1-deploy": {
@@ -11,31 +11,31 @@
       "detail": "rows=3 uniqueDedupe=3 uniqueEntity=3 legacyOnly=false",
       "dbRows": [
         {
-          "id": "b92caad1-0349-495e-b806-a9dbeb690aa0",
+          "id": "4bb6146e-c5da-4ef9-ae98-589bbf5f7e6e",
           "title": "BID_ACCEPTED",
-          "dedupe_key": "BID_ACCEPTED|ee10c937-24f4-46ba-b006-548aaab44547|d772f7d7-be15-4ce3-8c3f-9c33ea184f77",
-          "event_id": "6b768f24-7d36-413f-98a3-13c4e7c90e44",
-          "created_at": "2026-06-16 17:46:48.578026+00"
+          "dedupe_key": "BID_ACCEPTED|55175fe5-3bd1-4cc8-a9b1-b8d01ac9a25b|d772f7d7-be15-4ce3-8c3f-9c33ea184f77",
+          "event_id": "d1fb7b1d-e43f-4de3-8f35-8073c71fa27e",
+          "created_at": "2026-06-16 18:15:36.843502+00"
         },
         {
-          "id": "cdea74ca-0ce9-4391-a8c7-90c6bb05c8b4",
+          "id": "1cc73d16-bd34-4b11-9678-77e70f7279c7",
           "title": "BID_ACCEPTED",
-          "dedupe_key": "BID_ACCEPTED|4ca5e1b9-79a1-4629-9f2e-cfb2e6d60fcf|d772f7d7-be15-4ce3-8c3f-9c33ea184f77",
-          "event_id": "d2c0ca4d-41fd-479b-8aaf-6bbd67ed024b",
-          "created_at": "2026-06-16 17:46:43.368264+00"
+          "dedupe_key": "BID_ACCEPTED|982566ec-a897-4238-8f0c-f70f839e6bf1|d772f7d7-be15-4ce3-8c3f-9c33ea184f77",
+          "event_id": "21416811-62eb-44a9-824f-cbdee3b2ed00",
+          "created_at": "2026-06-16 18:15:31.436146+00"
         },
         {
-          "id": "ae178c34-b39b-4eee-89a1-85f9e09832a2",
+          "id": "31e55b26-59e3-41c4-b25f-7cd84eaba74c",
           "title": "BID_ACCEPTED",
-          "dedupe_key": "BID_ACCEPTED|489f8847-3647-4c9c-a610-919bf53e4828|d772f7d7-be15-4ce3-8c3f-9c33ea184f77",
-          "event_id": "d5d4710d-6a6e-4e0a-af8e-7e41a59b4d67",
-          "created_at": "2026-06-16 17:46:38.921618+00"
+          "dedupe_key": "BID_ACCEPTED|cb7804f0-d706-482b-b2eb-24deddfc20a9|d772f7d7-be15-4ce3-8c3f-9c33ea184f77",
+          "event_id": "d05f6eba-060c-4c79-8263-6919b9ccb129",
+          "created_at": "2026-06-16 18:15:26.838971+00"
         }
       ],
       "bidIds": [
-        "489f8847-3647-4c9c-a610-919bf53e4828",
-        "4ca5e1b9-79a1-4629-9f2e-cfb2e6d60fcf",
-        "ee10c937-24f4-46ba-b006-548aaab44547"
+        "cb7804f0-d706-482b-b2eb-24deddfc20a9",
+        "982566ec-a897-4238-8f0c-f70f839e6bf1",
+        "55175fe5-3bd1-4cc8-a9b1-b8d01ac9a25b"
       ]
     },
     "phase3-identity": {
@@ -44,41 +44,41 @@
         "parsed": [
           {
             "eventType": "BID_ACCEPTED",
-            "entityId": "ee10c937-24f4-46ba-b006-548aaab44547",
+            "entityId": "55175fe5-3bd1-4cc8-a9b1-b8d01ac9a25b",
             "receiverId": "d772f7d7-be15-4ce3-8c3f-9c33ea184f77",
             "eventVersion": null,
             "legacy": false
           },
           {
             "eventType": "BID_ACCEPTED",
-            "entityId": "4ca5e1b9-79a1-4629-9f2e-cfb2e6d60fcf",
+            "entityId": "982566ec-a897-4238-8f0c-f70f839e6bf1",
             "receiverId": "d772f7d7-be15-4ce3-8c3f-9c33ea184f77",
             "eventVersion": null,
             "legacy": false
           },
           {
             "eventType": "BID_ACCEPTED",
-            "entityId": "489f8847-3647-4c9c-a610-919bf53e4828",
+            "entityId": "cb7804f0-d706-482b-b2eb-24deddfc20a9",
             "receiverId": "d772f7d7-be15-4ce3-8c3f-9c33ea184f77",
             "eventVersion": null,
             "legacy": false
           }
         ],
         "bidIds": [
-          "489f8847-3647-4c9c-a610-919bf53e4828",
-          "4ca5e1b9-79a1-4629-9f2e-cfb2e6d60fcf",
-          "ee10c937-24f4-46ba-b006-548aaab44547"
+          "cb7804f0-d706-482b-b2eb-24deddfc20a9",
+          "982566ec-a897-4238-8f0c-f70f839e6bf1",
+          "55175fe5-3bd1-4cc8-a9b1-b8d01ac9a25b"
         ],
         "totalRows": 3
       }
     },
     "phase4-sync-triple": {
       "pass": true,
-      "detail": "BID_ACCEPTED in sync=true elapsed=709ms count=3"
+      "detail": "BID_ACCEPTED in sync=true elapsed=698ms count=3"
     },
     "phase4-sync-status": {
       "pass": true,
-      "detail": "statusSync=true ref=L-655754"
+      "detail": "statusSync=true ref=L-555117"
     },
     "phase4-sync": {
       "pass": true
@@ -89,7 +89,7 @@
     },
     "phase6-reconnect": {
       "pass": true,
-      "detail": "recovered BID_ACCEPTED=3 since=2026-06-16T17:46:30.833Z"
+      "detail": "recovered BID_ACCEPTED=3 since=2026-06-16T18:15:18.408Z"
     },
     "phase7-burst": {
       "pass": true,

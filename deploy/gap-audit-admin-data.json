@@ -1,13 +1,13 @@
 {
-  "at": "2026-06-16T17:45:04.384Z",
+  "at": "2026-06-16T18:31:25.489Z",
   "pass": true,
   "feedPages": [
     {
       "page": 1,
       "ok": true,
       "status": 200,
-      "total": 5429,
-      "totalPages": 272,
+      "total": 6547,
+      "totalPages": 328,
       "dupes": [],
       "itemCount": 20
     },
@@ -15,8 +15,8 @@
       "page": 2,
       "ok": true,
       "status": 200,
-      "total": 5430,
-      "totalPages": 272,
+      "total": 6548,
+      "totalPages": 328,
       "dupes": [],
       "itemCount": 20
     },
@@ -24,43 +24,43 @@
       "page": 3,
       "ok": true,
       "status": 200,
-      "total": 5430,
-      "totalPages": 272,
+      "total": 6548,
+      "totalPages": 328,
       "dupes": [],
       "itemCount": 20
     }
   ],
   "withinPageDupes": false,
   "crossPageDuplicateIds": [
-    "5cc70ff0-97ab-4eda-9810-6ffb109b2de2"
+    "c4a60bb9-a3b2-40ff-b9b7-cb694d9cf9d6"
   ],
   "crossPageDupesLive": true,
   "paginationStable": false,
-  "auditPaginationStable": false,
+  "auditPaginationStable": true,
   "note": "Cross-page duplicate ids may occur when live events insert during offset pagination",
   "auditPages": [
     {
       "page": 1,
       "ok": true,
       "status": 200,
-      "total": 3218,
-      "totalPages": 161,
+      "total": 3872,
+      "totalPages": 194,
       "itemCount": 20
     },
     {
       "page": 2,
       "ok": true,
       "status": 200,
-      "total": 3216,
-      "totalPages": 161,
+      "total": 3872,
+      "totalPages": 194,
       "itemCount": 20
     },
     {
       "page": 3,
       "ok": true,
       "status": 200,
-      "total": 3216,
-      "totalPages": 161,
+      "total": 3872,
+      "totalPages": 194,
       "itemCount": 20
     }
   ],

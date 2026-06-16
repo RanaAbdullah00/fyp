@@ -1,17 +1,15 @@
 {
-  "at": "2026-06-16T17:44:28.545Z",
+  "at": "2026-06-16T18:30:49.681Z",
   "pass": true,
-  "loadId": "e11a45f4-590b-467d-a646-db3c776ab906",
+  "loadId": "7431d705-5a0b-4bcc-a13e-e3b86dc6e0e4",
   "concurrent": 50,
-  "elapsedMs": 6418,
-  "success": 12,
-  "conflict": 37,
+  "elapsedMs": 8465,
+  "success": 50,
+  "conflict": 0,
   "dbCount": 1,
   "activeForLoad": 0,
   "statusHistogram": {
-    "200": 11,
-    "201": 1,
-    "409": 37,
-    "520": 1
+    "200": 49,
+    "201": 1
   }
 }
