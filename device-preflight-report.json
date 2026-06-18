@@ -1,0 +1,36 @@
+{
+  "generatedAt": "2026-06-18T22:11:22.585Z",
+  "baseUrl": "http://127.0.0.1:10102",
+  "results": [
+    {
+      "id": "D1",
+      "label": "Login",
+      "status": "PASS",
+      "exitCode": 0
+    },
+    {
+      "id": "D3-D5",
+      "label": "Load bid accept chain",
+      "status": "PASS",
+      "exitCode": 0
+    },
+    {
+      "id": "D7",
+      "label": "Notifications",
+      "status": "PASS",
+      "exitCode": 0
+    },
+    {
+      "id": "D8",
+      "label": "Reviews lifecycle",
+      "status": "PASS",
+      "exitCode": 0
+    },
+    {
+      "id": "profile",
+      "label": "Profile address",
+      "status": "PASS",
+      "exitCode": 0
+    }
+  ]
+}

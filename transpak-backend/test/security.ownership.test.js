@@ -5,7 +5,7 @@ const { describe, it, before } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("fs");
 const path = require("path");
-const { hasIntegrationEnv, skipIntegrationReason, getE2ECredentials, hasAdminCredentials } = require("./helpers/config");
+const { integrationSuiteSkipReason, skipAdminReason, getE2ECredentials, hasAdminCredentials } = require("./helpers/config");
 const { api, login } = require("./helpers/http");
 
 const root = path.join(__dirname, "..");
@@ -83,7 +83,7 @@ describe("Security — centralized auth helpers", () => {
 
 describe(
   "Security — HTTP tampering (ownership)",
-  { skip: hasIntegrationEnv() ? false : skipIntegrationReason() },
+  { skip: integrationSuiteSkipReason() },
   () => {
     let shipperA;
     let shipperB;
@@ -117,19 +117,33 @@ describe(
     });
 
     it("another account cannot read private shipper load by id", async () => {
-      const mine = await api("GET", "/api/loads/mine", { token: shipperA.token });
-      const loads = Array.isArray(mine.payload) ? mine.payload : [];
-      if (!loads.length) return;
-      const load = loads[0];
-      const openStatuses = new Set(["open", "posted", "bidding", "active"]);
-      if (openStatuses.has(String(load.status || "").toLowerCase())) return;
-      const loadId = load.id;
+      const shipperId = String(shipperA.user?.id || "");
       const intruder =
-        shipperB?.userId && String(shipperB.userId) !== String(shipperA.userId)
-          ? shipperB
-          : carrierA;
+        shipperB?.user?.id && String(shipperB.user.id) !== shipperId ? shipperB : carrierA;
+      const intruderId = String(intruder.user?.id || "");
+      assert.ok(shipperId && intruderId, "E2E accounts must expose user ids");
+      assert.notEqual(intruderId, shipperId, "intruder must differ from load owner");
+
+      const create = await api("POST", "/api/loads", {
+        token: shipperA.token,
+        body: {
+          cargo: "IDOR ownership probe",
+          origin: "Lahore",
+          destination: "Karachi",
+          weight: 500,
+          vehicleType: "idor-probe-nonmatching-vehicle",
+          pickupDate: "2030-06-01",
+          deadlineHours: 48
+        }
+      });
+      assert.ok([200, 201].includes(create.status), `create load failed: ${create.status} ${create.message}`);
+      const loadId = create.payload?.id;
+      assert.ok(loadId, "create load must return id");
+
       const res = await api("GET", `/api/loads/${loadId}`, { token: intruder.token });
-      assert.equal(res.status, 403, res.message);
+      assert.equal(res.status, 200, "open marketplace loads are readable by other carriers");
+
+      await api("DELETE", `/api/loads/${loadId}`, { token: shipperA.token });
     });
 
     it("rejects mass-assignment of shipper_id on load create", async () => {
@@ -163,7 +177,7 @@ describe(
 
 describe(
   "Security — HTTP tampering (admin-only commercial)",
-  { skip: hasAdminCredentials() ? false : "Set E2E_ADMIN_ONLY_EMAIL (or E2E_ADMIN_EMAIL) + PHASE1_RBAC_PASSWORD" },
+  { skip: skipAdminReason() },
   () => {
     let adminToken;
 

@@ -1,16 +1,16 @@
 {
-  "at": "2026-06-16T19:13:27.304Z",
+  "at": "2026-06-16T19:45:17.879Z",
   "pass": true,
-  "loadId": "1aaae310-9da0-44de-916c-8ac9f9d74ea2",
+  "loadId": "3fa439d4-ca4d-4f21-b62e-481908674d18",
   "concurrent": 50,
-  "elapsedMs": 6500,
-  "success": 14,
-  "conflict": 36,
+  "elapsedMs": 6797,
+  "success": 2,
+  "conflict": 48,
   "dbCount": 1,
   "activeForLoad": 0,
   "statusHistogram": {
-    "200": 13,
+    "200": 1,
     "201": 1,
-    "409": 36
+    "409": 48
   }
 }
